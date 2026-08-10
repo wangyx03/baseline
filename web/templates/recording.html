@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>SKU Recording</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f7f7f7;
+        }
+
+
+        .page {
+            display: grid;
+            grid-template-columns: 480px 1fr;
+            min-height: 100vh;
+        }
+
+
+        /* ==========================
+           LEFT
+        ========================== */
+
+        .left-panel {
+            background: white;
+            padding: 40px;
+        }
+
+
+        h1 {
+            margin-top: 0;
+            font-size: 36px;
+        }
+
+
+        .store-name {
+            font-size: 26px;
+            margin-bottom: 30px;
+        }
+
+
+        .live-area {
+            margin-bottom: 25px;
+            padding-bottom: 25px;
+            border-bottom: 1px solid #ddd;
+        }
+
+
+        .live-label {
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+
+        .live-row {
+            display: flex;
+            gap: 8px;
+        }
+
+
+        #liveId {
+            flex: 1;
+            font-size: 18px;
+            padding: 10px;
+        }
+
+
+        #startLiveButton {
+            padding: 10px 15px;
+            font-size: 16px;
+        }
+
+
+        #changeLiveButton {
+            display: none;
+            margin-top: 10px;
+        }
+
+
+        #currentLive {
+            margin-top: 12px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+
+        #sku {
+            width: 100%;
+            font-size: 24px;
+            padding: 12px;
+        }
+
+
+        #sku:disabled {
+            background: #eeeeee;
+            cursor: not-allowed;
+        }
+
+
+        #status {
+            font-size: 20px;
+            margin-top: 20px;
+            min-height: 25px;
+        }
+
+
+        .success {
+            color: green;
+        }
+
+
+        .error {
+            color: red;
+        }
+
+
+        #bookInfo {
+            display: none;
+            margin-top: 30px;
+        }
+
+
+        #bookCover {
+            width: 200px;
+            max-height: 320px;
+            object-fit: contain;
+            display: block;
+            margin-bottom: 20px;
+        }
+
+
+        #bookTitle {
+            font-size: 28px;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+
+        .book-field {
+            font-size: 20px;
+            margin: 8px 0;
+        }
+
+
+        /* ==========================
+           RIGHT
+        ========================== */
+
+        .right-panel {
+            padding: 40px;
+            overflow-x: auto;
+        }
+
+
+        .right-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+
+        .right-panel h2 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-size: 28px;
+        }
+
+
+        #liveListTitle {
+            color: #555;
+            margin-bottom: 20px;
+        }
+
+
+        #downloadButton {
+            padding: 10px 16px;
+            font-size: 15px;
+        }
+
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+
+        th,
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+
+        th {
+            background: #efefef;
+        }
+
+
+        .sku-edit {
+            width: 190px;
+            padding: 7px;
+            font-size: 15px;
+        }
+
+
+        button {
+            padding: 7px 12px;
+            cursor: pointer;
+            border: 1px solid #aaa;
+            background: white;
+            border-radius: 4px;
+        }
+
+
+        button:hover:not(:disabled) {
+            background: #f0f0f0;
+        }
+
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+
+        .delete-btn {
+            color: #a00000;
+        }
+
+
+        .empty-message {
+            padding: 20px;
+            color: #777;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="page">
+
+
+    <!-- LEFT -->
+
+    <div class="left-panel">
+
+
+        <h1>
+            SKU Recording
+        </h1>
+
+
+        <div class="store-name">
+            {{ store_name }}
+        </div>
+
+
+        <div class="live-area">
+
+
+            <div class="live-label">
+                LIVE ID
+            </div>
+
+
+            <div class="live-row">
+
+                <input
+                    type="text"
+                    id="liveId"
+                    placeholder="Enter LIVE ID"
+                    autocomplete="off"
+                >
+
+
+                <button
+                    id="startLiveButton"
+                    type="button">
+
+                    Start Live
+
+                </button>
+
+            </div>
+
+
+            <div id="currentLive"></div>
+
+
+            <button
+                id="changeLiveButton"
+                type="button">
+
+                Change LIVE
+
+            </button>
+
+
+        </div>
+
+
+        <input
+            type="text"
+            id="sku"
+            placeholder="Enter LIVE ID first"
+            autocomplete="off"
+            disabled
+        >
+
+
+        <p id="status"></p>
+
+
+        <div id="bookInfo">
+
+
+            <img
+                id="bookCover"
+                src=""
+                alt="Book Cover"
+            >
+
+
+            <h2 id="bookTitle"></h2>
+
+
+            <p class="book-field">
+
+                <strong>Author:</strong>
+
+                <span id="bookAuthor"></span>
+
+            </p>
+
+
+            <p class="book-field">
+
+                <strong>Format:</strong>
+
+                <span id="bookFormat"></span>
+
+            </p>
+
+
+        </div>
+
+
+    </div>
+
+
+    <!-- RIGHT -->
+
+    <div class="right-panel">
+
+
+        <div class="right-header">
+
+
+            <div>
+
+                <h2>
+                    Current LIVE Recorded Items
+                </h2>
+
+                <div id="liveListTitle">
+                    Enter LIVE ID to view recordings
+                </div>
+
+            </div>
+
+
+            <button
+                id="downloadButton"
+                type="button"
+                disabled>
+
+                Download CSV
+
+            </button>
+
+
+        </div>
+
+
+        <table>
+
+
+            <thead>
+
+                <tr>
+
+                    <th>#</th>
+
+                    <th>SKU</th>
+
+                    <th>Book Title</th>
+
+                    <th>Time</th>
+
+                    <th>Action</th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody id="recordingTableBody">
+
+                <tr>
+
+                    <td
+                        colspan="5"
+                        class="empty-message">
+
+                        Enter LIVE ID to begin
+
+                    </td>
+
+                </tr>
+
+            </tbody>
+
+
+        </table>
+
+
+    </div>
+
+
+</div>
+
+
+<script>
+
+
+    const input =
+        document.getElementById("sku");
+
+
+    const status =
+        document.getElementById("status");
+
+
+    const liveIdInput =
+        document.getElementById("liveId");
+
+
+    const startLiveButton =
+        document.getElementById(
+            "startLiveButton"
+        );
+
+
+    const changeLiveButton =
+        document.getElementById(
+            "changeLiveButton"
+        );
+
+
+    const downloadButton =
+        document.getElementById(
+            "downloadButton"
+        );
+
+
+    const currentLive =
+        document.getElementById(
+            "currentLive"
+        );
+
+
+    const liveListTitle =
+        document.getElementById(
+            "liveListTitle"
+        );
+
+
+    const bookInfo =
+        document.getElementById(
+            "bookInfo"
+        );
+
+
+    const bookCover =
+        document.getElementById(
+            "bookCover"
+        );
+
+
+    const bookTitle =
+        document.getElementById(
+            "bookTitle"
+        );
+
+
+    const bookAuthor =
+        document.getElementById(
+            "bookAuthor"
+        );
+
+
+    const bookFormat =
+        document.getElementById(
+            "bookFormat"
+        );
+
+
+    const tableBody =
+        document.getElementById(
+            "recordingTableBody"
+        );
+
+
+    const storeId =
+        Number("{{ store_id }}");
+
+
+    /*
+        LIVE ID 只保存在当前网页内存。
+
+        不保存到：
+        localStorage
+        sessionStorage
+        Cookie
+
+        所以刷新页面后必须重新输入。
+    */
+
+    let currentLiveId = "";
+
+
+    // =====================================================
+    // Start LIVE
+    // =====================================================
+
+    async function startLive() {
+
+
+        const liveId =
+            liveIdInput
+                .value
+                .trim();
+
+
+        if (!liveId) {
+
+            status.className =
+                "error";
+
+            status.innerText =
+                "LIVE ID is required";
+
+            liveIdInput.focus();
+
+            return;
+        }
+
+
+        currentLiveId =
+            liveId;
+
+
+        liveIdInput.disabled =
+            true;
+
+
+        startLiveButton.disabled =
+            true;
+
+
+        changeLiveButton.style.display =
+            "inline-block";
+
+
+        downloadButton.disabled =
+            false;
+
+
+        currentLive.innerText =
+            "Current LIVE ID: "
+            +
+            currentLiveId;
+
+
+        liveListTitle.innerText =
+            "LIVE ID: "
+            +
+            currentLiveId;
+
+
+        input.disabled =
+            false;
+
+
+        input.placeholder =
+            "Scan SKU";
+
+
+        status.className =
+            "success";
+
+
+        status.innerText =
+            "✓ LIVE started";
+
+
+        await loadRecordings();
+
+
+        input.focus();
+
+    }
+
+
+    startLiveButton.addEventListener(
+        "click",
+        startLive
+    );
+
+
+    liveIdInput.addEventListener(
+        "keydown",
+        function(event) {
+
+            if (event.key === "Enter") {
+
+                startLive();
+
+            }
+
+        }
+    );
+
+
+    // =====================================================
+    // Change LIVE
+    // =====================================================
+
+    function changeLive() {
+
+
+        currentLiveId =
+            "";
+
+
+        liveIdInput.disabled =
+            false;
+
+
+        liveIdInput.value =
+            "";
+
+
+        startLiveButton.disabled =
+            false;
+
+
+        changeLiveButton.style.display =
+            "none";
+
+
+        downloadButton.disabled =
+            true;
+
+
+        currentLive.innerText =
+            "";
+
+
+        liveListTitle.innerText =
+            "Enter LIVE ID to view recordings";
+
+
+        input.disabled =
+            true;
+
+
+        input.value =
+            "";
+
+
+        input.placeholder =
+            "Enter LIVE ID first";
+
+
+        status.innerText =
+            "";
+
+
+        bookInfo.style.display =
+            "none";
+
+
+        tableBody.innerHTML = `
+
+            <tr>
+
+                <td
+                    colspan="5"
+                    class="empty-message">
+
+                    Enter LIVE ID to begin
+
+                </td>
+
+            </tr>
+
+        `;
+
+
+        liveIdInput.focus();
+
+    }
+
+
+    changeLiveButton.addEventListener(
+        "click",
+        changeLive
+    );
+
+
+    // =====================================================
+    // Download CSV
+    // =====================================================
+
+    downloadButton.addEventListener(
+        "click",
+        function() {
+
+
+            if (!currentLiveId) {
+
+                return;
+
+            }
+
+
+            const url =
+                "/api/recordings/download"
+                +
+                "?store_id="
+                +
+                encodeURIComponent(
+                    storeId
+                )
+                +
+                "&live_id="
+                +
+                encodeURIComponent(
+                    currentLiveId
+                );
+
+
+            window.location.href =
+                url;
+
+        }
+    );
+
+
+    // =====================================================
+    // Load Recordings
+    // =====================================================
+
+    async function loadRecordings() {
+
+
+        if (!currentLiveId) {
+
+            return;
+
+        }
+
+
+        try {
+
+
+            const url =
+                "/api/recordings"
+                +
+                "?store_id="
+                +
+                encodeURIComponent(
+                    storeId
+                )
+                +
+                "&live_id="
+                +
+                encodeURIComponent(
+                    currentLiveId
+                );
+
+
+            const response =
+                await fetch(url);
+
+
+            const rows =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    rows.message
+                    ||
+                    "Could not load recordings"
+                );
+
+            }
+
+
+            tableBody.innerHTML =
+                "";
+
+
+            if (rows.length === 0) {
+
+
+                tableBody.innerHTML = `
+
+                    <tr>
+
+                        <td
+                            colspan="5"
+                            class="empty-message">
+
+                            No recordings in this LIVE yet
+
+                        </td>
+
+                    </tr>
+
+                `;
+
+
+                return;
+
+            }
+
+
+            rows.forEach(
+                function(row, index) {
+
+
+                    const tr =
+                        document.createElement(
+                            "tr"
+                        );
+
+
+                    tr.innerHTML = `
+
+
+                        <td>
+                            ${index + 1}
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                class="sku-edit"
+                                id="sku-${row.recording_id}"
+                                value="${row.sku}"
+                            >
+
+                        </td>
+
+
+                        <td>
+                            ${row.book_title || ""}
+                        </td>
+
+
+                        <td>
+
+                            ${
+                                row.recorded_at
+                                ?
+                                row.recorded_at
+                                + " ET"
+                                :
+                                ""
+                            }
+
+                        </td>
+
+
+                        <td>
+
+                            <button
+                                onclick="
+                                    saveRecording(
+                                        ${row.recording_id}
+                                    )
+                                ">
+
+                                Save
+
+                            </button>
+
+
+                            <button
+                                class="delete-btn"
+                                onclick="
+                                    deleteRecording(
+                                        ${row.recording_id}
+                                    )
+                                ">
+
+                                Delete
+
+                            </button>
+
+                        </td>
+
+                    `;
+
+
+                    tableBody.appendChild(
+                        tr
+                    );
+
+                }
+            );
+
+
+        } catch (error) {
+
+
+            status.className =
+                "error";
+
+
+            status.innerText =
+                error.message;
+
+        }
+
+    }
+
+
+    // =====================================================
+    // Save
+    // =====================================================
+
+    async function saveRecording(
+        recordingId
+    ) {
+
+
+        if (!currentLiveId) {
+
+            status.className =
+                "error";
+
+            status.innerText =
+                "LIVE ID is required";
+
+            return;
+        }
+
+
+        const sku =
+            document
+                .getElementById(
+                    "sku-"
+                    +
+                    recordingId
+                )
+                .value
+                .trim();
+
+
+        if (!sku) {
+
+            status.className =
+                "error";
+
+            status.innerText =
+                "SKU cannot be empty";
+
+            return;
+        }
+
+
+        try {
+
+
+            const response =
+                await fetch(
+
+                    "/api/recordings/"
+                    +
+                    recordingId,
+
+                    {
+
+                        method:
+                            "PUT",
+
+
+                        headers: {
+
+                            "Content-Type":
+                                "application/json"
+
+                        },
+
+
+                        body:
+                            JSON.stringify({
+
+                                sku:
+                                    sku,
+
+                                store_id:
+                                    storeId,
+
+                                live_id:
+                                    currentLiveId
+
+                            })
+
+                    }
+
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.message
+                    ||
+                    "Update failed"
+                );
+
+            }
+
+
+            status.className =
+                "success";
+
+
+            status.innerText =
+                "✓ Recording updated";
+
+
+            await loadRecordings();
+
+
+        } catch (error) {
+
+
+            status.className =
+                "error";
+
+
+            status.innerText =
+                error.message;
+
+        }
+
+
+        input.focus();
+
+    }
+
+
+    // =====================================================
+    // Delete
+    // =====================================================
+
+    async function deleteRecording(
+        recordingId
+    ) {
+
+
+        if (!currentLiveId) {
+
+            return;
+
+        }
+
+
+        const confirmed =
+            confirm(
+                "Delete this recording?"
+            );
+
+
+        if (!confirmed) {
+
+            input.focus();
+
+            return;
+        }
+
+
+        try {
+
+
+            const response =
+                await fetch(
+
+                    "/api/recordings/"
+                    +
+                    recordingId,
+
+                    {
+
+                        method:
+                            "DELETE",
+
+
+                        headers: {
+
+                            "Content-Type":
+                                "application/json"
+
+                        },
+
+
+                        body:
+                            JSON.stringify({
+
+                                store_id:
+                                    storeId,
+
+                                live_id:
+                                    currentLiveId
+
+                            })
+
+                    }
+
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.message
+                    ||
+                    "Delete failed"
+                );
+
+            }
+
+
+            status.className =
+                "success";
+
+
+            status.innerText =
+                "✓ Recording deleted";
+
+
+            await loadRecordings();
+
+
+        } catch (error) {
+
+
+            status.className =
+                "error";
+
+
+            status.innerText =
+                error.message;
+
+        }
+
+
+        input.focus();
+
+    }
+
+
+    // =====================================================
+    // Scan
+    // =====================================================
+
+    input.addEventListener(
+        "keydown",
+        async function(event) {
+
+
+            if (event.key !== "Enter") {
+
+                return;
+
+            }
+
+
+            if (!currentLiveId) {
+
+                status.className =
+                    "error";
+
+                status.innerText =
+                    "LIVE ID is required";
+
+                return;
+            }
+
+
+            const sku =
+                input
+                    .value
+                    .trim();
+
+
+            if (!sku) {
+
+                return;
+
+            }
+
+
+            input.disabled =
+                true;
+
+
+            try {
+
+
+                const response =
+                    await fetch(
+
+                        "/api/record",
+
+                        {
+
+                            method:
+                                "POST",
+
+
+                            headers: {
+
+                                "Content-Type":
+                                    "application/json"
+
+                            },
+
+
+                            body:
+                                JSON.stringify({
+
+                                    sku:
+                                        sku,
+
+                                    store_id:
+                                        storeId,
+
+                                    live_id:
+                                        currentLiveId
+
+                                })
+
+                        }
+
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        data.message
+                        ||
+                        "Recording failed"
+                    );
+
+                }
+
+
+                status.className =
+                    "success";
+
+
+                status.innerText =
+                    "✓ Recorded: "
+                    +
+                    sku;
+
+
+                if (data.book) {
+
+
+                    bookTitle.innerText =
+                        data.book.book_title
+                        ||
+                        "";
+
+
+                    bookAuthor.innerText =
+                        data.book.book_author
+                        ||
+                        "";
+
+
+                    bookFormat.innerText =
+                        data.book.book_format
+                        ||
+                        "";
+
+
+                    bookCover.style.display =
+                        "block";
+
+
+                    bookCover.src =
+                        "http://91.98.171.224/bookcovers/"
+                        +
+                        sku
+                        +
+                        ".jpg";
+
+
+                    bookCover.onerror =
+                        function() {
+
+                            bookCover.style.display =
+                                "none";
+
+                        };
+
+
+                    bookInfo.style.display =
+                        "block";
+
+
+                } else {
+
+
+                    bookInfo.style.display =
+                        "none";
+
+
+                    status.innerText =
+                        "✓ Recorded: "
+                        +
+                        sku
+                        +
+                        " — Book information not found";
+
+                }
+
+
+                input.value =
+                    "";
+
+
+                await loadRecordings();
+
+
+            } catch (error) {
+
+
+                status.className =
+                    "error";
+
+
+                status.innerText =
+                    error.message;
+
+            }
+
+
+            input.disabled =
+                false;
+
+
+            input.focus();
+
+        }
+    );
+
+
+    // =====================================================
+    // Page Load
+    // =====================================================
+
+    window.onload =
+        function() {
+
+
+            currentLiveId =
+                "";
+
+
+            input.disabled =
+                true;
+
+
+            downloadButton.disabled =
+                true;
+
+
+            liveIdInput.focus();
+
+        };
+
+
+</script>
+
+
+</body>
+
+</html>
