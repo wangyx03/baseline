@@ -83,21 +83,14 @@ import argparse
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 import requests
 import pymysql
 
 EASTERN_TZ = ZoneInfo("America/Detroit")
-
-try:
-    from dotenv import load_dotenv
-    _dotenv_loaded = load_dotenv()
-    if not _dotenv_loaded:
-        print("Notice: no .env file found; falling back to system environment variables only.",
-              file=sys.stderr)
-except ImportError:
-    print("Notice: python-dotenv not installed (pip install python-dotenv).", file=sys.stderr)
-
 
 def log(msg: str = "", err: bool = False) -> None:
     print(msg, file=sys.stderr if err else sys.stdout)
