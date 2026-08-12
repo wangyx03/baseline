@@ -3,9 +3,9 @@ from dotenv import load_dotenv
 import os
 from pathlib import Path
 
-from auth import auth_bp, init_auth
-from recording import recording_bp
-from weekly_inventory import weekly_bp
+from .auth import auth_bp, init_auth
+from .recording import recording_bp
+from .weekly_inventory import weekly_bp
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent

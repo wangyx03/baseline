@@ -452,6 +452,14 @@
                 </button>
 
             </div>
+            <button
+                type="button"
+                id="renameLiveButton"
+                onclick="renameRecordedLive()"
+                style="display:none; margin-top:10px;"
+            >
+                Rename LIVE ID
+            </button>
 
         </div>
 
@@ -1191,6 +1199,13 @@ async function startLive() {
 
         startLiveButton.textContent =
             "Start Live";
+        
+        document
+            .getElementById(
+                "renameLiveButton"
+            )
+            .style.display =
+                "none";
 
 
         currentSession.style.display =
@@ -1412,6 +1427,196 @@ async function startLive() {
 
 }
 
+// =========================================================
+// Rename Recorded LIVE ID
+// =========================================================
+
+async function renameRecordedLive() {
+
+
+    if (
+        !currentWeekId
+        ||
+        !currentLiveId
+    ) {
+
+        return;
+
+    }
+
+
+    const newLiveId =
+        prompt(
+            "Enter new LIVE ID:",
+            currentLiveId
+        );
+
+
+    if (newLiveId === null) {
+
+        return;
+
+    }
+
+
+    const cleanedLiveId =
+        newLiveId.trim();
+
+
+    if (!cleanedLiveId) {
+
+        alert(
+            "New LIVE ID cannot be empty."
+        );
+
+        return;
+
+    }
+
+
+    if (
+        cleanedLiveId
+        ===
+        currentLiveId
+    ) {
+
+        alert(
+            "New LIVE ID is the same as current LIVE ID."
+        );
+
+        return;
+
+    }
+
+
+    const confirmed =
+        confirm(
+            "Change all recorded items from LIVE ID:\n\n"
+            + currentLiveId
+            + "\n\nTo:\n\n"
+            + cleanedLiveId
+            + "\n\nThis will update the entire current Recording session."
+        );
+
+
+    if (!confirmed) {
+
+        return;
+
+    }
+
+
+    try {
+
+
+        const response =
+            await fetch(
+                "/api/recordings/change-live-id",
+                {
+                    method:
+                        "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            week_id:
+                                currentWeekId,
+
+                            store_id:
+                                STORE_ID,
+
+                            old_live_id:
+                                currentLiveId,
+
+                            new_live_id:
+                                cleanedLiveId
+                        })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+
+            alert(
+                data.message
+                ||
+                "Could not change LIVE ID."
+            );
+
+            return;
+
+        }
+
+
+        currentLiveId =
+            cleanedLiveId;
+
+
+        liveInput.value =
+            currentLiveId;
+
+
+        currentLiveText.textContent =
+            currentLiveId;
+
+
+        sessionSubtitle.textContent =
+            "Week: "
+            + currentWeekId
+            + " | LIVE ID: "
+            + currentLiveId;
+
+
+        saveRecordingSession();
+
+
+        showMessage(
+            "✓ LIVE ID changed to "
+            + currentLiveId
+            + " — "
+            + data.changed_rows
+            + " records updated.",
+            "success"
+        );
+
+
+        await loadRecordings(
+            currentPage
+        );
+
+
+        skuInput.focus();
+
+
+    }
+
+    catch (error) {
+
+
+        console.error(
+            error
+        );
+
+
+        alert(
+            "Connection error while changing LIVE ID."
+        );
+
+    }
+
+}
 
 // =========================================================
 // Activate UI
@@ -1429,7 +1634,15 @@ function activateRecordingSession() {
 
 
     startLiveButton.textContent =
-        "Change LIVE";
+        "🔄 LIVE Session";
+    
+    
+    document
+        .getElementById(
+            "renameLiveButton"
+        )
+        .style.display =
+            "inline-block";
 
 
     currentWeekText.textContent =

@@ -5,7 +5,7 @@ import io
 import math
 
 from db import get_db
-from inventory_service import get_weekly_item_status
+from .inventory_service import get_weekly_item_status
 from utils import format_et
 
 recording_bp = Blueprint("recording", __name__)
@@ -868,6 +868,279 @@ def insert_recording_before():
 
         cursor.close()
         db.close()
+# =========================================================
+# Change Recorded LIVE ID
+# =========================================================
+
+@recording_bp.route(
+    "/api/recordings/change-live-id",
+    methods=["POST"]
+)
+@login_required
+def change_recorded_live_id():
+
+    data = request.get_json() or {}
+
+    week_id = str(
+        data.get("week_id", "")
+    ).strip()
+
+    store_id = data.get(
+        "store_id"
+    )
+
+    old_live_id = str(
+        data.get("old_live_id", "")
+    ).strip()
+
+    new_live_id = str(
+        data.get("new_live_id", "")
+    ).strip()
+
+
+    # =====================================================
+    # Validation
+    # =====================================================
+
+    if not week_id:
+
+        return jsonify({
+            "success": False,
+            "message": "Week ID is required"
+        }), 400
+
+
+    if store_id is None:
+
+        return jsonify({
+            "success": False,
+            "message": "Store ID is required"
+        }), 400
+
+
+    if not old_live_id:
+
+        return jsonify({
+            "success": False,
+            "message": "Current LIVE ID is required"
+        }), 400
+
+
+    if not new_live_id:
+
+        return jsonify({
+            "success": False,
+            "message": "New LIVE ID is required"
+        }), 400
+
+
+    if old_live_id == new_live_id:
+
+        return jsonify({
+            "success": False,
+            "message": "New LIVE ID is the same as current LIVE ID"
+        }), 400
+
+
+    db = get_db()
+
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+
+    try:
+
+        # =================================================
+        # 1. Make sure current Recording exists
+        # =================================================
+
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) AS total
+
+            FROM sku_recording
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+            """,
+            (
+                week_id,
+                store_id,
+                old_live_id
+            )
+        )
+
+        row = cursor.fetchone()
+
+        recording_count = int(
+            row["total"] or 0
+        )
+
+
+        if recording_count == 0:
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "No recording data found for current LIVE ID"
+            }), 404
+
+
+        # =================================================
+        # 2. Current LIVE must NOT already be Locked
+        # =================================================
+
+        cursor.execute(
+            """
+            SELECT 1
+
+            FROM inventory_locked
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+
+            LIMIT 1
+            """,
+            (
+                week_id,
+                store_id,
+                old_live_id
+            )
+        )
+
+
+        if cursor.fetchone() is not None:
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "This LIVE already has Locked data. "
+                    "Recorded LIVE ID cannot be changed."
+            }), 409
+
+
+        # =================================================
+        # 3. New LIVE ID must NOT already have Recording
+        # =================================================
+
+        cursor.execute(
+            """
+            SELECT 1
+
+            FROM sku_recording
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+
+            LIMIT 1
+            """,
+            (
+                week_id,
+                store_id,
+                new_live_id
+            )
+        )
+
+
+        if cursor.fetchone() is not None:
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "The new LIVE ID already has Recording data."
+            }), 409
+
+
+        # =================================================
+        # 4. New LIVE ID must NOT already have Locked data
+        # =================================================
+
+        cursor.execute(
+            """
+            SELECT 1
+
+            FROM inventory_locked
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+
+            LIMIT 1
+            """,
+            (
+                week_id,
+                store_id,
+                new_live_id
+            )
+        )
+
+
+        if cursor.fetchone() is not None:
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "The new LIVE ID already has Locked data."
+            }), 409
+
+
+        # =================================================
+        # 5. Change LIVE ID
+        # =================================================
+
+        cursor.execute(
+            """
+            UPDATE sku_recording
+
+            SET live_id = %s
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+            """,
+            (
+                new_live_id,
+                week_id,
+                store_id,
+                old_live_id
+            )
+        )
+
+
+        changed_rows = cursor.rowcount
+
+
+        db.commit()
+
+
+        return jsonify({
+            "success": True,
+            "old_live_id": old_live_id,
+            "new_live_id": new_live_id,
+            "changed_rows": changed_rows
+        })
+
+
+    except Exception as e:
+
+        db.rollback()
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+
+    finally:
+
+        cursor.close()
+        db.close()
+
 
 @recording_bp.route(
     "/api/recordings",
@@ -1623,7 +1896,7 @@ def download_recordings():
                 week_id,
                 store_id,
                 live_id,
-                row["sku"],
+                f'= "{row["sku"]}"',
                 row["book_title"]
                     or "",
                 row["quantity"],
