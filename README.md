@@ -3,7 +3,7 @@ inventory_snapshot.py snapshot xlwms inventory updates (1h)
 DB
 book_sku: book sku and information
 
-inventory_locked: lock skan skus for inventory
+inventory_locked: lock skan skus for inventory manual
 
 invenrory_snapshor: napshot xlwms inventory updates (1h)
 
