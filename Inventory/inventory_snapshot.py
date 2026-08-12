@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS inventory_snapshot (
     available_stock     INT          DEFAULT 0,
     locked_stock        INT          DEFAULT 0,
     inbound_in_transit  INT          DEFAULT 0,
-    updated_at          DATETIME     NOT NULL,
+    updated_at          DATETIME     NOT NULL,  -- stored as UTC, see write_full() below
     PRIMARY KEY (sku, warehouse, stock_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -80,9 +80,8 @@ import hmac
 import json
 import hashlib
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
-from zoneinfo import ZoneInfo
 from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -90,7 +89,6 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 import requests
 import pymysql
 
-EASTERN_TZ = ZoneInfo("America/Detroit")
 
 def log(msg: str = "", err: bool = False) -> None:
     print(msg, file=sys.stderr if err else sys.stdout)
@@ -361,10 +359,17 @@ class DbWriter:
         )
 
     def _connect(self):
-        return pymysql.connect(
+        conn = pymysql.connect(
             host=self.host, port=self.port, user=self.user, password=self.password,
             database=self.database, charset="utf8mb4", autocommit=False,
         )
+        # Force this session to UTC — matches the convention used in tkorders'
+        # db.py, so every DATETIME this script writes (updated_at below) means
+        # the same thing regardless of what timezone the MySQL server itself
+        # defaults to.
+        with conn.cursor() as cur:
+            cur.execute("SET time_zone = '+00:00'")
+        return conn
 
     def write_full(self, rows: List[Dict[str, Any]]) -> None:
         if not rows:
@@ -380,7 +385,10 @@ class DbWriter:
                 cur.execute(f"DROP TABLE IF EXISTS `{staging_table}`")
                 cur.execute(f"CREATE TABLE `{staging_table}` LIKE `{table}`")
 
-                now = datetime.now(EASTERN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                # UTC, not local time — DATETIME columns don't carry timezone
+                # info, so by convention every DATETIME here is UTC (see
+                # db.py's docstring in tkorders/ for the same convention).
+                now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                 insert_sql = (
                     f"INSERT INTO `{staging_table}` "
                     "(sku, product_name, warehouse, stock_type, total_stock, "

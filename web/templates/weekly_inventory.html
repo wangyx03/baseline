@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Weekly Inventory Monitor Demo</title>
+
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            color: #111;
+        }
+
+
+        /* =====================================================
+           TOP NAV
+        ===================================================== */
+
+        .top-nav {
+            display: flex;
+            align-items: center;
+            padding: 14px 20px;
+            background: white;
+            border-bottom: 1px solid #ddd;
+        }
+
+
+        .recording-links {
+            display: flex;
+            gap: 24px;
+        }
+
+
+        .recording-links a {
+            font-size: 18px;
+        }
+
+
+        .user-area {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+
+        /* =====================================================
+           PAGE
+        ===================================================== */
+
+        .page {
+            padding: 28px 20px 50px 20px;
+        }
+
+
+        h1 {
+            margin: 0 0 30px 0;
+            font-size: 42px;
+        }
+
+
+        /* =====================================================
+           CONTROL PANEL
+        ===================================================== */
+
+        .controls {
+            background: white;
+            padding: 28px 30px;
+            border-radius: 10px;
+            display: flex;
+            align-items: flex-end;
+            gap: 22px;
+            flex-wrap: wrap;
+        }
+
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+
+        .control-group label {
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+
+        select,
+        input {
+            font-family: inherit;
+        }
+
+
+        #weekId {
+            width: 260px;
+            padding: 13px 16px;
+            font-size: 18px;
+            border: 1px solid #999;
+            border-radius: 4px;
+            background: white;
+        }
+
+
+        #storeId {
+            width: 220px;
+            padding: 13px 16px;
+            font-size: 18px;
+            border: 1px solid #999;
+            border-radius: 4px;
+            background: white;
+        }
+
+
+        button {
+            padding: 13px 20px;
+            font-size: 17px;
+            background: white;
+            border: 1px solid #aaa;
+            border-radius: 7px;
+            cursor: pointer;
+        }
+
+
+        button:hover:not(:disabled) {
+            background: #eee;
+        }
+
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+
+        .filter-button.active {
+            background: #111;
+            color: white;
+            border-color: #111;
+        }
+
+
+        /* =====================================================
+           REFRESH INFO
+        ===================================================== */
+
+        .refresh-info {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            margin: 15px 2px 0 2px;
+            color: #666;
+            font-size: 14px;
+        }
+
+
+        .refresh-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #2c9c4b;
+            margin-right: 5px;
+        }
+
+
+        /* =====================================================
+           SUMMARY
+        ===================================================== */
+
+        .summary-grid {
+            display: flex;
+            gap: 28px;
+            flex-wrap: wrap;
+            margin-top: 35px;
+            margin-bottom: 28px;
+        }
+
+
+        .summary-card {
+            width: 225px;
+            background: white;
+            padding: 22px 30px;
+            border-radius: 12px;
+        }
+
+
+        .summary-label {
+            color: #555;
+            font-size: 17px;
+            margin-bottom: 8px;
+        }
+
+
+        .summary-value {
+            font-size: 34px;
+            font-weight: bold;
+        }
+
+
+        /* =====================================================
+           SEARCH
+        ===================================================== */
+
+        .search-row {
+            margin-bottom: 22px;
+        }
+
+
+        #searchInput {
+            width: 525px;
+            max-width: 100%;
+            padding: 14px 16px;
+            font-size: 18px;
+            border: 1px solid #888;
+        }
+
+
+        /* =====================================================
+           TABLE
+        ===================================================== */
+
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 900px;
+        }
+
+
+        th,
+        td {
+            padding: 15px 16px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+
+        th {
+            background: #eee;
+            font-size: 16px;
+        }
+
+
+        td {
+            font-size: 16px;
+        }
+
+
+        .number {
+            text-align: right;
+        }
+
+
+        .remaining-zero {
+            font-weight: bold;
+        }
+
+
+        .empty-row {
+            padding: 28px;
+            color: #777;
+        }
+
+
+        /* =====================================================
+           STATUS / ERROR
+        ===================================================== */
+
+        #errorMessage {
+            margin-top: 20px;
+            color: #b00020;
+            font-size: 16px;
+        }
+
+
+        /* =====================================================
+           MOBILE
+        ===================================================== */
+
+        @media (max-width: 800px) {
+
+            h1 {
+                font-size: 32px;
+            }
+
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+
+            #weekId,
+            #storeId {
+                width: 100%;
+            }
+
+
+            .summary-card {
+                width: 100%;
+            }
+
+
+            .top-nav {
+                flex-wrap: wrap;
+                gap: 15px;
+            }
+
+
+            .user-area {
+                width: 100%;
+                margin-left: 0;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<!-- =========================================================
+     TOP NAV
+========================================================= -->
+
+<div class="top-nav">
+
+    <div class="recording-links">
+
+        <a href="/recording/1">
+            TU Recording
+        </a>
+
+        <a href="/recording/2">
+            VB Recording
+        </a>
+
+    </div>
+
+
+    <div class="user-area">
+
+        User:
+        <strong>
+            {{ current_user.username }}
+        </strong>
+
+        <a href="/logout">
+            Logout
+        </a>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     PAGE
+========================================================= -->
+
+<div class="page">
+
+
+    <h1>
+        Weekly Inventory Monitor Demo
+    </h1>
+
+
+    <!-- =====================================================
+         CONTROLS
+    ===================================================== -->
+
+    <div class="controls">
+
+
+        <!-- WEEK -->
+
+        <div class="control-group">
+
+            <label for="weekId">
+                Week
+            </label>
+
+            <select id="weekId">
+
+                <option value="">
+                    Loading...
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <!-- STORE -->
+
+        <div class="control-group">
+
+            <label for="storeId">
+                Store
+            </label>
+
+            <select id="storeId">
+
+                <option value="1">
+                    TU
+                </option>
+
+                <option value="2">
+                    VB
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <!-- LOAD -->
+
+        <button
+            type="button"
+            id="loadButton"
+            onclick="loadInventory()"
+        >
+            Load
+        </button>
+
+
+        <!-- FILTERS -->
+
+        <button
+            type="button"
+            id="filterAll"
+            class="filter-button active"
+            onclick="setFilter('all')"
+        >
+            All
+        </button>
+
+
+        <button
+            type="button"
+            id="filterNeverUsed"
+            class="filter-button"
+            onclick="setFilter('unused')"
+        >
+            Used = 0
+        </button>
+
+
+        <button
+            type="button"
+            id="filterInStock"
+            class="filter-button"
+            onclick="setFilter('instock')"
+        >
+            In Stock
+        </button>
+
+
+    </div>
+
+
+    <!-- =====================================================
+         AUTO REFRESH INFO
+    ===================================================== -->
+
+    <div class="refresh-info">
+
+        <span>
+            <span class="refresh-dot"></span>
+            Auto Refresh: 15s
+        </span>
+
+        <span>
+            Last Updated:
+            <strong id="lastUpdated">
+                —
+            </strong>
+        </span>
+
+    </div>
+
+
+    <!-- =====================================================
+         SUMMARY
+    ===================================================== -->
+
+    <div class="summary-grid">
+
+
+        <div class="summary-card">
+
+            <div class="summary-label">
+                Total SKU
+            </div>
+
+            <div
+                class="summary-value"
+                id="totalSku"
+            >
+                0
+            </div>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <div class="summary-label">
+                Never Used
+            </div>
+
+            <div
+                class="summary-value"
+                id="neverUsed"
+            >
+                0
+            </div>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <div class="summary-label">
+                Total Planned
+            </div>
+
+            <div
+                class="summary-value"
+                id="totalPlanned"
+            >
+                0
+            </div>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <div class="summary-label">
+                Total Used
+            </div>
+
+            <div
+                class="summary-value"
+                id="totalUsed"
+            >
+                0
+            </div>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <div class="summary-label">
+                Total Remaining
+            </div>
+
+            <div
+                class="summary-value"
+                id="totalRemaining"
+            >
+                0
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+    <!-- =====================================================
+         SEARCH
+    ===================================================== -->
+
+    <div class="search-row">
+
+        <input
+            type="text"
+            id="searchInput"
+            placeholder="Search SKU or title"
+        >
+
+    </div>
+
+
+    <!-- =====================================================
+         ERROR
+    ===================================================== -->
+
+    <div id="errorMessage"></div>
+
+
+    <!-- =====================================================
+         TABLE
+    ===================================================== -->
+
+    <div class="table-container">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        SKU
+                    </th>
+
+                    <th>
+                        Title
+                    </th>
+
+                    <th class="number">
+                        Planned
+                    </th>
+
+                    <th class="number">
+                        Used
+                    </th>
+
+                    <th class="number">
+                        Remaining
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody id="inventoryBody">
+
+                <tr>
+
+                    <td
+                        colspan="5"
+                        class="empty-row"
+                    >
+                        Loading inventory...
+                    </td>
+
+                </tr>
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+
+</div>
+
+
+<script>
+
+
+// =========================================================
+// SETTINGS
+// =========================================================
+
+const STORAGE_WEEK_KEY =
+    "weeklyInventoryWeek";
+
+
+const STORAGE_STORE_KEY =
+    "weeklyInventoryStore";
+
+
+const AUTO_REFRESH_MS =
+    15000;
+
+
+let autoRefreshTimer =
+    null;
+
+
+let allItems =
+    [];
+
+
+let currentFilter =
+    "all";
+
+
+let loadingInventory =
+    false;
+
+
+// =========================================================
+// ELEMENTS
+// =========================================================
+
+const weekSelect =
+    document.getElementById(
+        "weekId"
+    );
+
+
+const storeSelect =
+    document.getElementById(
+        "storeId"
+    );
+
+
+const searchInput =
+    document.getElementById(
+        "searchInput"
+    );
+
+
+const inventoryBody =
+    document.getElementById(
+        "inventoryBody"
+    );
+
+
+const errorMessage =
+    document.getElementById(
+        "errorMessage"
+    );
+
+
+const lastUpdated =
+    document.getElementById(
+        "lastUpdated"
+    );
+
+
+// =========================================================
+// SAVE SELECTION
+// =========================================================
+
+function saveCurrentSelection() {
+
+
+    const weekId =
+        weekSelect.value;
+
+
+    const storeId =
+        storeSelect.value;
+
+
+    if (weekId) {
+
+        localStorage.setItem(
+            STORAGE_WEEK_KEY,
+            weekId
+        );
+
+    }
+
+
+    if (storeId) {
+
+        localStorage.setItem(
+            STORAGE_STORE_KEY,
+            storeId
+        );
+
+    }
+
+}
+
+
+// =========================================================
+// RESTORE STORE
+// =========================================================
+
+function restoreStore() {
+
+
+    const savedStore =
+        localStorage.getItem(
+            STORAGE_STORE_KEY
+        );
+
+
+    if (!savedStore) {
+        return;
+    }
+
+
+    const exists =
+        Array.from(
+            storeSelect.options
+        )
+        .some(
+            option =>
+                option.value
+                ===
+                savedStore
+        );
+
+
+    if (exists) {
+
+        storeSelect.value =
+            savedStore;
+
+    }
+
+}
+
+
+// =========================================================
+// LOAD WEEKS
+// =========================================================
+
+async function loadWeeks() {
+
+
+    const savedWeek =
+        localStorage.getItem(
+            STORAGE_WEEK_KEY
+        );
+
+
+    const storeId =
+        storeSelect.value;
+
+
+    try {
+
+
+        const response =
+            await fetch(
+
+                "/api/weekly-weeks"
+
+                + "?store_id="
+
+                + encodeURIComponent(
+                    storeId
+                )
+
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+
+
+            errorMessage.textContent =
+                data.message
+                ||
+                "Could not load weeks.";
+
+
+            return;
+
+        }
+
+
+        weekSelect.innerHTML =
+            "";
+
+
+        if (
+            !data.weeks
+            ||
+            data.weeks.length === 0
+        ) {
+
+
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+
+            option.value =
+                "";
+
+
+            option.textContent =
+                "No weekly inventory";
+
+
+            weekSelect.appendChild(
+                option
+            );
+
+
+            return;
+
+        }
+
+
+        for (
+            const week
+            of data.weeks
+        ) {
+
+
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+
+            option.value =
+                week;
+
+
+            option.textContent =
+                week;
+
+
+            weekSelect.appendChild(
+                option
+            );
+
+        }
+
+
+        // -----------------------------------------------------
+        // Restore previous week if still available
+        // -----------------------------------------------------
+
+        if (
+            savedWeek
+            &&
+            data.weeks.includes(
+                savedWeek
+            )
+        ) {
+
+
+            weekSelect.value =
+                savedWeek;
+
+
+        } else {
+
+
+            // Database latest week
+            weekSelect.value =
+                data.weeks[0];
+
+        }
+
+
+        saveCurrentSelection();
+
+
+    }
+
+    catch (error) {
+
+
+        console.error(
+            error
+        );
+
+
+        errorMessage.textContent =
+            "Could not load weeks.";
+
+    }
+
+}
+
+
+// =========================================================
+// LOAD INVENTORY
+// =========================================================
+
+async function loadInventory() {
+
+
+    if (loadingInventory) {
+        return;
+    }
+
+
+    const weekId =
+        weekSelect.value;
+
+
+    const storeId =
+        storeSelect.value;
+
+
+    if (
+        !weekId
+        ||
+        !storeId
+    ) {
+
+        return;
+
+    }
+
+
+    loadingInventory =
+        true;
+
+
+    errorMessage.textContent =
+        "";
+
+
+    saveCurrentSelection();
+
+
+    try {
+
+
+        const url =
+
+            "/api/weekly-inventory"
+
+            + "?week_id="
+
+            + encodeURIComponent(
+                weekId
+            )
+
+            + "&store_id="
+
+            + encodeURIComponent(
+                storeId
+            );
+
+
+        const response =
+            await fetch(
+                url,
+                {
+                    cache: "no-store"
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+
+
+            errorMessage.textContent =
+                data.message
+                ||
+                "Could not load inventory.";
+
+
+            return;
+
+        }
+
+
+        allItems =
+            data.items
+            ||
+            [];
+
+
+        updateSummary();
+
+
+        renderInventory();
+
+
+        updateLastUpdatedTime();
+
+
+    }
+
+    catch (error) {
+
+
+        console.error(
+            error
+        );
+
+
+        errorMessage.textContent =
+            "Could not load inventory.";
+
+    }
+
+    finally {
+
+
+        loadingInventory =
+            false;
+
+    }
+
+}
+
+
+// =========================================================
+// SUMMARY
+// =========================================================
+
+function updateSummary() {
+
+
+    let totalSku =
+        allItems.length;
+
+
+    let neverUsed =
+        0;
+
+
+    let totalPlanned =
+        0;
+
+
+    let totalUsed =
+        0;
+
+
+    let totalRemaining =
+        0;
+
+
+    for (
+        const item
+        of allItems
+    ) {
+
+
+        const planned =
+            Number(
+                item.planned
+                ||
+                0
+            );
+
+
+        const used =
+            Number(
+                item.used
+                ||
+                0
+            );
+
+
+        const remaining =
+            Number(
+                item.remaining
+                ||
+                0
+            );
+
+
+        if (used === 0) {
+
+            neverUsed += 1;
+
+        }
+
+
+        totalPlanned +=
+            planned;
+
+
+        totalUsed +=
+            used;
+
+
+        totalRemaining +=
+            remaining;
+
+    }
+
+
+    document
+        .getElementById(
+            "totalSku"
+        )
+        .textContent =
+            totalSku;
+
+
+    document
+        .getElementById(
+            "neverUsed"
+        )
+        .textContent =
+            neverUsed;
+
+
+    document
+        .getElementById(
+            "totalPlanned"
+        )
+        .textContent =
+            totalPlanned;
+
+
+    document
+        .getElementById(
+            "totalUsed"
+        )
+        .textContent =
+            totalUsed;
+
+
+    document
+        .getElementById(
+            "totalRemaining"
+        )
+        .textContent =
+            totalRemaining;
+
+}
+
+
+// =========================================================
+// FILTER
+// =========================================================
+
+function setFilter(
+    filter
+) {
+
+
+    currentFilter =
+        filter;
+
+
+    document
+        .querySelectorAll(
+            ".filter-button"
+        )
+        .forEach(
+            button =>
+                button.classList.remove(
+                    "active"
+                )
+        );
+
+
+    if (
+        filter === "all"
+    ) {
+
+
+        document
+            .getElementById(
+                "filterAll"
+            )
+            .classList.add(
+                "active"
+            );
+
+
+    } else if (
+        filter === "unused"
+    ) {
+
+
+        document
+            .getElementById(
+                "filterNeverUsed"
+            )
+            .classList.add(
+                "active"
+            );
+
+
+    } else if (
+        filter === "instock"
+    ) {
+
+
+        document
+            .getElementById(
+                "filterInStock"
+            )
+            .classList.add(
+                "active"
+            );
+
+    }
+
+
+    renderInventory();
+
+}
+
+
+// =========================================================
+// RENDER INVENTORY
+// =========================================================
+
+function renderInventory() {
+
+
+    const search =
+        searchInput.value
+        .trim()
+        .toLowerCase();
+
+
+    let rows =
+        allItems.filter(
+            item => {
+
+
+                const sku =
+                    String(
+                        item.sku
+                        ||
+                        ""
+                    )
+                    .toLowerCase();
+
+
+                const title =
+                    String(
+                        item.title
+                        ||
+                        ""
+                    )
+                    .toLowerCase();
+
+
+                const used =
+                    Number(
+                        item.used
+                        ||
+                        0
+                    );
+
+
+                const remaining =
+                    Number(
+                        item.remaining
+                        ||
+                        0
+                    );
+
+
+                // Search
+
+                if (
+                    search
+                    &&
+                    !sku.includes(
+                        search
+                    )
+                    &&
+                    !title.includes(
+                        search
+                    )
+                ) {
+
+                    return false;
+
+                }
+
+
+                // Filter
+
+                if (
+                    currentFilter
+                    ===
+                    "unused"
+                    &&
+                    used !== 0
+                ) {
+
+                    return false;
+
+                }
+
+
+                if (
+                    currentFilter
+                    ===
+                    "instock"
+                    &&
+                    remaining <= 0
+                ) {
+
+                    return false;
+
+                }
+
+
+                return true;
+
+            }
+        );
+
+
+    inventoryBody.innerHTML =
+        "";
+
+
+    if (
+        rows.length === 0
+    ) {
+
+
+        inventoryBody.innerHTML = `
+
+            <tr>
+
+                <td
+                    colspan="5"
+                    class="empty-row"
+                >
+
+                    No matching inventory
+
+                </td>
+
+            </tr>
+
+        `;
+
+
+        return;
+
+    }
+
+
+    for (
+        const item
+        of rows
+    ) {
+
+
+        const tr =
+            document.createElement(
+                "tr"
+            );
+
+
+        const remaining =
+            Number(
+                item.remaining
+                ||
+                0
+            );
+
+
+        tr.innerHTML = `
+
+            <td>
+                ${escapeHtml(item.sku)}
+            </td>
+
+            <td>
+                ${escapeHtml(item.title || "")}
+            </td>
+
+            <td class="number">
+                ${Number(item.planned || 0)}
+            </td>
+
+            <td class="number">
+                ${Number(item.used || 0)}
+            </td>
+
+            <td
+                class="
+                    number
+                    ${remaining <= 0
+                        ? "remaining-zero"
+                        : ""}
+                "
+            >
+                ${remaining}
+            </td>
+
+        `;
+
+
+        inventoryBody.appendChild(
+            tr
+        );
+
+    }
+
+}
+
+
+// =========================================================
+// LAST UPDATED
+// =========================================================
+
+function updateLastUpdatedTime() {
+
+
+    const now =
+        new Date();
+
+
+    lastUpdated.textContent =
+        now.toLocaleTimeString(
+            [],
+            {
+                hour:
+                    "numeric",
+
+                minute:
+                    "2-digit",
+
+                second:
+                    "2-digit"
+            }
+        );
+
+}
+
+
+// =========================================================
+// AUTO REFRESH
+// =========================================================
+
+function startAutoRefresh() {
+
+
+    if (
+        autoRefreshTimer
+    ) {
+
+
+        clearInterval(
+            autoRefreshTimer
+        );
+
+    }
+
+
+    autoRefreshTimer =
+        setInterval(
+
+            async function() {
+
+
+                /*
+                Only data reloads.
+
+                Week / Store selections are NOT reset.
+                */
+
+                await loadInventory();
+
+
+            },
+
+            AUTO_REFRESH_MS
+
+        );
+
+}
+
+
+// =========================================================
+// STORE CHANGE
+// =========================================================
+
+storeSelect.addEventListener(
+
+    "change",
+
+    async function() {
+
+
+        /*
+        Save the new store immediately.
+        */
+
+        localStorage.setItem(
+            STORAGE_STORE_KEY,
+            storeSelect.value
+        );
+
+
+        /*
+        Load weeks available for this store.
+
+        If previous Week also exists in the new Store,
+        it will remain selected.
+
+        Otherwise latest available Week is selected.
+        */
+
+        await loadWeeks();
+
+
+        await loadInventory();
+
+    }
+
+);
+
+
+// =========================================================
+// WEEK CHANGE
+// =========================================================
+
+weekSelect.addEventListener(
+
+    "change",
+
+    async function() {
+
+
+        saveCurrentSelection();
+
+
+        await loadInventory();
+
+    }
+
+);
+
+
+// =========================================================
+// SEARCH
+// =========================================================
+
+searchInput.addEventListener(
+
+    "input",
+
+    function() {
+
+
+        renderInventory();
+
+    }
+
+);
+
+
+// =========================================================
+// ESCAPE
+// =========================================================
+
+function escapeHtml(
+    value
+) {
+
+
+    return String(
+        value
+        ??
+        ""
+    )
+
+    .replace(
+        /&/g,
+        "&amp;"
+    )
+
+    .replace(
+        /</g,
+        "&lt;"
+    )
+
+    .replace(
+        />/g,
+        "&gt;"
+    )
+
+    .replace(
+        /"/g,
+        "&quot;"
+    )
+
+    .replace(
+        /'/g,
+        "&#039;"
+    );
+
+}
+
+
+// =========================================================
+// PAGE LOAD
+// =========================================================
+
+window.addEventListener(
+
+    "load",
+
+    async function() {
+
+
+        /*
+        1. Restore Store first.
+
+        Example:
+        Last time = VB
+        F5 → VB remains selected.
+        */
+
+        restoreStore();
+
+
+        /*
+        2. Load available Weeks for that Store.
+
+        Previous Week is restored if still available.
+        */
+
+        await loadWeeks();
+
+
+        /*
+        3. Load inventory immediately.
+        */
+
+        await loadInventory();
+
+
+        /*
+        4. Start 15-second refresh.
+        */
+
+        startAutoRefresh();
+
+    }
+
+);
+
+
+</script>
+
+
+</body>
+
+</html>

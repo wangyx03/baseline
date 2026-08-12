@@ -5,7 +5,13 @@
 
     <meta charset="UTF-8">
 
-    <title>SKU Recording</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>SKU Recording Demo</title>
+
 
     <style>
 
@@ -18,29 +24,59 @@
             font-family: Arial, sans-serif;
             margin: 0;
             background: #f7f7f7;
+            color: #111;
+        }
+
+
+        .top-nav {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            background: white;
+            border-bottom: 1px solid #ddd;
+        }
+
+
+        .nav-button {
+            padding: 8px 16px;
+            background: #111;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+        }
+
+
+        .nav-button:hover {
+            background: #333;
+        }
+
+
+        .user-area {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
 
         .page {
             display: grid;
             grid-template-columns: 480px 1fr;
-            min-height: 100vh;
+            min-height: calc(100vh - 55px);
         }
 
-
-        /* ==========================
-           LEFT
-        ========================== */
 
         .left-panel {
             background: white;
-            padding: 40px;
+            padding: 40px 30px;
+            border-right: 1px solid #eee;
         }
 
 
-        h1 {
+        .left-panel h1 {
+            font-size: 38px;
             margin-top: 0;
-            font-size: 36px;
         }
 
 
@@ -50,17 +86,23 @@
         }
 
 
-        .live-area {
-            margin-bottom: 25px;
-            padding-bottom: 25px;
-            border-bottom: 1px solid #ddd;
+        .field {
+            margin-bottom: 22px;
         }
 
 
-        .live-label {
+        .field-label {
+            display: block;
             font-weight: bold;
-            font-size: 18px;
             margin-bottom: 8px;
+        }
+
+
+        #weekId,
+        #liveId {
+            width: 100%;
+            padding: 12px;
+            font-size: 18px;
         }
 
 
@@ -70,93 +112,159 @@
         }
 
 
-        #liveId {
+        .live-row #liveId {
             flex: 1;
-            font-size: 18px;
-            padding: 10px;
         }
 
 
-        #startLiveButton {
-            padding: 10px 15px;
-            font-size: 16px;
+        button {
+            padding: 10px 14px;
+            font-size: 15px;
+            cursor: pointer;
+            background: white;
+            border: 1px solid #aaa;
+            border-radius: 4px;
         }
 
 
-        #changeLiveButton {
-            display: none;
-            margin-top: 10px;
+        button:hover:not(:disabled) {
+            background: #eee;
         }
 
 
-        #currentLive {
-            margin-top: 12px;
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-
-        #sku {
-            width: 100%;
-            font-size: 24px;
-            padding: 12px;
-        }
-
-
-        #sku:disabled {
-            background: #eeeeee;
+        button:disabled {
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
 
-        #status {
-            font-size: 20px;
-            margin-top: 20px;
-            min-height: 25px;
+        #weekId:disabled,
+        #liveId:disabled,
+        #skuInput:disabled {
+            background: #eeeeee;
+            color: #777;
+            border: 2px solid #aaa;
+            opacity: 1;
+            cursor: not-allowed;
         }
 
 
-        .success {
+        #weekId:disabled {
+            -webkit-text-fill-color: #777;
+        }
+
+
+        .current-session {
+            margin: 18px 0;
+            line-height: 1.7;
+        }
+
+
+        .round-controls {
+            margin: 18px 0;
+            padding: 14px;
+            background: #f3f3f3;
+            border: 1px solid #ccc;
+        }
+
+
+        .round-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+
+        #roundInput {
+            width: 80px;
+            padding: 8px;
+            font-size: 16px;
+        }
+
+
+        .insert-mode {
+            display: none;
+            margin-bottom: 15px;
+            padding: 14px;
+            border: 2px solid #111;
+            background: #eee;
+        }
+
+
+        #skuInput {
+            width: 100%;
+            padding: 15px;
+            font-size: 22px;
+            border: 2px solid #555;
+        }
+
+
+        #skuInput:focus {
+            border-color: #111;
+            outline: none;
+        }
+
+
+        .message {
+            margin-top: 15px;
+            min-height: 25px;
+            font-size: 17px;
+        }
+
+
+        .message.success {
             color: green;
         }
 
 
-        .error {
+        .message.error {
             color: red;
         }
 
 
         #bookInfo {
             display: none;
-            margin-top: 30px;
+            margin-top: 28px;
         }
 
 
         #bookCover {
-            width: 200px;
-            max-height: 320px;
+            width: 180px;
+            max-height: 280px;
             object-fit: contain;
             display: block;
-            margin-bottom: 20px;
         }
 
 
         #bookTitle {
             font-size: 28px;
-            margin-top: 0;
-            margin-bottom: 15px;
         }
 
 
         .book-field {
-            font-size: 20px;
-            margin: 8px 0;
+            font-size: 18px;
+            margin: 7px 0;
         }
 
 
-        /* ==========================
-           RIGHT
-        ========================== */
+        #weeklyStatus {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+        }
+
+
+        .remaining-line {
+            font-size: 28px;
+            margin-top: 12px;
+        }
+
+
+        #weeklyRemaining {
+            font-weight: bold;
+        }
+
 
         .right-panel {
             padding: 40px;
@@ -167,86 +275,83 @@
         .right-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            margin-bottom: 25px;
             gap: 20px;
         }
 
 
-        .right-panel h2 {
-            margin-top: 0;
-            margin-bottom: 8px;
-            font-size: 28px;
+        .right-header h2 {
+            font-size: 32px;
+            margin: 0;
         }
 
 
-        #liveListTitle {
+        .subtitle {
+            margin-top: 8px;
+            font-size: 18px;
             color: #555;
-            margin-bottom: 20px;
-        }
-
-
-        #downloadButton {
-            padding: 10px 16px;
-            font-size: 15px;
         }
 
 
         table {
             width: 100%;
             border-collapse: collapse;
+            min-width: 950px;
             background: white;
         }
 
 
         th,
         td {
-            padding: 12px;
+            padding: 13px 12px;
             border-bottom: 1px solid #ddd;
             text-align: left;
-            vertical-align: middle;
         }
 
 
         th {
-            background: #efefef;
+            background: #eee;
         }
 
 
         .sku-edit {
-            width: 190px;
+            width: 180px;
             padding: 7px;
-            font-size: 15px;
         }
 
 
-        button {
-            padding: 7px 12px;
-            cursor: pointer;
-            border: 1px solid #aaa;
-            background: white;
-            border-radius: 4px;
+        .action-buttons {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
         }
 
 
-        button:hover:not(:disabled) {
-            background: #f0f0f0;
-        }
-
-
-        button:disabled {
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
-
-
-        .delete-btn {
+        .delete-button {
             color: #a00000;
         }
 
 
-        .empty-message {
-            padding: 20px;
-            color: #777;
+        .pagination {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+
+        @media (max-width: 900px) {
+
+            .page {
+                grid-template-columns: 1fr;
+            }
+
+            .left-panel {
+                border-right: none;
+            }
+
         }
 
     </style>
@@ -257,16 +362,41 @@
 <body>
 
 
+<div class="top-nav">
+
+    <a
+        href="/weekly-inventory"
+        class="nav-button"
+    >
+        Weekly Inventory
+    </a>
+
+
+    <div class="user-area">
+
+        User:
+
+        <strong>
+            {{ current_user.username }}
+        </strong>
+
+        <a href="/logout">
+            Logout
+        </a>
+
+    </div>
+
+</div>
+
+
 <div class="page">
 
-
-    <!-- LEFT -->
 
     <div class="left-panel">
 
 
         <h1>
-            SKU Recording
+            SKU Recording Demo
         </h1>
 
 
@@ -275,18 +405,39 @@
         </div>
 
 
-        <div class="live-area">
+        <div class="field">
+
+            <label
+                class="field-label"
+                for="weekId"
+            >
+                Week
+            </label>
+
+            <select id="weekId">
+
+                <option value="">
+                    Loading...
+                </option>
+
+            </select>
+
+        </div>
 
 
-            <div class="live-label">
+        <div class="field">
+
+            <label
+                class="field-label"
+                for="liveId"
+            >
                 LIVE ID
-            </div>
+            </label>
 
 
             <div class="live-row">
 
                 <input
-                    type="text"
                     id="liveId"
                     placeholder="Enter LIVE ID"
                     autocomplete="off"
@@ -295,40 +446,116 @@
 
                 <button
                     id="startLiveButton"
-                    type="button">
-
+                    onclick="startLive()"
+                >
                     Start Live
-
                 </button>
 
             </div>
 
+        </div>
 
-            <div id="currentLive"></div>
+
+        <div
+            class="current-session"
+            id="currentSession"
+            style="display:none;"
+        >
+
+            Current Week:
+
+            <strong id="currentWeekText">
+            </strong>
+
+            <br>
+
+            Current LIVE ID:
+
+            <strong id="currentLiveText">
+            </strong>
+
+        </div>
+
+
+        <div
+            class="round-controls"
+            id="roundControls"
+            style="display:none;"
+        >
+
+            Current Round:
+
+            <strong id="currentRoundText">
+                1
+            </strong>
+
+
+            <div class="round-row">
+
+                <button
+                    type="button"
+                    onclick="startNewRound()"
+                >
+                    Start New Round
+                </button>
+
+
+                <input
+                    id="roundInput"
+                    type="number"
+                    min="1"
+                    value="1"
+                >
+
+
+                <button
+                    type="button"
+                    onclick="setRound()"
+                >
+                    Set Round
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <div
+            class="insert-mode"
+            id="insertModeBox"
+        >
+
+            <strong>
+                INSERT MODE
+            </strong>
+
+
+            <div id="insertModeText">
+            </div>
 
 
             <button
-                id="changeLiveButton"
-                type="button">
-
-                Change LIVE
-
+                type="button"
+                onclick="cancelInsertMode()"
+            >
+                Cancel Insert
             </button>
-
 
         </div>
 
 
         <input
-            type="text"
-            id="sku"
-            placeholder="Enter LIVE ID first"
+            id="skuInput"
+            placeholder="Select Week and enter LIVE ID first"
             autocomplete="off"
             disabled
         >
 
 
-        <p id="status"></p>
+        <div
+            id="message"
+            class="message"
+        ></div>
 
 
         <div id="bookInfo">
@@ -336,30 +563,81 @@
 
             <img
                 id="bookCover"
-                src=""
                 alt="Book Cover"
             >
 
 
-            <h2 id="bookTitle"></h2>
+            <h2 id="bookTitle">
+            </h2>
 
 
-            <p class="book-field">
+            <div class="book-field">
 
-                <strong>Author:</strong>
+                <strong>
+                    Author:
+                </strong>
 
-                <span id="bookAuthor"></span>
+                <span id="bookAuthor">
+                </span>
 
-            </p>
+            </div>
 
 
-            <p class="book-field">
+            <div class="book-field">
 
-                <strong>Format:</strong>
+                <strong>
+                    Format:
+                </strong>
 
-                <span id="bookFormat"></span>
+                <span id="bookFormat">
+                </span>
 
-            </p>
+            </div>
+
+
+            <div
+                id="weeklyStatus"
+                style="display:none;"
+            >
+
+
+                <div class="book-field">
+
+                    <strong>
+                        Planned:
+                    </strong>
+
+                    <span id="weeklyPlanned">
+                    </span>
+
+                </div>
+
+
+                <div class="book-field">
+
+                    <strong>
+                        Used:
+                    </strong>
+
+                    <span id="weeklyUsed">
+                    </span>
+
+                </div>
+
+
+                <div class="remaining-line">
+
+                    <strong>
+                        Remaining:
+                    </strong>
+
+                    <span id="weeklyRemaining">
+                    </span>
+
+                </div>
+
+
+            </div>
 
 
         </div>
@@ -367,8 +645,6 @@
 
     </div>
 
-
-    <!-- RIGHT -->
 
     <div class="right-panel">
 
@@ -379,11 +655,14 @@
             <div>
 
                 <h2>
-                    Current LIVE Recorded Items
+                    Current Session Recorded Items
                 </h2>
 
-                <div id="liveListTitle">
-                    Enter LIVE ID to view recordings
+                <div
+                    class="subtitle"
+                    id="sessionSubtitle"
+                >
+                    Select Week and enter LIVE ID
                 </div>
 
             </div>
@@ -391,11 +670,10 @@
 
             <button
                 id="downloadButton"
-                type="button"
-                disabled>
-
+                onclick="downloadCSV()"
+                disabled
+            >
                 Download CSV
-
             </button>
 
 
@@ -409,31 +687,37 @@
 
                 <tr>
 
-                    <th>#</th>
+                    <th>
+                        Round / Seq
+                    </th>
 
-                    <th>SKU</th>
+                    <th>
+                        SKU
+                    </th>
 
-                    <th>Book Title</th>
+                    <th>
+                        Product Name
+                    </th>
 
-                    <th>Time</th>
+                    <th>
+                        Time
+                    </th>
 
-                    <th>Action</th>
+                    <th>
+                        Action
+                    </th>
 
                 </tr>
 
             </thead>
 
 
-            <tbody id="recordingTableBody">
+            <tbody id="recordingBody">
 
                 <tr>
 
-                    <td
-                        colspan="5"
-                        class="empty-message">
-
-                        Enter LIVE ID to begin
-
+                    <td colspan="5">
+                        Select Week and enter LIVE ID
                     </td>
 
                 </tr>
@@ -442,6 +726,40 @@
 
 
         </table>
+
+
+        <div class="pagination">
+
+
+            <button
+                id="previousButton"
+                onclick="previousPage()"
+                disabled
+            >
+                Previous
+            </button>
+
+
+            <span id="pageText">
+                Page 1 / 1
+            </span>
+
+
+            <button
+                id="nextButton"
+                onclick="nextPage()"
+                disabled
+            >
+                Next
+            </button>
+
+
+            <span id="paginationInfo">
+                Showing 0 of 0
+            </span>
+
+
+        </div>
 
 
     </div>
@@ -453,273 +771,463 @@
 <script>
 
 
-    const input =
-        document.getElementById("sku");
+// =========================================================
+// STORE
+// =========================================================
+
+const STORE_ID =
+    {{ store_id | tojson }};
 
 
-    const status =
-        document.getElementById("status");
+// =========================================================
+// Session Storage
+//
+// Different Store = different temporary recording session.
+// =========================================================
+
+const RECORDING_WEEK_KEY =
+    "recordingWeek_" + STORE_ID;
+
+const RECORDING_LIVE_KEY =
+    "recordingLive_" + STORE_ID;
+
+const RECORDING_ROUND_KEY =
+    "recordingRound_" + STORE_ID;
+
+const RECORDING_PAGE_KEY =
+    "recordingPage_" + STORE_ID;
 
 
-    const liveIdInput =
-        document.getElementById("liveId");
+// =========================================================
+// State
+// =========================================================
+
+let currentWeekId = "";
+
+let currentLiveId = "";
+
+let currentRound = 1;
+
+let currentPage = 1;
+
+let totalPages = 1;
+
+let insertBeforeRound = null;
+
+let insertBeforeSeq = null;
 
 
-    const startLiveButton =
-        document.getElementById(
-            "startLiveButton"
+// =========================================================
+// Elements
+// =========================================================
+
+const weekSelect =
+    document.getElementById(
+        "weekId"
+    );
+
+
+const liveInput =
+    document.getElementById(
+        "liveId"
+    );
+
+
+const skuInput =
+    document.getElementById(
+        "skuInput"
+    );
+
+
+const startLiveButton =
+    document.getElementById(
+        "startLiveButton"
+    );
+
+
+const message =
+    document.getElementById(
+        "message"
+    );
+
+
+const recordingBody =
+    document.getElementById(
+        "recordingBody"
+    );
+
+
+const currentSession =
+    document.getElementById(
+        "currentSession"
+    );
+
+
+const currentWeekText =
+    document.getElementById(
+        "currentWeekText"
+    );
+
+
+const currentLiveText =
+    document.getElementById(
+        "currentLiveText"
+    );
+
+
+const roundControls =
+    document.getElementById(
+        "roundControls"
+    );
+
+
+const currentRoundText =
+    document.getElementById(
+        "currentRoundText"
+    );
+
+
+const roundInput =
+    document.getElementById(
+        "roundInput"
+    );
+
+
+const downloadButton =
+    document.getElementById(
+        "downloadButton"
+    );
+
+
+const sessionSubtitle =
+    document.getElementById(
+        "sessionSubtitle"
+    );
+
+
+const insertModeBox =
+    document.getElementById(
+        "insertModeBox"
+    );
+
+
+const insertModeText =
+    document.getElementById(
+        "insertModeText"
+    );
+
+
+const weeklyStatus =
+    document.getElementById(
+        "weeklyStatus"
+    );
+
+
+const weeklyPlanned =
+    document.getElementById(
+        "weeklyPlanned"
+    );
+
+
+const weeklyUsed =
+    document.getElementById(
+        "weeklyUsed"
+    );
+
+
+const weeklyRemaining =
+    document.getElementById(
+        "weeklyRemaining"
+    );
+
+
+// =========================================================
+// Save temporary recording session
+// =========================================================
+
+function saveRecordingSession() {
+
+
+    if (currentWeekId) {
+
+        sessionStorage.setItem(
+            RECORDING_WEEK_KEY,
+            currentWeekId
         );
-
-
-    const changeLiveButton =
-        document.getElementById(
-            "changeLiveButton"
-        );
-
-
-    const downloadButton =
-        document.getElementById(
-            "downloadButton"
-        );
-
-
-    const currentLive =
-        document.getElementById(
-            "currentLive"
-        );
-
-
-    const liveListTitle =
-        document.getElementById(
-            "liveListTitle"
-        );
-
-
-    const bookInfo =
-        document.getElementById(
-            "bookInfo"
-        );
-
-
-    const bookCover =
-        document.getElementById(
-            "bookCover"
-        );
-
-
-    const bookTitle =
-        document.getElementById(
-            "bookTitle"
-        );
-
-
-    const bookAuthor =
-        document.getElementById(
-            "bookAuthor"
-        );
-
-
-    const bookFormat =
-        document.getElementById(
-            "bookFormat"
-        );
-
-
-    const tableBody =
-        document.getElementById(
-            "recordingTableBody"
-        );
-
-
-    const storeId =
-        Number("{{ store_id }}");
-
-
-    /*
-        LIVE ID 只保存在当前网页内存。
-
-        不保存到：
-        localStorage
-        sessionStorage
-        Cookie
-
-        所以刷新页面后必须重新输入。
-    */
-
-    let currentLiveId = "";
-
-
-    // =====================================================
-    // Start LIVE
-    // =====================================================
-
-    async function startLive() {
-
-
-        const liveId =
-            liveIdInput
-                .value
-                .trim();
-
-
-        if (!liveId) {
-
-            status.className =
-                "error";
-
-            status.innerText =
-                "LIVE ID is required";
-
-            liveIdInput.focus();
-
-            return;
-        }
-
-
-        currentLiveId =
-            liveId;
-
-
-        liveIdInput.disabled =
-            true;
-
-
-        startLiveButton.disabled =
-            true;
-
-
-        changeLiveButton.style.display =
-            "inline-block";
-
-
-        downloadButton.disabled =
-            false;
-
-
-        currentLive.innerText =
-            "Current LIVE ID: "
-            +
-            currentLiveId;
-
-
-        liveListTitle.innerText =
-            "LIVE ID: "
-            +
-            currentLiveId;
-
-
-        input.disabled =
-            false;
-
-
-        input.placeholder =
-            "Scan SKU";
-
-
-        status.className =
-            "success";
-
-
-        status.innerText =
-            "✓ LIVE started";
-
-
-        await loadRecordings();
-
-
-        input.focus();
 
     }
 
 
-    startLiveButton.addEventListener(
-        "click",
-        startLive
+    if (currentLiveId) {
+
+        sessionStorage.setItem(
+            RECORDING_LIVE_KEY,
+            currentLiveId
+        );
+
+    }
+
+
+    sessionStorage.setItem(
+        RECORDING_ROUND_KEY,
+        String(currentRound)
     );
 
 
-    liveIdInput.addEventListener(
-        "keydown",
-        function(event) {
+    sessionStorage.setItem(
+        RECORDING_PAGE_KEY,
+        String(currentPage)
+    );
 
-            if (event.key === "Enter") {
+}
 
-                startLive();
 
-            }
+// =========================================================
+// Clear temporary recording session
+// =========================================================
+
+function clearRecordingSession() {
+
+
+    sessionStorage.removeItem(
+        RECORDING_WEEK_KEY
+    );
+
+
+    sessionStorage.removeItem(
+        RECORDING_LIVE_KEY
+    );
+
+
+    sessionStorage.removeItem(
+        RECORDING_ROUND_KEY
+    );
+
+
+    sessionStorage.removeItem(
+        RECORDING_PAGE_KEY
+    );
+
+}
+
+
+// =========================================================
+// Load Weeks
+// =========================================================
+
+async function loadWeeks() {
+
+
+    try {
+
+
+        const response =
+            await fetch(
+
+                "/api/weekly-weeks"
+
+                + "?store_id="
+
+                + encodeURIComponent(
+                    STORE_ID
+                )
+
+            );
+
+
+        const data =
+            await response.json();
+
+
+        weekSelect.innerHTML =
+            "";
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+
+
+            showMessage(
+                data.message
+                ||
+                "Could not load weeks.",
+                "error"
+            );
+
+
+            return;
 
         }
-    );
 
 
-    // =====================================================
+        if (
+            !data.weeks
+            ||
+            data.weeks.length === 0
+        ) {
+
+
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+
+            option.value =
+                "";
+
+
+            option.textContent =
+                "No weekly inventory";
+
+
+            weekSelect.appendChild(
+                option
+            );
+
+
+            return;
+
+        }
+
+
+        for (
+            const week
+            of data.weeks
+        ) {
+
+
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+
+            option.value =
+                week;
+
+
+            option.textContent =
+                week;
+
+
+            weekSelect.appendChild(
+                option
+            );
+
+        }
+
+
+    }
+
+    catch (error) {
+
+
+        console.error(
+            error
+        );
+
+
+        showMessage(
+            "Could not load weeks.",
+            "error"
+        );
+
+    }
+
+}
+
+
+// =========================================================
+// Start / Change LIVE
+// =========================================================
+
+async function startLive() {
+
+
+    // -----------------------------------------------------
     // Change LIVE
-    // =====================================================
+    // -----------------------------------------------------
 
-    function changeLive() {
+    if (currentLiveId) {
+
+
+        clearRecordingSession();
+
+
+        currentWeekId =
+            "";
 
 
         currentLiveId =
             "";
 
 
-        liveIdInput.disabled =
+        currentRound =
+            1;
+
+
+        currentPage =
+            1;
+
+
+        totalPages =
+            1;
+
+
+        cancelInsertMode();
+
+
+        weekSelect.disabled =
             false;
 
 
-        liveIdInput.value =
+        liveInput.disabled =
+            false;
+
+
+        startLiveButton.textContent =
+            "Start Live";
+
+
+        currentSession.style.display =
+            "none";
+
+
+        roundControls.style.display =
+            "none";
+
+
+        skuInput.disabled =
+            true;
+
+
+        skuInput.value =
             "";
 
 
-        startLiveButton.disabled =
-            false;
-
-
-        changeLiveButton.style.display =
-            "none";
+        skuInput.placeholder =
+            "Select Week and enter LIVE ID first";
 
 
         downloadButton.disabled =
             true;
 
 
-        currentLive.innerText =
-            "";
+        sessionSubtitle.textContent =
+            "Select Week and enter LIVE ID";
 
 
-        liveListTitle.innerText =
-            "Enter LIVE ID to view recordings";
-
-
-        input.disabled =
-            true;
-
-
-        input.value =
-            "";
-
-
-        input.placeholder =
-            "Enter LIVE ID first";
-
-
-        status.innerText =
-            "";
-
-
-        bookInfo.style.display =
-            "none";
-
-
-        tableBody.innerHTML = `
+        recordingBody.innerHTML = `
 
             <tr>
 
-                <td
-                    colspan="5"
-                    class="empty-message">
+                <td colspan="5">
 
-                    Enter LIVE ID to begin
+                    Select Week and enter LIVE ID
 
                 </td>
 
@@ -728,711 +1236,1782 @@
         `;
 
 
-        liveIdInput.focus();
+        updatePagination({
+
+            page: 1,
+
+            total_pages: 1,
+
+            total_items: 0,
+
+            start_item: 0,
+
+            end_item: 0,
+
+            has_previous: false,
+
+            has_next: false
+
+        });
+
+
+        document
+            .getElementById(
+                "bookInfo"
+            )
+            .style.display =
+                "none";
+
+
+        showMessage(
+            "",
+            ""
+        );
+
+
+        liveInput.focus();
+
+
+        return;
 
     }
 
 
-    changeLiveButton.addEventListener(
-        "click",
-        changeLive
-    );
+    // -----------------------------------------------------
+    // Start LIVE
+    // -----------------------------------------------------
+
+    const selectedWeek =
+        weekSelect.value;
 
 
-    // =====================================================
-    // Download CSV
-    // =====================================================
-
-    downloadButton.addEventListener(
-        "click",
-        function() {
+    const liveId =
+        liveInput.value.trim();
 
 
-            if (!currentLiveId) {
-
-                return;
-
-            }
+    if (!selectedWeek) {
 
 
-            const url =
-                "/api/recordings/download"
-                +
-                "?store_id="
-                +
-                encodeURIComponent(
-                    storeId
+        showMessage(
+            "Please select Week.",
+            "error"
+        );
+
+
+        return;
+
+    }
+
+
+    if (!liveId) {
+
+
+        showMessage(
+            "Please enter LIVE ID.",
+            "error"
+        );
+
+
+        liveInput.focus();
+
+
+        return;
+
+    }
+
+
+    currentWeekId =
+        selectedWeek;
+
+
+    currentLiveId =
+        liveId;
+
+
+    // Check existing session info
+
+    try {
+
+
+        const response =
+            await fetch(
+
+                "/api/recordings/session-info"
+
+                + "?week_id="
+                + encodeURIComponent(
+                    currentWeekId
                 )
-                +
-                "&live_id="
-                +
-                encodeURIComponent(
-                    currentLiveId
-                );
 
-
-            window.location.href =
-                url;
-
-        }
-    );
-
-
-    // =====================================================
-    // Load Recordings
-    // =====================================================
-
-    async function loadRecordings() {
-
-
-        if (!currentLiveId) {
-
-            return;
-
-        }
-
-
-        try {
-
-
-            const url =
-                "/api/recordings"
-                +
-                "?store_id="
-                +
-                encodeURIComponent(
-                    storeId
+                + "&store_id="
+                + encodeURIComponent(
+                    STORE_ID
                 )
-                +
-                "&live_id="
-                +
-                encodeURIComponent(
+
+                + "&live_id="
+                + encodeURIComponent(
                     currentLiveId
-                );
+                )
 
-
-            const response =
-                await fetch(url);
-
-
-            const rows =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                throw new Error(
-                    rows.message
-                    ||
-                    "Could not load recordings"
-                );
-
-            }
-
-
-            tableBody.innerHTML =
-                "";
-
-
-            if (rows.length === 0) {
-
-
-                tableBody.innerHTML = `
-
-                    <tr>
-
-                        <td
-                            colspan="5"
-                            class="empty-message">
-
-                            No recordings in this LIVE yet
-
-                        </td>
-
-                    </tr>
-
-                `;
-
-
-                return;
-
-            }
-
-
-            rows.forEach(
-                function(row, index) {
-
-
-                    const tr =
-                        document.createElement(
-                            "tr"
-                        );
-
-
-                    tr.innerHTML = `
-
-
-                        <td>
-                            ${index + 1}
-                        </td>
-
-
-                        <td>
-
-                            <input
-                                class="sku-edit"
-                                id="sku-${row.recording_id}"
-                                value="${row.sku}"
-                            >
-
-                        </td>
-
-
-                        <td>
-                            ${row.book_title || ""}
-                        </td>
-
-
-                        <td>
-
-                            ${
-                                row.recorded_at
-                                ?
-                                row.recorded_at
-                                + " ET"
-                                :
-                                ""
-                            }
-
-                        </td>
-
-
-                        <td>
-
-                            <button
-                                onclick="
-                                    saveRecording(
-                                        ${row.recording_id}
-                                    )
-                                ">
-
-                                Save
-
-                            </button>
-
-
-                            <button
-                                class="delete-btn"
-                                onclick="
-                                    deleteRecording(
-                                        ${row.recording_id}
-                                    )
-                                ">
-
-                                Delete
-
-                            </button>
-
-                        </td>
-
-                    `;
-
-
-                    tableBody.appendChild(
-                        tr
-                    );
-
-                }
             );
 
 
-        } catch (error) {
+        const info =
+            await response.json();
 
 
-            status.className =
-                "error";
+        if (
+            response.ok
+            &&
+            info.success
+        ) {
 
 
-            status.innerText =
-                error.message;
+            currentRound =
+                info.max_round
+                ||
+                1;
+
+
+        } else {
+
+
+            currentRound =
+                1;
 
         }
+
+
+    }
+
+    catch (error) {
+
+
+        currentRound =
+            1;
 
     }
 
 
-    // =====================================================
-    // Save
-    // =====================================================
+    currentPage =
+        1;
 
-    async function saveRecording(
-        recordingId
+
+    activateRecordingSession();
+
+
+    saveRecordingSession();
+
+
+    await loadRecordings(
+        1
+    );
+
+
+    skuInput.focus();
+
+}
+
+
+// =========================================================
+// Activate UI
+// =========================================================
+
+function activateRecordingSession() {
+
+
+    weekSelect.disabled =
+        true;
+
+
+    liveInput.disabled =
+        true;
+
+
+    startLiveButton.textContent =
+        "Change LIVE";
+
+
+    currentWeekText.textContent =
+        currentWeekId;
+
+
+    currentLiveText.textContent =
+        currentLiveId;
+
+
+    currentSession.style.display =
+        "block";
+
+
+    roundControls.style.display =
+        "block";
+
+
+    sessionSubtitle.textContent =
+
+        "Week: "
+        + currentWeekId
+        + " | LIVE ID: "
+        + currentLiveId;
+
+
+    downloadButton.disabled =
+        false;
+
+
+    skuInput.disabled =
+        false;
+
+
+    skuInput.placeholder =
+        "Scan SKU";
+
+
+    updateRoundDisplay();
+
+}
+
+
+// =========================================================
+// Restore after F5
+// =========================================================
+
+async function restoreRecordingSession() {
+
+
+    const savedWeek =
+        sessionStorage.getItem(
+            RECORDING_WEEK_KEY
+        );
+
+
+    const savedLive =
+        sessionStorage.getItem(
+            RECORDING_LIVE_KEY
+        );
+
+
+    const savedRound =
+        sessionStorage.getItem(
+            RECORDING_ROUND_KEY
+        );
+
+
+    const savedPage =
+        sessionStorage.getItem(
+            RECORDING_PAGE_KEY
+        );
+
+
+    if (
+        !savedWeek
+        ||
+        !savedLive
     ) {
 
 
-        if (!currentLiveId) {
+        liveInput.focus();
 
-            status.className =
-                "error";
 
-            status.innerText =
-                "LIVE ID is required";
+        return;
+
+    }
+
+
+    const weekExists =
+
+        Array
+            .from(
+                weekSelect.options
+            )
+            .some(
+                option =>
+                    option.value
+                    ===
+                    savedWeek
+            );
+
+
+    if (!weekExists) {
+
+
+        clearRecordingSession();
+
+
+        liveInput.focus();
+
+
+        return;
+
+    }
+
+
+    currentWeekId =
+        savedWeek;
+
+
+    currentLiveId =
+        savedLive;
+
+
+    currentRound =
+        parseInt(
+            savedRound
+            ||
+            "1"
+        );
+
+
+    currentPage =
+        parseInt(
+            savedPage
+            ||
+            "1"
+        );
+
+
+    if (
+        currentRound < 1
+        ||
+        Number.isNaN(
+            currentRound
+        )
+    ) {
+
+        currentRound =
+            1;
+
+    }
+
+
+    if (
+        currentPage < 1
+        ||
+        Number.isNaN(
+            currentPage
+        )
+    ) {
+
+        currentPage =
+            1;
+
+    }
+
+
+    weekSelect.value =
+        currentWeekId;
+
+
+    liveInput.value =
+        currentLiveId;
+
+
+    activateRecordingSession();
+
+
+    await loadRecordings(
+        currentPage
+    );
+
+
+    skuInput.focus();
+
+}
+
+
+// =========================================================
+// Round
+// =========================================================
+
+function updateRoundDisplay() {
+
+
+    currentRoundText.textContent =
+        currentRound;
+
+
+    roundInput.value =
+        currentRound;
+
+}
+
+
+function startNewRound() {
+
+
+    currentRound +=
+        1;
+
+
+    updateRoundDisplay();
+
+
+    saveRecordingSession();
+
+
+    showMessage(
+        "Round "
+        + currentRound
+        + " started.",
+        "success"
+    );
+
+
+    skuInput.focus();
+
+}
+
+
+function setRound() {
+
+
+    const value =
+        parseInt(
+            roundInput.value
+        );
+
+
+    if (
+        Number.isNaN(
+            value
+        )
+        ||
+        value < 1
+    ) {
+
+
+        alert(
+            "Invalid Round"
+        );
+
+
+        return;
+
+    }
+
+
+    currentRound =
+        value;
+
+
+    updateRoundDisplay();
+
+
+    saveRecordingSession();
+
+
+    showMessage(
+        "Current Round changed to "
+        + currentRound,
+        "success"
+    );
+
+
+    skuInput.focus();
+
+}
+
+
+// =========================================================
+// Scan
+// =========================================================
+
+skuInput.addEventListener(
+
+    "keydown",
+
+    async function(event) {
+
+
+        if (
+            event.key !== "Enter"
+        ) {
 
             return;
+
         }
+
+
+        event.preventDefault();
 
 
         const sku =
-            document
-                .getElementById(
-                    "sku-"
-                    +
-                    recordingId
-                )
-                .value
-                .trim();
+            skuInput.value.trim();
 
 
         if (!sku) {
-
-            status.className =
-                "error";
-
-            status.innerText =
-                "SKU cannot be empty";
-
             return;
         }
 
 
-        try {
+        if (
+            !currentWeekId
+            ||
+            !currentLiveId
+        ) {
 
 
-            const response =
-                await fetch(
-
-                    "/api/recordings/"
-                    +
-                    recordingId,
-
-                    {
-
-                        method:
-                            "PUT",
-
-
-                        headers: {
-
-                            "Content-Type":
-                                "application/json"
-
-                        },
-
-
-                        body:
-                            JSON.stringify({
-
-                                sku:
-                                    sku,
-
-                                store_id:
-                                    storeId,
-
-                                live_id:
-                                    currentLiveId
-
-                            })
-
-                    }
-
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                throw new Error(
-                    data.message
-                    ||
-                    "Update failed"
-                );
-
-            }
-
-
-            status.className =
-                "success";
-
-
-            status.innerText =
-                "✓ Recording updated";
-
-
-            await loadRecordings();
-
-
-        } catch (error) {
-
-
-            status.className =
-                "error";
-
-
-            status.innerText =
-                error.message;
-
-        }
-
-
-        input.focus();
-
-    }
-
-
-    // =====================================================
-    // Delete
-    // =====================================================
-
-    async function deleteRecording(
-        recordingId
-    ) {
-
-
-        if (!currentLiveId) {
-
-            return;
-
-        }
-
-
-        const confirmed =
-            confirm(
-                "Delete this recording?"
+            showMessage(
+                "Start LIVE first.",
+                "error"
             );
 
 
-        if (!confirmed) {
+            return;
 
-            input.focus();
+        }
+
+
+        if (
+            insertBeforeSeq
+            !==
+            null
+        ) {
+
+
+            await insertSku(
+
+                sku,
+
+                insertBeforeRound,
+
+                insertBeforeSeq
+
+            );
+
+
+        } else {
+
+
+            await recordSku(
+                sku
+            );
+
+        }
+
+    }
+
+);
+
+
+// =========================================================
+// Normal Recording
+// =========================================================
+
+async function recordSku(
+    sku
+) {
+
+
+    skuInput.disabled =
+        true;
+
+
+    try {
+
+
+        const response =
+            await fetch(
+
+                "/api/record",
+
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            week_id:
+                                currentWeekId,
+
+                            store_id:
+                                STORE_ID,
+
+                            live_id:
+                                currentLiveId,
+
+                            round_no:
+                                currentRound,
+
+                            sku:
+                                sku
+
+                        })
+
+                }
+
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+
+
+            showMessage(
+                data.message
+                ||
+                "Could not record SKU.",
+                "error"
+            );
+
 
             return;
-        }
-
-
-        try {
-
-
-            const response =
-                await fetch(
-
-                    "/api/recordings/"
-                    +
-                    recordingId,
-
-                    {
-
-                        method:
-                            "DELETE",
-
-
-                        headers: {
-
-                            "Content-Type":
-                                "application/json"
-
-                        },
-
-
-                        body:
-                            JSON.stringify({
-
-                                store_id:
-                                    storeId,
-
-                                live_id:
-                                    currentLiveId
-
-                            })
-
-                    }
-
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                throw new Error(
-                    data.message
-                    ||
-                    "Delete failed"
-                );
-
-            }
-
-
-            status.className =
-                "success";
-
-
-            status.innerText =
-                "✓ Recording deleted";
-
-
-            await loadRecordings();
-
-
-        } catch (error) {
-
-
-            status.className =
-                "error";
-
-
-            status.innerText =
-                error.message;
 
         }
 
 
-        input.focus();
+        skuInput.value =
+            "";
+
+
+        showMessage(
+            "✓ Recorded: "
+            + sku,
+            "success"
+        );
+
+
+        showBookInfo(
+
+            sku,
+
+            data.book,
+
+            data.weekly_status
+
+        );
+
+
+        await loadRecordings(
+            999999
+        );
+
+
+    }
+
+    catch (error) {
+
+
+        console.error(
+            error
+        );
+
+
+        showMessage(
+            "Connection error.",
+            "error"
+        );
+
+    }
+
+    finally {
+
+
+        skuInput.disabled =
+            false;
+
+
+        skuInput.focus();
+
+    }
+
+}
+
+
+// =========================================================
+// Insert Before
+// =========================================================
+
+function enableInsertMode(
+    roundNo,
+    seq
+) {
+
+
+    insertBeforeRound =
+        roundNo;
+
+
+    insertBeforeSeq =
+        seq;
+
+
+    insertModeBox.style.display =
+        "block";
+
+
+    insertModeText.textContent =
+
+        "Insert before Round "
+        + roundNo
+        + " / Seq "
+        + seq;
+
+
+    skuInput.placeholder =
+
+        "Scan SKU to insert before "
+        + roundNo
+        + " / "
+        + seq;
+
+
+    skuInput.focus();
+
+}
+
+
+function cancelInsertMode() {
+
+
+    insertBeforeRound =
+        null;
+
+
+    insertBeforeSeq =
+        null;
+
+
+    insertModeBox.style.display =
+        "none";
+
+
+    if (
+        currentLiveId
+    ) {
+
+
+        skuInput.placeholder =
+            "Scan SKU";
+
+    }
+
+}
+
+
+async function insertSku(
+    sku,
+    roundNo,
+    beforeSeq
+) {
+
+
+    skuInput.disabled =
+        true;
+
+
+    try {
+
+
+        const response =
+            await fetch(
+
+                "/api/recordings/insert-before",
+
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            week_id:
+                                currentWeekId,
+
+                            store_id:
+                                STORE_ID,
+
+                            live_id:
+                                currentLiveId,
+
+                            round_no:
+                                roundNo,
+
+                            before_seq:
+                                beforeSeq,
+
+                            sku:
+                                sku
+
+                        })
+
+                }
+
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+
+
+            showMessage(
+                data.message
+                ||
+                "Insert failed.",
+                "error"
+            );
+
+
+            return;
+
+        }
+
+
+        skuInput.value =
+            "";
+
+
+        showMessage(
+
+            "✓ Inserted before Round "
+            + roundNo
+            + " / Seq "
+            + beforeSeq,
+
+            "success"
+
+        );
+
+
+        showBookInfo(
+
+            sku,
+
+            data.book,
+
+            data.weekly_status
+
+        );
+
+
+        cancelInsertMode();
+
+
+        await loadRecordings(
+            currentPage
+        );
+
+
+    }
+
+    catch (error) {
+
+
+        console.error(
+            error
+        );
+
+
+        showMessage(
+            "Insert failed.",
+            "error"
+        );
+
+    }
+
+    finally {
+
+
+        skuInput.disabled =
+            false;
+
+
+        skuInput.focus();
+
+    }
+
+}
+
+
+// =========================================================
+// Load Recordings
+// =========================================================
+
+async function loadRecordings(
+    page
+) {
+
+
+    if (
+        !currentWeekId
+        ||
+        !currentLiveId
+    ) {
+
+        return;
 
     }
 
 
-    // =====================================================
-    // Scan
-    // =====================================================
+    const url =
 
-    input.addEventListener(
-        "keydown",
-        async function(event) {
+        "/api/recordings"
 
+        + "?week_id="
+        + encodeURIComponent(
+            currentWeekId
+        )
 
-            if (event.key !== "Enter") {
+        + "&store_id="
+        + encodeURIComponent(
+            STORE_ID
+        )
 
-                return;
+        + "&live_id="
+        + encodeURIComponent(
+            currentLiveId
+        )
 
-            }
-
-
-            if (!currentLiveId) {
-
-                status.className =
-                    "error";
-
-                status.innerText =
-                    "LIVE ID is required";
-
-                return;
-            }
+        + "&page="
+        + encodeURIComponent(
+            page
+        );
 
 
-            const sku =
-                input
-                    .value
-                    .trim();
+    try {
 
 
-            if (!sku) {
-
-                return;
-
-            }
-
-
-            input.disabled =
-                true;
-
-
-            try {
-
-
-                const response =
-                    await fetch(
-
-                        "/api/record",
-
-                        {
-
-                            method:
-                                "POST",
-
-
-                            headers: {
-
-                                "Content-Type":
-                                    "application/json"
-
-                            },
-
-
-                            body:
-                                JSON.stringify({
-
-                                    sku:
-                                        sku,
-
-                                    store_id:
-                                        storeId,
-
-                                    live_id:
-                                        currentLiveId
-
-                                })
-
-                        }
-
-                    );
-
-
-                const data =
-                    await response.json();
-
-
-                if (!response.ok) {
-
-                    throw new Error(
-                        data.message
-                        ||
-                        "Recording failed"
-                    );
-
+        const response =
+            await fetch(
+                url,
+                {
+                    cache:
+                        "no-store"
                 }
+            );
 
 
-                status.className =
-                    "success";
+        const data =
+            await response.json();
 
 
-                status.innerText =
-                    "✓ Recorded: "
-                    +
-                    sku;
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
 
 
-                if (data.book) {
+            showMessage(
+                data.message
+                ||
+                "Could not load recordings.",
+                "error"
+            );
 
 
-                    bookTitle.innerText =
-                        data.book.book_title
-                        ||
-                        "";
-
-
-                    bookAuthor.innerText =
-                        data.book.book_author
-                        ||
-                        "";
-
-
-                    bookFormat.innerText =
-                        data.book.book_format
-                        ||
-                        "";
-
-
-                    bookCover.style.display =
-                        "block";
-
-
-                    bookCover.src =
-                        "http://91.98.171.224/bookcovers/"
-                        +
-                        sku
-                        +
-                        ".jpg";
-
-
-                    bookCover.onerror =
-                        function() {
-
-                            bookCover.style.display =
-                                "none";
-
-                        };
-
-
-                    bookInfo.style.display =
-                        "block";
-
-
-                } else {
-
-
-                    bookInfo.style.display =
-                        "none";
-
-
-                    status.innerText =
-                        "✓ Recorded: "
-                        +
-                        sku
-                        +
-                        " — Book information not found";
-
-                }
-
-
-                input.value =
-                    "";
-
-
-                await loadRecordings();
-
-
-            } catch (error) {
-
-
-                status.className =
-                    "error";
-
-
-                status.innerText =
-                    error.message;
-
-            }
-
-
-            input.disabled =
-                false;
-
-
-            input.focus();
+            return;
 
         }
+
+
+        currentPage =
+            data.pagination.page;
+
+
+        totalPages =
+            data.pagination.total_pages;
+
+
+        saveRecordingSession();
+
+
+        renderRecordings(
+            data.items
+        );
+
+
+        updatePagination(
+            data.pagination
+        );
+
+
+    }
+
+    catch (error) {
+
+
+        console.error(
+            error
+        );
+
+
+        showMessage(
+            "Could not load recordings.",
+            "error"
+        );
+
+    }
+
+}
+
+
+// =========================================================
+// Render
+// =========================================================
+
+function renderRecordings(
+    rows
+) {
+
+
+    recordingBody.innerHTML =
+        "";
+
+
+    if (
+        !rows
+        ||
+        rows.length === 0
+    ) {
+
+
+        recordingBody.innerHTML = `
+
+            <tr>
+
+                <td colspan="5">
+
+                    No recordings
+
+                </td>
+
+            </tr>
+
+        `;
+
+
+        return;
+
+    }
+
+
+    for (
+        const row
+        of rows
+    ) {
+
+
+        const tr =
+            document.createElement(
+                "tr"
+            );
+
+
+        tr.innerHTML = `
+
+            <td>
+
+                ${row.round_no}
+                /
+                ${row.seq}
+
+            </td>
+
+
+            <td>
+
+                <input
+
+                    class="sku-edit"
+
+                    id="sku-${row.recording_id}"
+
+                    value="${escapeHtml(row.sku)}"
+
+                >
+
+            </td>
+
+
+            <td>
+
+                ${escapeHtml(
+                    row.book_title
+                    || ""
+                )}
+
+            </td>
+
+
+            <td>
+
+                ${escapeHtml(
+                    row.recorded_at
+                    || ""
+                )}
+
+            </td>
+
+
+            <td>
+
+
+                <div class="action-buttons">
+
+
+                    <button
+                        type="button"
+                        onclick="saveRecording(
+                            ${row.recording_id}
+                        )"
+                    >
+                        Save
+                    </button>
+
+
+                    <button
+                        type="button"
+                        onclick="enableInsertMode(
+                            ${row.round_no},
+                            ${row.seq}
+                        )"
+                    >
+                        Insert Before
+                    </button>
+
+
+                    <button
+                        type="button"
+                        class="delete-button"
+                        onclick="deleteRecording(
+                            ${row.recording_id}
+                        )"
+                    >
+                        Delete
+                    </button>
+
+
+                </div>
+
+
+            </td>
+
+        `;
+
+
+        recordingBody.appendChild(
+            tr
+        );
+
+    }
+
+}
+
+
+// =========================================================
+// Pagination
+// =========================================================
+
+function updatePagination(
+    p
+) {
+
+
+    document
+        .getElementById(
+            "pageText"
+        )
+        .textContent =
+
+            "Page "
+            + p.page
+            + " / "
+            + p.total_pages;
+
+
+    document
+        .getElementById(
+            "paginationInfo"
+        )
+        .textContent =
+
+            "Showing "
+            + p.start_item
+            + "–"
+            + p.end_item
+            + " of "
+            + p.total_items;
+
+
+    document
+        .getElementById(
+            "previousButton"
+        )
+        .disabled =
+            !p.has_previous;
+
+
+    document
+        .getElementById(
+            "nextButton"
+        )
+        .disabled =
+            !p.has_next;
+
+}
+
+
+function previousPage() {
+
+
+    if (
+        currentPage > 1
+    ) {
+
+
+        loadRecordings(
+            currentPage - 1
+        );
+
+    }
+
+}
+
+
+function nextPage() {
+
+
+    if (
+        currentPage < totalPages
+    ) {
+
+
+        loadRecordings(
+            currentPage + 1
+        );
+
+    }
+
+}
+
+
+// =========================================================
+// Save SKU edit
+// =========================================================
+
+async function saveRecording(
+    recordingId
+) {
+
+
+    const sku =
+        document
+            .getElementById(
+                "sku-"
+                + recordingId
+            )
+            .value
+            .trim();
+
+
+    if (!sku) {
+
+
+        alert(
+            "SKU cannot be empty."
+        );
+
+
+        return;
+
+    }
+
+
+    const response =
+        await fetch(
+
+            "/api/recordings/"
+            + recordingId,
+
+            {
+
+                method:
+                    "PUT",
+
+                headers: {
+
+                    "Content-Type":
+                        "application/json"
+
+                },
+
+                body:
+                    JSON.stringify({
+
+                        week_id:
+                            currentWeekId,
+
+                        store_id:
+                            STORE_ID,
+
+                        live_id:
+                            currentLiveId,
+
+                        sku:
+                            sku
+
+                    })
+
+            }
+
+        );
+
+
+    const data =
+        await response.json();
+
+
+    if (
+        !response.ok
+        ||
+        !data.success
+    ) {
+
+
+        alert(
+            data.message
+            ||
+            "Update failed."
+        );
+
+
+        return;
+
+    }
+
+
+    showMessage(
+        "✓ Recording updated",
+        "success"
     );
 
 
-    // =====================================================
-    // Page Load
-    // =====================================================
+    await loadRecordings(
+        currentPage
+    );
 
-    window.onload =
+
+    skuInput.focus();
+
+}
+
+
+// =========================================================
+// Delete
+// =========================================================
+
+async function deleteRecording(
+    recordingId
+) {
+
+
+    if (
+        !confirm(
+            "Delete this recording?"
+        )
+    ) {
+
+        return;
+
+    }
+
+
+    const response =
+        await fetch(
+
+            "/api/recordings/"
+            + recordingId,
+
+            {
+
+                method:
+                    "DELETE",
+
+                headers: {
+
+                    "Content-Type":
+                        "application/json"
+
+                },
+
+                body:
+                    JSON.stringify({
+
+                        week_id:
+                            currentWeekId,
+
+                        store_id:
+                            STORE_ID,
+
+                        live_id:
+                            currentLiveId
+
+                    })
+
+            }
+
+        );
+
+
+    const data =
+        await response.json();
+
+
+    if (
+        !response.ok
+        ||
+        !data.success
+    ) {
+
+
+        alert(
+            data.message
+            ||
+            "Delete failed."
+        );
+
+
+        return;
+
+    }
+
+
+    showMessage(
+        "✓ Recording deleted",
+        "success"
+    );
+
+
+    await loadRecordings(
+        currentPage
+    );
+
+
+    skuInput.focus();
+
+}
+
+
+// =========================================================
+// Book Info + Remaining
+// =========================================================
+
+function showBookInfo(
+    sku,
+    book,
+    status
+) {
+
+
+    if (!book) {
+
+
+        document
+            .getElementById(
+                "bookInfo"
+            )
+            .style.display =
+                "none";
+
+
+        return;
+
+    }
+
+
+    document
+        .getElementById(
+            "bookTitle"
+        )
+        .textContent =
+            book.book_title
+            ||
+            "";
+
+
+    document
+        .getElementById(
+            "bookAuthor"
+        )
+        .textContent =
+            book.book_author
+            ||
+            "";
+
+
+    document
+        .getElementById(
+            "bookFormat"
+        )
+        .textContent =
+            book.book_format
+            ||
+            "";
+
+
+    const cover =
+        document.getElementById(
+            "bookCover"
+        );
+
+
+    cover.src =
+
+        "http://91.98.171.224/bookcovers/"
+        + sku
+        + ".jpg";
+
+
+    cover.style.display =
+        "block";
+
+
+    cover.onerror =
         function() {
 
 
-            currentLiveId =
-                "";
-
-
-            input.disabled =
-                true;
-
-
-            downloadButton.disabled =
-                true;
-
-
-            liveIdInput.focus();
+            cover.style.display =
+                "none";
 
         };
+
+
+    if (
+        status
+        &&
+        status.in_weekly_inventory
+    ) {
+
+
+        weeklyPlanned.textContent =
+            status.planned;
+
+
+        weeklyUsed.textContent =
+            status.used;
+
+
+        weeklyRemaining.textContent =
+            status.remaining;
+
+
+        weeklyStatus.style.display =
+            "block";
+
+
+    } else {
+
+
+        weeklyStatus.style.display =
+            "none";
+
+    }
+
+
+    document
+        .getElementById(
+            "bookInfo"
+        )
+        .style.display =
+            "block";
+
+}
+
+
+// =========================================================
+// Download
+// =========================================================
+
+function downloadCSV() {
+
+
+    if (
+        !currentWeekId
+        ||
+        !currentLiveId
+    ) {
+
+        return;
+
+    }
+
+
+    window.location.href =
+
+        "/api/recordings/download"
+
+        + "?week_id="
+        + encodeURIComponent(
+            currentWeekId
+        )
+
+        + "&store_id="
+        + encodeURIComponent(
+            STORE_ID
+        )
+
+        + "&live_id="
+        + encodeURIComponent(
+            currentLiveId
+        );
+
+}
+
+
+// =========================================================
+// Message
+// =========================================================
+
+function showMessage(
+    text,
+    type
+) {
+
+
+    message.textContent =
+        text;
+
+
+    message.className =
+
+        "message"
+
+        +
+
+        (
+            type
+            ?
+            " " + type
+            :
+            ""
+        );
+
+}
+
+
+// =========================================================
+// Escape
+// =========================================================
+
+function escapeHtml(
+    value
+) {
+
+
+    return String(
+        value
+        ??
+        ""
+    )
+
+    .replace(
+        /&/g,
+        "&amp;"
+    )
+
+    .replace(
+        /</g,
+        "&lt;"
+    )
+
+    .replace(
+        />/g,
+        "&gt;"
+    )
+
+    .replace(
+        /"/g,
+        "&quot;"
+    )
+
+    .replace(
+        /'/g,
+        "&#039;"
+    );
+
+}
+
+
+// =========================================================
+// LIVE Enter
+// =========================================================
+
+liveInput.addEventListener(
+
+    "keydown",
+
+    function(event) {
+
+
+        if (
+            event.key === "Enter"
+        ) {
+
+
+            event.preventDefault();
+
+
+            startLive();
+
+        }
+
+    }
+
+);
+
+
+// =========================================================
+// Page Load
+// =========================================================
+
+window.addEventListener(
+
+    "load",
+
+    async function() {
+
+
+        await loadWeeks();
+
+
+        await restoreRecordingSession();
+
+    }
+
+);
 
 
 </script>

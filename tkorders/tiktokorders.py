@@ -266,14 +266,10 @@ def extract_line_items(order: dict) -> list:
         {
             "product_name": item.get("product_name"),
             "sku_id": item.get("sku_id"),
-            "sku_name": item.get("sku_name"),      # e.g. "292" — the batch/round number
-            "seller_sku": item.get("seller_sku"),  # seller-defined SKU code
+            "sku_name": item.get("sku_name"),
+            "seller_sku": item.get("seller_sku"),
             "sale_price": item.get("sale_price"),
             "quantity": item.get("quantity") or 1,
-            # LIVE/affiliate creator — field names unverified against a real response,
-            # check the raw order JSON and adjust these two .get() keys if they don't match
-            "creator_username": item.get("creator_username") or item.get("author_username"),
-            "creator_type": item.get("creator_type") or item.get("author_type"),
         }
         for item in order.get("line_items", [])
     ]
