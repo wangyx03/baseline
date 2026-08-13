@@ -10,6 +10,9 @@ from utils import format_et
 
 recording_bp = Blueprint("recording", __name__)
 
+# Maximum number of sequence positions allowed in each round.
+MAX_SEQ_PER_ROUND = 300
+
 def write_recording_log(
     cursor,
     recording_id,
@@ -409,38 +412,55 @@ def record():
         )
 
 
-        cursor.execute(
-            """
-            SELECT
-                COALESCE(
-                    MAX(seq),
-                    0
-                ) AS max_seq
+        # =====================================================
+        # Next Round / Seq
+        #
+        # Each round can contain at most 300 sequence positions.
+        # If the selected round is full, automatically continue
+        # to the next available round and restart Seq at 1.
+        # =====================================================
 
-            FROM sku_recording
+        while True:
 
-            WHERE week_id = %s
-              AND store_id = %s
-              AND live_id = %s
-              AND round_no = %s
-            """,
-            (
-                week_id,
-                store_id,
-                live_id,
-                round_no
+            cursor.execute(
+                """
+                SELECT
+                    COALESCE(
+                        MAX(seq),
+                        0
+                    ) AS max_seq
+
+                FROM sku_recording
+
+                WHERE week_id = %s
+                  AND store_id = %s
+                  AND live_id = %s
+                  AND round_no = %s
+                """,
+                (
+                    week_id,
+                    store_id,
+                    live_id,
+                    round_no
+                )
             )
-        )
 
-        seq_row = cursor.fetchone()
+            seq_row = cursor.fetchone()
 
-        next_seq = (
-            int(
+            max_seq = int(
                 seq_row["max_seq"]
                 or 0
             )
-            + 1
-        )
+
+            if max_seq < MAX_SEQ_PER_ROUND:
+
+                next_seq = max_seq + 1
+
+                break
+
+            # Current round is full.
+            # Continue checking the next round until one has space.
+            round_no += 1
 
 
         cursor.execute(
@@ -794,6 +814,92 @@ def insert_recording_before():
         recording_id = (
             cursor.lastrowid
         )
+
+        # =====================================================
+        # Keep every Round at a maximum of 300 Seq
+        #
+        # Insert Before can temporarily create Seq 301.
+        # Move that overflow item to Seq 1 of the next Round,
+        # pushing that Round forward. Continue cascading if the
+        # next Round is also full.
+        # =====================================================
+
+        overflow_round = round_no
+
+        while True:
+
+            cursor.execute(
+                """
+                SELECT
+                    recording_id,
+                    seq
+
+                FROM sku_recording
+
+                WHERE week_id = %s
+                  AND store_id = %s
+                  AND live_id = %s
+                  AND round_no = %s
+                  AND seq > %s
+
+                ORDER BY
+                    seq ASC,
+                    recording_id ASC
+
+                LIMIT 1
+                """,
+                (
+                    week_id,
+                    store_id,
+                    live_id,
+                    overflow_round,
+                    MAX_SEQ_PER_ROUND
+                )
+            )
+
+            overflow_row = cursor.fetchone()
+
+            if overflow_row is None:
+                break
+
+            next_round = overflow_round + 1
+
+            cursor.execute(
+                """
+                UPDATE sku_recording
+
+                SET seq = seq + 1
+
+                WHERE week_id = %s
+                  AND store_id = %s
+                  AND live_id = %s
+                  AND round_no = %s
+                """,
+                (
+                    week_id,
+                    store_id,
+                    live_id,
+                    next_round
+                )
+            )
+
+            cursor.execute(
+                """
+                UPDATE sku_recording
+
+                SET
+                    round_no = %s,
+                    seq = 1
+
+                WHERE recording_id = %s
+                """,
+                (
+                    next_round,
+                    overflow_row["recording_id"]
+                )
+            )
+
+            overflow_round = next_round
 
 
         write_recording_log(
@@ -1896,7 +2002,7 @@ def download_recordings():
                 week_id,
                 store_id,
                 live_id,
-                f'= "{row["sku"]}"',
+                f'="{row["sku"]}"',
                 row["book_title"]
                     or "",
                 row["quantity"],

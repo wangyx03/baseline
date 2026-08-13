@@ -2101,6 +2101,31 @@ async function recordSku(
         );
 
 
+        // =====================================================
+        // Sync actual Round returned by backend
+        //
+        // Example:
+        // Round 1 / Seq 300
+        // next scan -> backend writes Round 2 / Seq 1
+        // =====================================================
+
+        if (
+            data.recording
+            &&
+            data.recording.round_no
+        ) {
+
+            currentRound =
+                Number(
+                    data.recording.round_no
+                );
+
+            updateRoundDisplay();
+
+            saveRecordingSession();
+        }
+
+
         showBookInfo(
 
             sku,
