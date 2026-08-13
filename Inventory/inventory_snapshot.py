@@ -26,10 +26,13 @@ CREATE TABLE IF NOT EXISTS inventory_snapshot (
 =============================================================================
 2. Install dependencies on the VPS
 =============================================================================
-    pip install requests pymysql python-dotenv --break-system-packages
+    pip install requests mysql-connector-python python-dotenv --break-system-packages
+
+    DB access goes through the shared baseline/db.py (get_db(), mysql.connector)
+    instead of a local pymysql connection.
 
 =============================================================================
-3. .env file (same directory as this script)
+3. .env file (baseline/.env, shared with db.py)
 =============================================================================
     OMS_APP_KEY=your AppKey
     OMS_APP_SECRET=your AppSecret
@@ -85,8 +88,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from db import get_db  # noqa: E402  (shared connection helper, baseline/db.py)
+
 import requests
-import pymysql
 
 
 def log(msg: str = "", err: bool = False) -> None:
@@ -349,26 +354,13 @@ def build_combined_rows(products, stock_records, in_transit_map) -> List[Dict[st
 # empty or half-written, even if this run crashes partway through)
 # ----------------------------------------------------------------------
 class DbWriter:
-    def __init__(self, host: str, port: int, user: str, password: str,
-                 database: str, table: str = "inventory_snapshot"):
-        if not all([host, user, password, database]):
-            raise RuntimeError("Missing DB_HOST / DB_USER / DB_PASSWORD / DB_NAME")
-        self.host, self.port, self.user, self.password, self.database, self.table = (
-            host, port, user, password, database, table
-        )
-
-    def _connect(self):
-        conn = pymysql.connect(
-            host=self.host, port=self.port, user=self.user, password=self.password,
-            database=self.database, charset="utf8mb4", autocommit=False,
-        )
-        # Force this session to UTC — matches the convention used in tkorders'
-        # db.py, so every DATETIME this script writes (updated_at below) means
-        # the same thing regardless of what timezone the MySQL server itself
-        # defaults to.
-        with conn.cursor() as cur:
-            cur.execute("SET time_zone = '+00:00'")
-        return conn
+    def __init__(self, database: str, table: str = "inventory_snapshot"):
+        # database name is only needed here for the log line below — the
+        # actual connection (host/port/user/password/time_zone) comes from
+        # the shared get_db() in baseline/db.py.
+        if not database:
+            raise RuntimeError("Missing DB_NAME")
+        self.database, self.table = database, table
 
     def write_full(self, rows: List[Dict[str, Any]]) -> None:
         if not rows:
@@ -378,41 +370,42 @@ class DbWriter:
         staging_table = f"{table}_staging"
         old_table = f"{table}_old"
 
-        conn = self._connect()
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
         try:
-            with conn.cursor() as cur:
-                cur.execute(f"DROP TABLE IF EXISTS `{staging_table}`")
-                cur.execute(f"CREATE TABLE `{staging_table}` LIKE `{table}`")
+            cursor.execute(f"DROP TABLE IF EXISTS `{staging_table}`")
+            cursor.execute(f"CREATE TABLE `{staging_table}` LIKE `{table}`")
 
-                # UTC, not local time — DATETIME columns don't carry timezone
-                # info, so by convention every DATETIME here is UTC (see
-                # db.py's docstring in tkorders/ for the same convention).
-                now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                insert_sql = (
-                    f"INSERT INTO `{staging_table}` "
-                    "(sku, product_name, warehouse, stock_type, total_stock, "
-                    "available_stock, locked_stock, inbound_in_transit, updated_at) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                )
-                values = [
-                    (r["SKU"], r["Product Name"], r["Warehouse"], r["Stock Type"],
-                     r["Total Stock (Dropship)"], r["Available Stock"],
-                     r["Locked Stock"], r["Inbound In-Transit"], now)
-                    for r in rows
-                ]
-                cur.executemany(insert_sql, values)
+            # UTC, not local time — DATETIME columns don't carry timezone
+            # info, so by convention every DATETIME here is UTC (matches the
+            # time_zone='+00:00' session setting in db.py's get_db()).
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            insert_sql = (
+                f"INSERT INTO `{staging_table}` "
+                "(sku, product_name, warehouse, stock_type, total_stock, "
+                "available_stock, locked_stock, inbound_in_transit, updated_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            )
+            values = [
+                (r["SKU"], r["Product Name"], r["Warehouse"], r["Stock Type"],
+                 r["Total Stock (Dropship)"], r["Available Stock"],
+                 r["Locked Stock"], r["Inbound In-Transit"], now)
+                for r in rows
+            ]
+            cursor.executemany(insert_sql, values)
 
-                cur.execute(f"DROP TABLE IF EXISTS `{old_table}`")
-                cur.execute(f"RENAME TABLE `{table}` TO `{old_table}`, `{staging_table}` TO `{table}`")
-                cur.execute(f"DROP TABLE IF EXISTS `{old_table}`")
+            cursor.execute(f"DROP TABLE IF EXISTS `{old_table}`")
+            cursor.execute(f"RENAME TABLE `{table}` TO `{old_table}`, `{staging_table}` TO `{table}`")
+            cursor.execute(f"DROP TABLE IF EXISTS `{old_table}`")
 
-            conn.commit()
+            db.commit()
             log(f"Wrote {len(rows)} row(s) to MySQL table `{self.database}`.`{table}`")
         except Exception:
-            conn.rollback()
+            db.rollback()
             raise
         finally:
-            conn.close()
+            cursor.close()
+            db.close()
 
 
 def run_once(client: OmsClient, args) -> List[Dict[str, Any]]:
@@ -458,10 +451,6 @@ def main():
     try:
         client = OmsClient(os.environ.get("OMS_APP_KEY", ""), os.environ.get("OMS_APP_SECRET", ""))
         db_writer = DbWriter(
-            host=os.environ.get("DB_HOST", ""),
-            port=int(os.environ.get("DB_PORT", "3306")),
-            user=os.environ.get("DB_USER", ""),
-            password=os.environ.get("DB_PASSWORD", ""),
             database=os.environ.get("DB_NAME", ""),
             table=os.environ.get("DB_TABLE", "inventory_snapshot"),
         )

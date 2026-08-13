@@ -8,10 +8,22 @@ this one reads it back out (joined with book metadata + weekly allocation
 plans) and pushes the combined view to Feishu so it's viewable without
 touching MySQL directly.
 
+Instead of running on its own fixed timer, this script polls
+inventory_snapshot's MAX(updated_at) every --poll-interval seconds and only
+runs the Feishu sync when that value has changed — i.e. right after
+oms_inventory_to_mysql.py finishes its own hourly write. The two scripts
+don't need to be chained or invoked in order; each just runs on its own
+schedule (see oms_inventory_to_mysql.py's docstring), and this one reacts
+whenever fresh data actually shows up.
+
 =============================================================================
 1. Install dependencies on the VPS
 =============================================================================
-    pip install pymysql requests python-dotenv --break-system-packages
+    pip install mysql-connector-python requests python-dotenv --break-system-packages
+
+    DB access goes through the shared baseline/db.py (get_db(), mysql.connector)
+    instead of a local pymysql connection — no separate DB_HOST/PORT/USER/etc.
+    handling needed here.
 
 =============================================================================
 2. .env additions (same file/keys as your other Feishu daemons already use)
@@ -23,28 +35,31 @@ touching MySQL directly.
     FEISHU_SHEET_URL=https://xcn3xthf3pue.feishu.cn/sheets/UnSRsCAfGhDWkitWOwvcb8o6nRc
     FEISHU_SHEET_ID=Alyix3
 
-    # Refresh interval in seconds, 3600 = every hour
-    WATCH_INTERVAL_SECONDS=3600
+    # How often to check inventory_snapshot.updated_at for a change, in seconds
+    POLL_INTERVAL_SECONDS=60
 
 =============================================================================
 3. Usage
 =============================================================================
-    # Run once
+    # Sync immediately once and exit (ignores change detection)
+    python inventory_query_to_feishu.py --once
+
+    # Poll forever, syncing to Feishu only when updated_at changes (default)
     python inventory_query_to_feishu.py
 
-    # Refresh every hour, forever (systemd, same pattern as your other daemons)
-    python inventory_query_to_feishu.py --watch 3600
+    # Poll every 30s instead of the default 60s
+    python inventory_query_to_feishu.py --poll-interval 30
 
 =============================================================================
 4. systemd service
 =============================================================================
     [Unit]
-    Description=Inventory query -> Feishu sync
+    Description=Inventory query -> Feishu sync (polls for changes)
     After=network.target mysql.service
 
     [Service]
     WorkingDirectory=/path/to/script
-    ExecStart=/usr/bin/python3 inventory_query_to_feishu.py --watch 3600
+    ExecStart=/usr/bin/python3 inventory_query_to_feishu.py
     Restart=always
     Environment=PYTHONUNBUFFERED=1
 
@@ -63,9 +78,11 @@ from typing import Any, Dict, List
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from db import get_db  # noqa: E402  (shared connection helper, baseline/db.py)
+from utils import format_et  # noqa: E402  (UTC -> Eastern display formatting, baseline/utils.py)
+
 import requests
-import pymysql
-from pymysql.cursors import DictCursor
 
 
 def log(msg: str = "", err: bool = False) -> None:
@@ -112,17 +129,30 @@ HEADER = ["sku", "product name", "warehouse", "stock_type", "TU_locked", "Vb_loc
 # ----------------------------------------------------------------------
 # MySQL
 # ----------------------------------------------------------------------
-def run_query(host: str, port: int, user: str, password: str, database: str) -> List[Dict[str, Any]]:
-    conn = pymysql.connect(
-        host=host, port=port, user=user, password=password,
-        database=database, charset="utf8mb4", cursorclass=DictCursor,
-    )
+def run_query() -> List[Dict[str, Any]]:
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
     try:
-        with conn.cursor() as cur:
-            cur.execute(QUERY)
-            return cur.fetchall()
+        cursor.execute(QUERY)
+        return cursor.fetchall()
     finally:
-        conn.close()
+        cursor.close()
+        db.close()
+
+
+def get_latest_snapshot_time(table: str):
+    """Read MAX(updated_at) off inventory_snapshot — used to detect that
+    inventory_snapshot.py has just finished a fresh write, without needing
+    this script to be invoked right after that one."""
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute(f"SELECT MAX(updated_at) AS latest FROM `{table}`")
+        row = cursor.fetchone()
+        return row["latest"] if row else None
+    finally:
+        cursor.close()
+        db.close()
 
 
 # ----------------------------------------------------------------------
@@ -177,6 +207,17 @@ class FeishuClient:
         self._put_values(spreadsheet_token, data_range, rows)
         log(f"Wrote {n_rows - 1} data row(s) + header to Feishu sheet {sheet_id}.")
 
+    def write_timestamp(self, spreadsheet_token: str, sheet_id: str, text: str, cell: str = "I1") -> None:
+        """Write a "last updated" label into row 1, right after the data
+        columns (HEADER is 8 columns, A–H, so I1 sits right beside it).
+
+        Feishu's values API rejects a single-cell range like "I1" (code
+        90202, "wrong range") — it needs a two-endpoint range, so a single
+        cell is addressed as "I1:I1"."""
+        a1_range = f"{sheet_id}!{cell}:{cell}"
+        self._put_values(spreadsheet_token, a1_range, [[text]])
+        log(f"Wrote update timestamp to {a1_range}: {text}")
+
     def _put_values(self, spreadsheet_token: str, a1_range: str, values: List[List[Any]]) -> None:
         url = f"{self.BASE}/sheets/v2/spreadsheets/{spreadsheet_token}/values"
         resp = requests.put(
@@ -225,30 +266,30 @@ def rows_to_grid(records: List[Dict[str, Any]]) -> List[List[Any]]:
     return grid
 
 
-def sync_once(db_cfg: Dict[str, Any], feishu: FeishuClient, spreadsheet_token: str, sheet_id: str) -> None:
+def sync_once(feishu: FeishuClient, spreadsheet_token: str, sheet_id: str, snapshot_time=None) -> None:
     log("Running MySQL query...")
-    records = run_query(**db_cfg)
+    records = run_query()
     log(f"  -> {len(records)} row(s)")
     grid = rows_to_grid(records)
     feishu.write_values(spreadsheet_token, sheet_id, grid)
 
+    # snapshot_time is inventory_snapshot's own updated_at (naive UTC, as
+    # stored in MySQL) — this is when the DATA was captured, not when this
+    # script happens to run. format_et() converts it to Eastern for display.
+    if snapshot_time is not None:
+        feishu.write_timestamp(spreadsheet_token, sheet_id, f"Renew at: {format_et(snapshot_time)}")
+    else:
+        log("No snapshot_time available; skipping timestamp write.")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Sync inventory query results from MySQL into a Feishu sheet")
-    parser.add_argument("--watch", type=int, default=int(os.environ.get("WATCH_INTERVAL_SECONDS", "0") or "0"),
-                         metavar="SECONDS")
+    parser.add_argument("--poll-interval", type=int,
+                         default=int(os.environ.get("POLL_INTERVAL_SECONDS", "60") or "60"),
+                         metavar="SECONDS", help="how often to check inventory_snapshot.updated_at for changes")
+    parser.add_argument("--once", action="store_true",
+                         help="sync immediately and exit, skipping change detection")
     args = parser.parse_args()
-
-    db_cfg = dict(
-        host=os.environ.get("DB_HOST", ""),
-        port=int(os.environ.get("DB_PORT", "3306")),
-        user=os.environ.get("DB_USER", ""),
-        password=os.environ.get("DB_PASSWORD", ""),
-        database=os.environ.get("DB_NAME", ""),
-    )
-    if not all([db_cfg["host"], db_cfg["user"], db_cfg["password"], db_cfg["database"]]):
-        log("Error: missing DB_HOST / DB_USER / DB_PASSWORD / DB_NAME in .env", err=True)
-        sys.exit(1)
 
     sheet_url = os.environ.get("FEISHU_SHEET_URL", "")
     sheet_id = os.environ.get("FEISHU_SHEET_ID", "")
@@ -267,16 +308,38 @@ def main():
         log(f"Error: {e}", err=True)
         sys.exit(1)
 
-    if args.watch > 0:
-        log(f"Entering watch mode, refreshing every {args.watch} seconds. Press Ctrl+C to stop.\n")
-        try:
-            while True:
-                sync_once(db_cfg, feishu, spreadsheet_token, sheet_id)
-                time.sleep(args.watch)
-        except KeyboardInterrupt:
-            log("\nWatch mode stopped.")
-    else:
-        sync_once(db_cfg, feishu, spreadsheet_token, sheet_id)
+    # Same table name inventory_snapshot.py writes to (DB_TABLE in .env,
+    # defaults to "inventory_snapshot" on both sides).
+    table = os.environ.get("DB_TABLE", "inventory_snapshot")
+
+    if args.once:
+        snapshot_time = get_latest_snapshot_time(table)
+        sync_once(feishu, spreadsheet_token, sheet_id, snapshot_time)
+        return
+
+    log(f"Polling `{table}`.updated_at every {args.poll_interval}s; "
+        f"syncing to Feishu only when it changes. Press Ctrl+C to stop.\n")
+    last_seen = None
+    try:
+        while True:
+            try:
+                latest = get_latest_snapshot_time(table)
+            except Exception as e:
+                log(f"Error checking updated_at: {e}", err=True)
+                time.sleep(args.poll_interval)
+                continue
+
+            if latest is not None and latest != last_seen:
+                log(f"Detected new snapshot (updated_at={latest}) — syncing to Feishu...")
+                try:
+                    sync_once(feishu, spreadsheet_token, sheet_id, latest)
+                    last_seen = latest
+                except Exception as e:
+                    log(f"Error syncing to Feishu: {e}", err=True)
+                    # last_seen deliberately not updated, so we retry on the next poll
+            time.sleep(args.poll_interval)
+    except KeyboardInterrupt:
+        log("\nStopped.")
 
 
 if __name__ == "__main__":
