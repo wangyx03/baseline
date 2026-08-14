@@ -1,0 +1,2486 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Staff Schedule</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='navbar.css') }}"
+    >
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            background: #f5f6f8;
+
+            color: #1f2329;
+        }
+
+        .page {
+            max-width: 1900px;
+
+            margin: 28px auto;
+
+            padding: 0 18px 50px 18px;
+        }
+
+        .page-header {
+            display: flex;
+
+            justify-content: space-between;
+            align-items: flex-end;
+
+            gap: 20px;
+
+            flex-wrap: wrap;
+
+            margin-bottom: 20px;
+        }
+
+        .page-title {
+            margin: 0;
+
+            font-size: 32px;
+        }
+
+        .subtitle {
+            margin-top: 7px;
+
+            color: #646a73;
+
+            font-size: 14px;
+        }
+
+        .week-controls {
+            display: flex;
+
+            align-items: center;
+
+            gap: 8px;
+
+            flex-wrap: wrap;
+        }
+
+        .week-button {
+            border: none;
+
+            border-radius: 7px;
+
+            padding: 10px 15px;
+
+            background: #f0f1f3;
+
+            color: #1f2329;
+
+            font-size: 14px;
+            font-weight: 600;
+
+            cursor: pointer;
+        }
+
+        .week-button:hover {
+            background: #e5e7eb;
+        }
+
+        .week-title {
+            min-width: 220px;
+
+            text-align: center;
+
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .status-bar {
+            display: none;
+
+            margin-bottom: 16px;
+
+            padding: 11px 14px;
+
+            border-radius: 8px;
+
+            font-size: 14px;
+        }
+
+        .status-bar.visible {
+            display: block;
+        }
+
+        .status-bar.success {
+            background: #e8f7ed;
+            color: #237b3b;
+        }
+
+        .status-bar.error {
+            background: #fdecec;
+            color: #c62828;
+        }
+
+        .status-bar.info {
+            background: #edf3ff;
+            color: #3159a7;
+        }
+
+        .matrix-wrapper {
+            overflow-x: auto;
+
+            background: white;
+
+            border: 1px solid #dfe1e5;
+
+            border-radius: 12px;
+
+            box-shadow:
+                0 2px 10px
+                rgba(0, 0, 0, 0.04);
+        }
+
+        table {
+            width: 100%;
+
+            min-width: 2100px;
+
+            border-collapse: separate;
+            border-spacing: 0;
+
+            table-layout: fixed;
+        }
+
+        th,
+        td {
+            border-right: 1px solid #dfe1e5;
+            border-bottom: 1px solid #dfe1e5;
+
+            text-align: center;
+
+            vertical-align: middle;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        th:last-child,
+        td:last-child {
+            border-right: none;
+        }
+
+        .time-header,
+        .time-cell {
+            width: 82px;
+
+            background: #fafafa;
+
+            position: sticky;
+            left: 0;
+
+            z-index: 5;
+        }
+
+        .time-header {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .time-cell {
+            padding: 10px 6px;
+
+            color: #50555c;
+
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .day-header {
+            height: 56px;
+
+            background: #f7f8fa;
+
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .day-date {
+            display: block;
+
+            margin-top: 3px;
+
+            color: #8f959e;
+
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .store-header {
+            height: 40px;
+
+            background: #fbfbfc;
+
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .store-code {
+            display: inline-block;
+
+            padding: 2px 7px;
+
+            border-radius: 4px;
+
+            background: #111;
+
+            color: white;
+
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .role-header {
+            height: 42px;
+
+            background: #ffffff;
+
+            font-size: 12px;
+            font-weight: 700;
+
+            white-space: nowrap;
+        }
+
+        .schedule-cell {
+            height: 64px;
+
+            padding: 4px;
+
+            background: #fff;
+        }
+
+        .schedule-cell:hover {
+            background: #fafbfc;
+        }
+
+        .assignment-button {
+            width: 100%;
+            height: 100%;
+
+            min-height: 48px;
+
+            border: 1px solid #d9dce1;
+
+            border-radius: 7px;
+
+            background: #f8f9fb;
+
+            color: #1f2329;
+
+            font-size: 12px;
+            font-weight: 600;
+
+            cursor: pointer;
+
+            white-space: normal;
+
+            line-height: 1.25;
+
+            padding: 5px 6px;
+        }
+
+        .assignment-button:hover {
+            border-color: #b9bec7;
+
+            background: #f1f3f6;
+        }
+
+        .assignment-button.assigned {
+            border-color: #cbd4e2;
+        }
+
+        .assignment-button.empty {
+            color: #8f959e;
+        }
+
+        .assignment-button.creator.assigned {
+            background: #eef3ff;
+        }
+
+        .operator-stack {
+            display: grid;
+
+            grid-template-rows:
+                1fr 1fr;
+
+            gap: 4px;
+
+            height: 100%;
+        }
+
+        .operator-button {
+            width: 100%;
+
+            min-height: 24px;
+
+            border: 1px solid #d9dce1;
+
+            border-radius: 6px;
+
+            background: #f8f9fb;
+
+            color: #1f2329;
+
+            font-size: 11px;
+            font-weight: 600;
+
+            cursor: pointer;
+
+            line-height: 1.15;
+
+            padding: 3px 5px;
+        }
+
+        .operator-button:hover {
+            border-color: #b9bec7;
+
+            background: #f1f3f6;
+        }
+
+        .operator-button.assigned {
+            background: #f2f7f2;
+
+            border-color: #cbd9cb;
+        }
+
+        .operator-button.empty {
+            color: #9aa0a8;
+        }
+
+        .operator-label {
+            color: #8f959e;
+
+            font-size: 9px;
+            font-weight: 700;
+
+            margin-right: 4px;
+        }
+
+        .modal-backdrop {
+            display: none;
+
+            position: fixed;
+
+            inset: 0;
+
+            background:
+                rgba(0, 0, 0, 0.38);
+
+            z-index: 1000;
+
+            align-items: center;
+            justify-content: center;
+
+            padding: 20px;
+        }
+
+        .modal-backdrop.visible {
+            display: flex;
+        }
+
+        .modal {
+            width: min(520px, 100%);
+
+            max-height: 85vh;
+
+            overflow-y: auto;
+
+            background: white;
+
+            border-radius: 12px;
+
+            box-shadow:
+                0 20px 50px
+                rgba(0, 0, 0, 0.22);
+        }
+
+        .modal-header {
+            display: flex;
+
+            justify-content: space-between;
+            align-items: flex-start;
+
+            gap: 20px;
+
+            padding: 20px;
+
+            border-bottom: 1px solid #e5e6e8;
+        }
+
+        .modal-title {
+            margin: 0;
+
+            font-size: 20px;
+        }
+
+        .modal-subtitle {
+            margin-top: 5px;
+
+            color: #646a73;
+
+            font-size: 13px;
+        }
+
+        .modal-close {
+            border: none;
+
+            background: transparent;
+
+            font-size: 23px;
+
+            cursor: pointer;
+
+            color: #646a73;
+        }
+
+        .candidate-list {
+            padding: 12px;
+        }
+
+        .candidate-item {
+            width: 100%;
+
+            display: flex;
+
+            justify-content: space-between;
+            align-items: center;
+
+            gap: 12px;
+
+            padding: 12px 14px;
+
+            border: none;
+            border-radius: 8px;
+
+            background: white;
+
+            text-align: left;
+
+            cursor: pointer;
+        }
+
+        .candidate-item:hover {
+            background: #f5f6f8;
+        }
+
+        .candidate-name {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .candidate-meta {
+            margin-top: 3px;
+
+            color: #8f959e;
+
+            font-size: 12px;
+        }
+
+        .candidate-arrow {
+            color: #8f959e;
+
+            font-size: 18px;
+        }
+
+        .candidate-empty {
+            padding: 28px 16px;
+
+            text-align: center;
+
+            color: #646a73;
+
+            font-size: 14px;
+        }
+
+        .unassign-button {
+            width: calc(100% - 24px);
+
+            margin: 0 12px 12px 12px;
+
+            padding: 11px 14px;
+
+            border: 1px solid #e3b4b4;
+
+            border-radius: 8px;
+
+            background: #fff7f7;
+
+            color: #b42318;
+
+            font-size: 13px;
+            font-weight: 700;
+
+            cursor: pointer;
+        }
+
+        .unassign-button:hover {
+            background: #fff0f0;
+        }
+
+        @media (max-width: 900px) {
+
+            .page {
+                margin-top: 18px;
+
+                padding: 0 10px 35px 10px;
+            }
+
+            .page-title {
+                font-size: 27px;
+            }
+
+            .page-header {
+                align-items: stretch;
+
+                flex-direction: column;
+            }
+
+            .week-controls {
+                width: 100%;
+            }
+
+            .week-title {
+                flex: 1;
+
+                min-width: 150px;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+{% include "navbar.html" %}
+
+<div class="page">
+
+    <div class="page-header">
+
+        <div>
+
+            <h1 class="page-title">
+                Staff Schedule
+            </h1>
+
+            <div class="subtitle">
+                Weekly matrix view. Click Creator or Operator to assign employees.
+            </div>
+
+        </div>
+
+        <div class="week-controls">
+
+            <button
+                type="button"
+                class="week-button"
+                onclick="changeWeek(-7)"
+            >
+                ← Previous
+            </button>
+
+            <button
+                type="button"
+                class="week-button"
+                onclick="goCurrentWeek()"
+            >
+                This Week
+            </button>
+
+            <div
+                class="week-title"
+                id="weekTitle"
+            >
+                Loading...
+            </div>
+
+            <button
+                type="button"
+                class="week-button"
+                onclick="changeWeek(7)"
+            >
+                Next →
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <div
+        id="statusBar"
+        class="status-bar"
+    >
+    </div>
+
+
+    <div class="matrix-wrapper">
+
+        <table id="scheduleTable">
+
+            <thead id="scheduleHead">
+            </thead>
+
+            <tbody id="scheduleBody">
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+
+<div
+    id="candidateModalBackdrop"
+    class="modal-backdrop"
+    onclick="handleBackdropClick(event)"
+>
+
+    <div
+        class="modal"
+        onclick="event.stopPropagation()"
+    >
+
+        <div class="modal-header">
+
+            <div>
+
+                <h2
+                    class="modal-title"
+                    id="modalTitle"
+                >
+                    Select Staff
+                </h2>
+
+                <div
+                    class="modal-subtitle"
+                    id="modalSubtitle"
+                >
+                </div>
+
+            </div>
+
+            <button
+                type="button"
+                class="modal-close"
+                onclick="closeCandidateModal()"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <div
+            id="candidateList"
+            class="candidate-list"
+        >
+        </div>
+
+
+        <button
+            type="button"
+            id="unassignButton"
+            class="unassign-button"
+            onclick="removeCurrentAssignment()"
+            style="display: none;"
+        >
+            Unassign
+        </button>
+
+    </div>
+
+</div>
+
+
+<script>
+
+/* =========================================================
+   Layout
+========================================================= */
+
+const HOUR_ROWS = [
+    ["11:00", "12:00"],
+    ["12:00", "13:00"],
+    ["13:00", "14:00"],
+    ["14:00", "15:00"],
+    ["15:00", "16:00"],
+    ["16:00", "17:00"],
+    ["17:00", "18:00"],
+    ["18:00", "19:00"],
+    ["19:00", "20:00"],
+    ["20:00", "21:00"]
+];
+
+
+const DISPLAY_STORES = [
+    "TU",
+    "VB"
+];
+
+
+let weekStart =
+    getMonday(
+        new Date()
+    );
+
+
+let scheduleData =
+    null;
+
+
+let activeSelection =
+    null;
+
+
+/* =========================================================
+   Date helpers
+========================================================= */
+
+function getMonday(date) {
+
+    const d =
+        new Date(date);
+
+    const day =
+        d.getDay();
+
+    const diff =
+        d.getDate()
+        -
+        day
+        +
+        (
+            day === 0
+                ? -6
+                : 1
+        );
+
+    d.setDate(
+        diff
+    );
+
+    d.setHours(
+        0,
+        0,
+        0,
+        0
+    );
+
+    return d;
+}
+
+
+function dateToString(date) {
+
+    const year =
+        date.getFullYear();
+
+    const month =
+        String(
+            date.getMonth()
+            +
+            1
+        ).padStart(
+            2,
+            "0"
+        );
+
+    const day =
+        String(
+            date.getDate()
+        ).padStart(
+            2,
+            "0"
+        );
+
+    return (
+        year
+        +
+        "-"
+        +
+        month
+        +
+        "-"
+        +
+        day
+    );
+}
+
+
+function displayDateString(value) {
+
+    const parts =
+        String(value)
+        .split("-");
+
+    if (
+        parts.length !== 3
+    ) {
+        return value;
+    }
+
+    return (
+        Number(parts[1])
+        +
+        "/"
+        +
+        Number(parts[2])
+        +
+        "/"
+        +
+        parts[0]
+    );
+}
+
+
+function formatTime(value) {
+
+    const parts =
+        String(value)
+        .split(":");
+
+    let hour =
+        Number(
+            parts[0]
+        );
+
+    const minute =
+        parts[1]
+        ||
+        "00";
+
+    const suffix =
+        hour >= 12
+            ? "PM"
+            : "AM";
+
+    hour =
+        hour % 12;
+
+    if (
+        hour === 0
+    ) {
+        hour = 12;
+    }
+
+    return (
+        hour
+        +
+        ":"
+        +
+        minute
+        +
+        " "
+        +
+        suffix
+    );
+}
+
+
+/* =========================================================
+   Week navigation
+========================================================= */
+
+function changeWeek(days) {
+
+    weekStart.setDate(
+        weekStart.getDate()
+        +
+        days
+    );
+
+    loadSchedule();
+}
+
+
+function goCurrentWeek() {
+
+    weekStart =
+        getMonday(
+            new Date()
+        );
+
+    loadSchedule();
+}
+
+
+/* =========================================================
+   Load
+========================================================= */
+
+async function loadSchedule() {
+
+    const weekStartString =
+        dateToString(
+            weekStart
+        );
+
+    showStatus(
+        "Loading schedule...",
+        "info"
+    );
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/schedule-week"
+                +
+                "?week_start="
+                +
+                encodeURIComponent(
+                    weekStartString
+                ),
+                {
+                    cache: "no-store"
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message
+                ||
+                "Unable to load schedule."
+            );
+        }
+
+        scheduleData =
+            data;
+
+        updateWeekTitle(
+            data.week_start,
+            data.week_end
+        );
+
+        renderMatrix();
+
+        hideStatus();
+
+    }
+
+    catch (error) {
+
+        console.error(
+            error
+        );
+
+        showStatus(
+            error.message
+            ||
+            "Unable to load schedule.",
+            "error"
+        );
+
+    }
+
+}
+
+
+function updateWeekTitle(
+    start,
+    end
+) {
+
+    document
+        .getElementById(
+            "weekTitle"
+        )
+        .textContent =
+            displayDateString(
+                start
+            )
+            +
+            " - "
+            +
+            displayDateString(
+                end
+            );
+
+}
+
+
+/* =========================================================
+   Matrix
+========================================================= */
+
+function renderMatrix() {
+
+    renderMatrixHeader();
+    renderMatrixBody();
+
+}
+
+
+function renderMatrixHeader() {
+
+    const head =
+        document.getElementById(
+            "scheduleHead"
+        );
+
+    head.innerHTML =
+        "";
+
+
+    const row1 =
+        document.createElement(
+            "tr"
+        );
+
+    const timeHeader =
+        document.createElement(
+            "th"
+        );
+
+    timeHeader.className =
+        "time-header";
+
+    timeHeader.rowSpan =
+        3;
+
+    timeHeader.textContent =
+        "Time";
+
+    row1.appendChild(
+        timeHeader
+    );
+
+
+    for (
+        const day
+        of scheduleData.days
+    ) {
+
+        const th =
+            document.createElement(
+                "th"
+            );
+
+        th.className =
+            "day-header";
+
+        th.colSpan =
+            4;
+
+        th.innerHTML = `
+            ${escapeHtml(day.day_name)}
+            <span class="day-date">
+                ${escapeHtml(
+                    displayDateString(
+                        day.work_date
+                    )
+                )}
+            </span>
+        `;
+
+        row1.appendChild(
+            th
+        );
+
+    }
+
+
+    const row2 =
+        document.createElement(
+            "tr"
+        );
+
+
+    for (
+        const day
+        of scheduleData.days
+    ) {
+
+        for (
+            const storeCode
+            of DISPLAY_STORES
+        ) {
+
+            const th =
+                document.createElement(
+                    "th"
+                );
+
+            th.className =
+                "store-header";
+
+            th.colSpan =
+                2;
+
+            th.innerHTML = `
+                <span class="store-code">
+                    ${escapeHtml(storeCode)}
+                </span>
+            `;
+
+            row2.appendChild(
+                th
+            );
+
+        }
+
+    }
+
+
+    const row3 =
+        document.createElement(
+            "tr"
+        );
+
+
+    for (
+        const day
+        of scheduleData.days
+    ) {
+
+        for (
+            const storeCode
+            of DISPLAY_STORES
+        ) {
+
+            const creator =
+                document.createElement(
+                    "th"
+                );
+
+            creator.className =
+                "role-header";
+
+            creator.textContent =
+                "Creator";
+
+
+            const staff =
+                document.createElement(
+                    "th"
+                );
+
+            staff.className =
+                "role-header";
+
+            staff.textContent =
+                "Operator";
+
+
+            row3.appendChild(
+                creator
+            );
+
+            row3.appendChild(
+                staff
+            );
+
+        }
+
+    }
+
+
+    head.appendChild(
+        row1
+    );
+
+    head.appendChild(
+        row2
+    );
+
+    head.appendChild(
+        row3
+    );
+
+}
+
+
+function renderMatrixBody() {
+
+    const body =
+        document.getElementById(
+            "scheduleBody"
+        );
+
+    body.innerHTML =
+        "";
+
+
+    for (
+        const hourRange
+        of HOUR_ROWS
+    ) {
+
+        const row =
+            document.createElement(
+                "tr"
+            );
+
+
+        const timeCell =
+            document.createElement(
+                "td"
+            );
+
+        timeCell.className =
+            "time-cell";
+
+        timeCell.textContent =
+            formatTime(
+                hourRange[0]
+            )
+            +
+            " - "
+            +
+            formatTime(
+                hourRange[1]
+            );
+
+        row.appendChild(
+            timeCell
+        );
+
+
+        for (
+            const day
+            of scheduleData.days
+        ) {
+
+            for (
+                const storeCode
+                of DISPLAY_STORES
+            ) {
+
+                const slot =
+                    findSlotForHour(
+                        day,
+                        storeCode,
+                        hourRange[0],
+                        hourRange[1]
+                    );
+
+
+                const creatorCell =
+                    document.createElement(
+                        "td"
+                    );
+
+                creatorCell.className =
+                    "schedule-cell";
+
+
+                const staffCell =
+                    document.createElement(
+                        "td"
+                    );
+
+                staffCell.className =
+                    "schedule-cell";
+
+
+                if (
+                    slot
+                ) {
+
+                    creatorCell.appendChild(
+                        buildCreatorButton(
+                            day,
+                            storeCode,
+                            slot
+                        )
+                    );
+
+
+                    staffCell.appendChild(
+                        buildOperatorStack(
+                            day,
+                            storeCode,
+                            slot
+                        )
+                    );
+
+                }
+
+
+                row.appendChild(
+                    creatorCell
+                );
+
+                row.appendChild(
+                    staffCell
+                );
+
+            }
+
+        }
+
+
+        body.appendChild(
+            row
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   Buttons
+========================================================= */
+
+function buildCreatorButton(
+    day,
+    storeCode,
+    slot
+) {
+
+    const assignment =
+        findAssignment(
+            slot.assignments,
+            "creator",
+            1
+        );
+
+
+    const button =
+        document.createElement(
+            "button"
+        );
+
+    button.type =
+        "button";
+
+    button.className =
+        "assignment-button creator "
+        +
+        (
+            assignment
+                ? "assigned"
+                : "empty"
+        );
+
+    button.textContent =
+        assignment
+            ? assignment.staff_name
+            : "—";
+
+
+    attachSelectionData(
+        button,
+        day,
+        storeCode,
+        slot,
+        "creator",
+        1,
+        "Creator",
+        assignment
+    );
+
+
+    button.addEventListener(
+        "click",
+        function () {
+            openCandidateModal(
+                this
+            );
+        }
+    );
+
+
+    return button;
+}
+
+
+function buildOperatorStack(
+    day,
+    storeCode,
+    slot
+) {
+
+    const stack =
+        document.createElement(
+            "div"
+        );
+
+    stack.className =
+        "operator-stack";
+
+
+    const a1 =
+        findAssignment(
+            slot.assignments,
+            "operator",
+            1
+        );
+
+
+    const a2 =
+        findAssignment(
+            slot.assignments,
+            "operator",
+            2
+        );
+
+
+    stack.appendChild(
+        buildOperatorButton(
+            day,
+            storeCode,
+            slot,
+            1,
+            "O1",
+            "Operator 1",
+            a1
+        )
+    );
+
+
+    stack.appendChild(
+        buildOperatorButton(
+            day,
+            storeCode,
+            slot,
+            2,
+            "O2",
+            "Operator 2",
+            a2
+        )
+    );
+
+
+    return stack;
+}
+
+
+function buildOperatorButton(
+    day,
+    storeCode,
+    slot,
+    positionNo,
+    shortLabel,
+    fullLabel,
+    assignment
+) {
+
+    const button =
+        document.createElement(
+            "button"
+        );
+
+    button.type =
+        "button";
+
+    button.className =
+        "operator-button "
+        +
+        (
+            assignment
+                ? "assigned"
+                : "empty"
+        );
+
+
+    if (
+        assignment
+    ) {
+
+        button.innerHTML = `
+            <span class="operator-label">
+                ${escapeHtml(shortLabel)}
+            </span>
+            ${escapeHtml(assignment.staff_name)}
+        `;
+
+    } else {
+
+        button.innerHTML = `
+            <span class="operator-label">
+                ${escapeHtml(shortLabel)}
+            </span>
+            —
+        `;
+
+    }
+
+
+    attachSelectionData(
+        button,
+        day,
+        storeCode,
+        slot,
+        "operator",
+        positionNo,
+        fullLabel,
+        assignment
+    );
+
+
+    button.addEventListener(
+        "click",
+        function () {
+            openCandidateModal(
+                this
+            );
+        }
+    );
+
+
+    return button;
+}
+
+
+function attachSelectionData(
+    button,
+    day,
+    storeCode,
+    slot,
+    roleType,
+    positionNo,
+    positionLabel,
+    assignment
+) {
+
+    button.dataset.workDate =
+        day.work_date;
+
+    button.dataset.slotId =
+        String(
+            slot.slot_id
+        );
+
+    button.dataset.storeCode =
+        storeCode;
+
+    button.dataset.slotNo =
+        String(
+            slot.slot_no
+        );
+
+    button.dataset.startTime =
+        slot.start_time;
+
+    button.dataset.endTime =
+        slot.end_time;
+
+    button.dataset.roleType =
+        roleType;
+
+    button.dataset.positionNo =
+        String(
+            positionNo
+        );
+
+    button.dataset.positionLabel =
+        positionLabel;
+
+    button.dataset.currentStaffId =
+        assignment
+            ? String(
+                assignment.staff_id
+            )
+            : "";
+
+    button.dataset.currentStaffName =
+        assignment
+            ? assignment.staff_name
+            : "";
+}
+
+
+/* =========================================================
+   Slot lookup
+========================================================= */
+
+function findSlotForHour(
+    day,
+    storeCode,
+    hourStart,
+    hourEnd
+) {
+
+    if (
+        !day
+        ||
+        !day.slots
+    ) {
+        return null;
+    }
+
+
+    for (
+        const slot
+        of day.slots
+    ) {
+
+        if (
+            slot.store_code
+            !==
+            storeCode
+        ) {
+            continue;
+        }
+
+
+        if (
+            timeLessOrEqual(
+                slot.start_time,
+                hourStart
+            )
+            &&
+            timeGreaterOrEqual(
+                slot.end_time,
+                hourEnd
+            )
+        ) {
+            return slot;
+        }
+
+    }
+
+
+    return null;
+}
+
+
+function timeLessOrEqual(
+    a,
+    b
+) {
+
+    return (
+        normalizeTimeString(a)
+        <=
+        normalizeTimeString(b)
+    );
+}
+
+
+function timeGreaterOrEqual(
+    a,
+    b
+) {
+
+    return (
+        normalizeTimeString(a)
+        >=
+        normalizeTimeString(b)
+    );
+}
+
+
+function normalizeTimeString(value) {
+
+    const parts =
+        String(value)
+        .split(":");
+
+    return (
+        String(parts[0])
+        .padStart(
+            2,
+            "0"
+        )
+        +
+        ":"
+        +
+        String(
+            parts[1]
+            ||
+            "00"
+        )
+        .padStart(
+            2,
+            "0"
+        )
+    );
+}
+
+
+function findAssignment(
+    assignments,
+    roleType,
+    positionNo
+) {
+
+    if (
+        !assignments
+    ) {
+        return null;
+    }
+
+
+    return (
+        assignments.find(
+            item =>
+                item.role_type
+                ===
+                roleType
+                &&
+                Number(
+                    item.position_no
+                )
+                ===
+                Number(
+                    positionNo
+                )
+        )
+        ||
+        null
+    );
+}
+
+
+/* =========================================================
+   Candidate modal
+========================================================= */
+
+async function openCandidateModal(
+    button
+) {
+
+    activeSelection = {
+        button:
+            button,
+
+        work_date:
+            button.dataset.workDate,
+
+        slot_id:
+            Number(
+                button.dataset.slotId
+            ),
+
+        store_code:
+            button.dataset.storeCode,
+
+        slot_no:
+            Number(
+                button.dataset.slotNo
+            ),
+
+        start_time:
+            button.dataset.startTime,
+
+        end_time:
+            button.dataset.endTime,
+
+        role_type:
+            button.dataset.roleType,
+
+        position_no:
+            Number(
+                button.dataset.positionNo
+            ),
+
+        position_label:
+            button.dataset.positionLabel,
+
+        current_staff_id:
+            button.dataset.currentStaffId
+            ||
+            "",
+
+        current_staff_name:
+            button.dataset.currentStaffName
+            ||
+            ""
+    };
+
+
+    document
+        .getElementById(
+            "modalTitle"
+        )
+        .textContent =
+            activeSelection.position_label;
+
+
+    document
+        .getElementById(
+            "modalSubtitle"
+        )
+        .textContent =
+            activeSelection.work_date
+            +
+            " · "
+            +
+            activeSelection.store_code
+            +
+            " Slot "
+            +
+            activeSelection.slot_no
+            +
+            " · "
+            +
+            formatTime(
+                activeSelection.start_time
+            )
+            +
+            " - "
+            +
+            formatTime(
+                activeSelection.end_time
+            );
+
+
+    const list =
+        document.getElementById(
+            "candidateList"
+        );
+
+
+    list.innerHTML = `
+        <div class="candidate-empty">
+            Loading candidates...
+        </div>
+    `;
+
+
+    document
+        .getElementById(
+            "unassignButton"
+        )
+        .style.display =
+            activeSelection.current_staff_id
+                ? "block"
+                : "none";
+
+
+    document
+        .getElementById(
+            "candidateModalBackdrop"
+        )
+        .classList.add(
+            "visible"
+        );
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/schedule-candidates"
+                +
+                "?work_date="
+                +
+                encodeURIComponent(
+                    activeSelection.work_date
+                )
+                +
+                "&slot_id="
+                +
+                encodeURIComponent(
+                    activeSelection.slot_id
+                )
+                +
+                "&role_type="
+                +
+                encodeURIComponent(
+                    activeSelection.role_type
+                ),
+                {
+                    cache: "no-store"
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message
+                ||
+                "Unable to load candidates."
+            );
+        }
+
+
+        renderCandidates(
+            data.candidates
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(
+            error
+        );
+
+
+        list.innerHTML = `
+            <div class="candidate-empty">
+                ${escapeHtml(
+                    error.message
+                    ||
+                    "Unable to load candidates."
+                )}
+            </div>
+        `;
+
+    }
+
+}
+
+
+function renderCandidates(candidates) {
+
+    const list =
+        document.getElementById(
+            "candidateList"
+        );
+
+
+    list.innerHTML =
+        "";
+
+
+    if (
+        !candidates
+        ||
+        candidates.length === 0
+    ) {
+
+        list.innerHTML = `
+            <div class="candidate-empty">
+                No eligible staff for this slot.
+            </div>
+        `;
+
+        return;
+    }
+
+
+    for (
+        const candidate
+        of candidates
+    ) {
+
+        const button =
+            document.createElement(
+                "button"
+            );
+
+        button.type =
+            "button";
+
+        button.className =
+            "candidate-item";
+
+
+        const left =
+            document.createElement(
+                "div"
+            );
+
+
+        const name =
+            document.createElement(
+                "div"
+            );
+
+        name.className =
+            "candidate-name";
+
+        name.textContent =
+            candidate.name;
+
+
+        const meta =
+            document.createElement(
+                "div"
+            );
+
+        meta.className =
+            "candidate-meta";
+
+        meta.textContent =
+            "Scheduled today: "
+            +
+            formatHours(
+                candidate.scheduled_hours
+            )
+            +
+            "h · This slot: "
+            +
+            formatHours(
+                candidate.slot_hours
+            )
+            +
+            "h";
+
+
+        left.appendChild(
+            name
+        );
+
+        left.appendChild(
+            meta
+        );
+
+
+        const arrow =
+            document.createElement(
+                "div"
+            );
+
+        arrow.className =
+            "candidate-arrow";
+
+        arrow.textContent =
+            "›";
+
+
+        button.appendChild(
+            left
+        );
+
+        button.appendChild(
+            arrow
+        );
+
+
+        button.addEventListener(
+            "click",
+            function () {
+                assignCandidate(
+                    candidate
+                );
+            }
+        );
+
+
+        list.appendChild(
+            button
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   Save / delete
+========================================================= */
+
+async function assignCandidate(
+    candidate
+) {
+
+    if (
+        !activeSelection
+    ) {
+        return;
+    }
+
+
+    try {
+
+        showStatus(
+            "Saving schedule...",
+            "info"
+        );
+
+
+        const response =
+            await fetch(
+                "/api/staff-schedule",
+                {
+                    method:
+                        "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            work_date:
+                                activeSelection.work_date,
+
+                            slot_id:
+                                activeSelection.slot_id,
+
+                            staff_id:
+                                candidate.staff_id,
+
+                            role_type:
+                                activeSelection.role_type,
+
+                            position_no:
+                                activeSelection.position_no
+                        })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message
+                ||
+                "Unable to save assignment."
+            );
+        }
+
+
+        closeCandidateModal();
+
+
+        showStatus(
+            "Schedule saved.",
+            "success"
+        );
+
+
+        await loadSchedule();
+
+    }
+
+    catch (error) {
+
+        console.error(
+            error
+        );
+
+
+        showStatus(
+            error.message
+            ||
+            "Unable to save assignment.",
+            "error"
+        );
+
+    }
+
+}
+
+
+async function removeCurrentAssignment() {
+
+    if (
+        !activeSelection
+        ||
+        !activeSelection.current_staff_id
+    ) {
+        return;
+    }
+
+
+    try {
+
+        showStatus(
+            "Removing assignment...",
+            "info"
+        );
+
+
+        const response =
+            await fetch(
+                "/api/staff-schedule",
+                {
+                    method:
+                        "DELETE",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            work_date:
+                                activeSelection.work_date,
+
+                            slot_id:
+                                activeSelection.slot_id,
+
+                            role_type:
+                                activeSelection.role_type,
+
+                            position_no:
+                                activeSelection.position_no
+                        })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message
+                ||
+                "Unable to remove assignment."
+            );
+        }
+
+
+        closeCandidateModal();
+
+
+        showStatus(
+            "Assignment removed.",
+            "success"
+        );
+
+
+        await loadSchedule();
+
+    }
+
+    catch (error) {
+
+        console.error(
+            error
+        );
+
+
+        showStatus(
+            error.message
+            ||
+            "Unable to remove assignment.",
+            "error"
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   Modal helpers
+========================================================= */
+
+function closeCandidateModal() {
+
+    document
+        .getElementById(
+            "candidateModalBackdrop"
+        )
+        .classList.remove(
+            "visible"
+        );
+
+
+    activeSelection =
+        null;
+}
+
+
+function handleBackdropClick(event) {
+
+    if (
+        event.target.id
+        ===
+        "candidateModalBackdrop"
+    ) {
+        closeCandidateModal();
+    }
+}
+
+
+document.addEventListener(
+    "keydown",
+    function (event) {
+        if (
+            event.key
+            ===
+            "Escape"
+        ) {
+            closeCandidateModal();
+        }
+    }
+);
+
+
+/* =========================================================
+   Status
+========================================================= */
+
+function showStatus(
+    message,
+    type
+) {
+
+    const bar =
+        document.getElementById(
+            "statusBar"
+        );
+
+    bar.textContent =
+        message;
+
+    bar.className =
+        "status-bar visible "
+        +
+        type;
+
+
+    if (
+        type === "success"
+    ) {
+
+        setTimeout(
+            function () {
+                if (
+                    bar.classList.contains(
+                        "success"
+                    )
+                ) {
+                    hideStatus();
+                }
+            },
+            2200
+        );
+
+    }
+
+}
+
+
+function hideStatus() {
+
+    document
+        .getElementById(
+            "statusBar"
+        )
+        .className =
+            "status-bar";
+}
+
+
+/* =========================================================
+   Utility
+========================================================= */
+
+function formatHours(value) {
+
+    const number =
+        Number(
+            value
+            ||
+            0
+        );
+
+    if (
+        Number.isInteger(
+            number
+        )
+    ) {
+        return String(
+            number
+        );
+    }
+
+    return number.toFixed(
+        1
+    );
+}
+
+
+function escapeHtml(value) {
+
+    return String(
+        value
+        ??
+        ""
+    )
+
+    .replace(
+        /&/g,
+        "&amp;"
+    )
+
+    .replace(
+        /</g,
+        "&lt;"
+    )
+
+    .replace(
+        />/g,
+        "&gt;"
+    )
+
+    .replace(
+        /"/g,
+        "&quot;"
+    )
+
+    .replace(
+        /'/g,
+        "&#039;"
+    );
+}
+
+
+/* =========================================================
+   Start
+========================================================= */
+
+window.addEventListener(
+    "load",
+    function () {
+        loadSchedule();
+    }
+);
+
+</script>
+
+</body>
+
+</html>
