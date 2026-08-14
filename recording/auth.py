@@ -124,7 +124,7 @@ def login():
         return redirect(
             url_for(
                 "recording.recording",
-                store_id=1
+                store_code="TU"
             )
         )
 
@@ -231,7 +231,7 @@ def login():
             return redirect(
                 url_for(
                     "recording.recording",
-                    store_id=1
+                    store_code="TU"
                 )
             )
 

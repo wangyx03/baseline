@@ -275,25 +275,6 @@
         }
 
 
-        .sortable {
-            cursor: pointer;
-            user-select: none;
-        }
-
-
-        .sortable:hover {
-            background: #ddd;
-        }
-
-
-        .sort-indicator {
-            display: inline-block;
-            width: 16px;
-            margin-left: 5px;
-            text-align: center;
-        }
-
-
         .remaining-zero {
             font-weight: bold;
         }
@@ -373,11 +354,11 @@
 
     <div class="recording-links">
 
-        <a href="/recording/1">
+        <a href="/recording/TU">
             TU Recording
         </a>
 
-        <a href="/recording/2">
+        <a href="/recording/VB">
             VB Recording
         </a>
 
@@ -660,37 +641,16 @@
                         Title
                     </th>
 
-                    <th
-                        class="number sortable"
-                        onclick="sortInventory('planned')"
-                    >
+                    <th class="number">
                         Planned
-                        <span
-                            id="sort-planned"
-                            class="sort-indicator"
-                        ></span>
                     </th>
 
-                    <th
-                        class="number sortable"
-                        onclick="sortInventory('used')"
-                    >
+                    <th class="number">
                         Used
-                        <span
-                            id="sort-used"
-                            class="sort-indicator"
-                        ></span>
                     </th>
 
-                    <th
-                        class="number sortable"
-                        onclick="sortInventory('remaining')"
-                    >
+                    <th class="number">
                         Remaining
-                        <span
-                            id="sort-remaining"
-                            class="sort-indicator"
-                        ></span>
                     </th>
 
                 </tr>
@@ -754,87 +714,6 @@ let currentFilter =
 
 let loadingInventory =
     false;
-
-
-let sortColumn =
-    null;
-
-
-let sortDirection =
-    "asc";
-
-
-function sortInventory(
-    column
-) {
-
-    if (
-        sortColumn === column
-    ) {
-
-        sortDirection =
-            sortDirection === "asc"
-            ? "desc"
-            : "asc";
-
-    } else {
-
-        sortColumn =
-            column;
-
-        sortDirection =
-            "asc";
-    }
-
-
-    updateSortIndicators();
-
-    renderInventory();
-}
-
-
-function updateSortIndicators() {
-
-    const columns = [
-        "planned",
-        "used",
-        "remaining"
-    ];
-
-
-    for (
-        const column
-        of columns
-    ) {
-
-        const element =
-            document.getElementById(
-                "sort-" + column
-            );
-
-
-        if (!element) {
-            continue;
-        }
-
-
-        if (
-            column !== sortColumn
-        ) {
-
-            element.textContent =
-                "";
-
-            continue;
-        }
-
-
-        element.textContent =
-            sortDirection === "asc"
-            ? "▲"
-            : "▼";
-    }
-}
 
 
 // =========================================================
@@ -1551,52 +1430,6 @@ function renderInventory() {
 
             }
         );
-
-
-    // ---------------------------------------------------------
-    // SORT
-    // ---------------------------------------------------------
-
-    if (sortColumn) {
-
-        rows.sort(
-            (a, b) => {
-
-                const valueA =
-                    Number(
-                        a[sortColumn]
-                        ||
-                        0
-                    );
-
-
-                const valueB =
-                    Number(
-                        b[sortColumn]
-                        ||
-                        0
-                    );
-
-
-                if (
-                    sortDirection ===
-                    "asc"
-                ) {
-
-                    return (
-                        valueA -
-                        valueB
-                    );
-                }
-
-
-                return (
-                    valueB -
-                    valueA
-                );
-            }
-        );
-    }
 
 
     inventoryBody.innerHTML =
