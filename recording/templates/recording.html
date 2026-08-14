@@ -31,6 +31,7 @@
         .top-nav {
             display: flex;
             align-items: center;
+            gap: 10px;
             padding: 10px 16px;
             background: white;
             border-bottom: 1px solid #ddd;
@@ -363,6 +364,13 @@
 
 
 <div class="top-nav">
+
+    <a
+        href="{{ url_for('index') }}"
+        class="nav-button"
+    >
+        Dashboard
+    </a>
 
     <a
         href="/weekly-inventory"
