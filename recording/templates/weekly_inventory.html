@@ -275,6 +275,25 @@
         }
 
 
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+
+        .sortable:hover {
+            background: #ddd;
+        }
+
+
+        .sort-indicator {
+            display: inline-block;
+            width: 16px;
+            margin-left: 5px;
+            text-align: center;
+        }
+
+
         .remaining-zero {
             font-weight: bold;
         }
@@ -641,16 +660,37 @@
                         Title
                     </th>
 
-                    <th class="number">
+                    <th
+                        class="number sortable"
+                        onclick="sortInventory('planned')"
+                    >
                         Planned
+                        <span
+                            id="sort-planned"
+                            class="sort-indicator"
+                        ></span>
                     </th>
 
-                    <th class="number">
+                    <th
+                        class="number sortable"
+                        onclick="sortInventory('used')"
+                    >
                         Used
+                        <span
+                            id="sort-used"
+                            class="sort-indicator"
+                        ></span>
                     </th>
 
-                    <th class="number">
+                    <th
+                        class="number sortable"
+                        onclick="sortInventory('remaining')"
+                    >
                         Remaining
+                        <span
+                            id="sort-remaining"
+                            class="sort-indicator"
+                        ></span>
                     </th>
 
                 </tr>
@@ -714,6 +754,14 @@ let currentFilter =
 
 let loadingInventory =
     false;
+
+
+let sortColumn =
+    null;
+
+
+let sortDirection =
+    "asc";
 
 
 // =========================================================
@@ -1328,6 +1376,80 @@ function setFilter(
 
 
 // =========================================================
+// SORT
+// =========================================================
+
+function sortInventory(
+    column
+) {
+
+    if (
+        sortColumn === column
+    ) {
+
+        sortDirection =
+            sortDirection === "asc"
+            ? "desc"
+            : "asc";
+
+    } else {
+
+        sortColumn =
+            column;
+
+        sortDirection =
+            "asc";
+    }
+
+    updateSortIndicators();
+
+    renderInventory();
+
+}
+
+
+function updateSortIndicators() {
+
+    const columns = [
+        "planned",
+        "used",
+        "remaining"
+    ];
+
+    for (
+        const column
+        of columns
+    ) {
+
+        const element =
+            document.getElementById(
+                "sort-" + column
+            );
+
+        if (!element) {
+            continue;
+        }
+
+        if (
+            column !== sortColumn
+        ) {
+
+            element.textContent =
+                "";
+
+            continue;
+        }
+
+        element.textContent =
+            sortDirection === "asc"
+            ? "▲"
+            : "▼";
+    }
+
+}
+
+
+// =========================================================
 // RENDER INVENTORY
 // =========================================================
 
@@ -1430,6 +1552,44 @@ function renderInventory() {
 
             }
         );
+
+
+    if (sortColumn) {
+
+        rows.sort(
+            (a, b) => {
+
+                const valueA =
+                    Number(
+                        a[sortColumn]
+                        ||
+                        0
+                    );
+
+                const valueB =
+                    Number(
+                        b[sortColumn]
+                        ||
+                        0
+                    );
+
+                if (
+                    sortDirection === "asc"
+                ) {
+
+                    return (
+                        valueA -
+                        valueB
+                    );
+                }
+
+                return (
+                    valueB -
+                    valueA
+                );
+            }
+        );
+    }
 
 
     inventoryBody.innerHTML =
