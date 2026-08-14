@@ -8,7 +8,7 @@ from recording.auth import auth_bp, init_auth
 from recording.recording import recording_bp
 from recording.weekly_inventory import weekly_bp
 from staffschedule.availability import availability_bp
-
+from staffschedule.availability_management import availability_management_bp
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -35,7 +35,7 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(recording_bp)
 app.register_blueprint(weekly_bp)
 app.register_blueprint(availability_bp)
-
+app.register_blueprint(availability_management_bp)
 
 if __name__ == "__main__":
 
