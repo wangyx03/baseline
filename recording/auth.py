@@ -4,7 +4,12 @@ from werkzeug.security import check_password_hash
 
 from db import get_db
 
-auth_bp = Blueprint("auth", __name__)
+auth_bp = Blueprint(
+    "auth",
+    __name__,
+    template_folder="templates"
+)
+
 login_manager = LoginManager()
 
 class User(UserMixin):

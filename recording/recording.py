@@ -8,7 +8,11 @@ from db import get_db
 from .inventory_service import get_weekly_item_status
 from utils import format_et
 
-recording_bp = Blueprint("recording", __name__)
+recording_bp = Blueprint(
+    "recording",
+    __name__,
+    template_folder="templates"
+)
 
 # Maximum number of sequence positions allowed in each round.
 MAX_SEQ_PER_ROUND = 300
@@ -62,47 +66,51 @@ def write_recording_log(
         )
     )
 
-@recording_bp.route(
-    "/recording/<int:store_id>"
-)
+@recording_bp.route("/recording/<store_code>")
 @login_required
-def recording(store_id):
+def recording(store_code):
+
+    store_code = store_code.upper().strip()
 
     db = get_db()
-
-    cursor = db.cursor(
-        dictionary=True
-    )
+    cursor = db.cursor(dictionary=True)
 
     try:
 
         cursor.execute(
             """
             SELECT
-                store_name
+                store_id,
+                store_name,
+                short_name
 
             FROM stores
 
-            WHERE store_id = %s
+            WHERE UPPER(short_name) = %s
             """,
             (
-                store_id,
+                store_code,
             )
         )
 
         store = cursor.fetchone()
 
-        if store is None:
+        if not store:
 
-            return (
-                "Store not found",
-                404
-            )
+            return "Invalid store", 404
+
 
         return render_template(
             "recording.html",
-            store_id=store_id,
-            store_name=store["store_name"]
+
+            store_id=
+                store["store_id"],
+
+            store_name=
+                store["store_name"],
+
+            store_code=
+                store["short_name"]
         )
 
     finally:

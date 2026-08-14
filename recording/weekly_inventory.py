@@ -3,7 +3,11 @@ from flask_login import login_required
 
 from db import get_db
 
-weekly_bp = Blueprint("weekly", __name__)
+weekly_bp = Blueprint(
+    "weekly",
+    __name__,
+    template_folder="templates"
+)
 
 @weekly_bp.route(
     "/weekly-inventory"
