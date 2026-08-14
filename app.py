@@ -63,7 +63,8 @@ app.register_blueprint(
 def index():
 
     return render_template(
-        "index.html"
+        "index.html",
+        show_dashboard=False
     )
 
 

@@ -12,6 +12,11 @@
 
     <title>SKU Recording Demo</title>
 
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='navbar.css') }}"
+    >
+
 
     <style>
 
@@ -25,39 +30,6 @@
             margin: 0;
             background: #f7f7f7;
             color: #111;
-        }
-
-
-        .top-nav {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 16px;
-            background: white;
-            border-bottom: 1px solid #ddd;
-        }
-
-
-        .nav-button {
-            padding: 8px 16px;
-            background: #111;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: 600;
-        }
-
-
-        .nav-button:hover {
-            background: #333;
-        }
-
-
-        .user-area {
-            margin-left: auto;
-            display: flex;
-            align-items: center;
-            gap: 12px;
         }
 
 
@@ -363,38 +335,7 @@
 <body>
 
 
-<div class="top-nav">
-
-    <a
-        href="{{ url_for('index') }}"
-        class="nav-button"
-    >
-        Dashboard
-    </a>
-
-    <a
-        href="/weekly-inventory"
-        class="nav-button"
-    >
-        Weekly Inventory
-    </a>
-
-
-    <div class="user-area">
-
-        User:
-
-        <strong>
-            {{ current_user.username }}
-        </strong>
-
-        <a href="/logout">
-            Logout
-        </a>
-
-    </div>
-
-</div>
+{% include "navbar.html" %}
 
 
 <div class="page">

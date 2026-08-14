@@ -1,4 +1,11 @@
-from flask import Blueprint, Response, jsonify, render_template, request
+from flask import (
+    Blueprint,
+    Response,
+    jsonify,
+    render_template,
+    request,
+    url_for
+)
 from flask_login import current_user, login_required
 import csv
 import io
@@ -110,7 +117,16 @@ def recording(store_code):
                 store["store_name"],
 
             store_code=
-                store["short_name"]
+                store["short_name"],
+
+            extra_nav_links=[
+                {
+                    "label": "Weekly Inventory",
+                    "url": url_for(
+                        "weekly.weekly_inventory_page"
+                    )
+                }
+            ]
         )
 
     finally:

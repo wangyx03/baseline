@@ -1,4 +1,10 @@
-from flask import Blueprint, jsonify, render_template, request
+from flask import (
+    Blueprint,
+    jsonify,
+    render_template,
+    request,
+    url_for
+)
 from flask_login import login_required
 
 from db import get_db
@@ -16,7 +22,24 @@ weekly_bp = Blueprint(
 def weekly_inventory_page():
 
     return render_template(
-        "weekly_inventory.html"
+        "weekly_inventory.html",
+
+        extra_nav_links=[
+            {
+                "label": "TU Recording",
+                "url": url_for(
+                    "recording.recording",
+                    store_code="TU"
+                )
+            },
+            {
+                "label": "VB Recording",
+                "url": url_for(
+                    "recording.recording",
+                    store_code="VB"
+                )
+            }
+        ]
     )
 
 @weekly_bp.route(

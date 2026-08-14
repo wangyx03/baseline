@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -11,11 +12,20 @@
 
     <title>Operations Dashboard</title>
 
+
+    <!-- Common Navbar CSS -->
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='navbar.css') }}"
+    >
+
+
     <style>
 
         * {
             box-sizing: border-box;
         }
+
 
         body {
             margin: 0;
@@ -28,47 +38,8 @@
                 sans-serif;
 
             background: #f5f6f8;
+
             color: #1f2329;
-        }
-
-
-        /* =========================
-           Top Bar
-        ========================= */
-
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-
-            padding: 13px 30px;
-
-            background: white;
-
-            border-bottom: 1px solid #e5e6e8;
-        }
-
-        .brand {
-            font-size: 17px;
-            font-weight: 700;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-
-            gap: 10px;
-
-            font-size: 14px;
-        }
-
-        .user-info a {
-            color: #5b21b6;
-            text-decoration: none;
-        }
-
-        .user-info a:hover {
-            text-decoration: underline;
         }
 
 
@@ -77,6 +48,7 @@
         ========================= */
 
         .page {
+
             max-width: 1150px;
 
             margin: 45px auto;
@@ -84,13 +56,17 @@
             padding: 0 20px;
         }
 
+
         h1 {
+
             margin: 0;
 
             font-size: 32px;
         }
 
+
         .subtitle {
+
             margin-top: 8px;
 
             color: #646a73;
@@ -104,13 +80,17 @@
         ========================= */
 
         .section {
+
             margin-top: 38px;
         }
 
+
         .section-title {
+
             margin-bottom: 15px;
 
             font-size: 18px;
+
             font-weight: 700;
         }
 
@@ -120,6 +100,7 @@
         ========================= */
 
         .grid {
+
             display: grid;
 
             grid-template-columns:
@@ -131,7 +112,9 @@
             gap: 16px;
         }
 
+
         .card {
+
             display: block;
 
             min-height: 125px;
@@ -140,15 +123,24 @@
 
             background: white;
 
-            border: 1px solid #e5e6e8;
+            border:
+                1px solid
+                #e5e6e8;
+
             border-radius: 10px;
 
             text-decoration: none;
+
             color: inherit;
 
             box-shadow:
                 0 2px 8px
-                rgba(0, 0, 0, 0.04);
+                rgba(
+                    0,
+                    0,
+                    0,
+                    0.04
+                );
 
             transition:
                 transform 0.12s,
@@ -156,33 +148,50 @@
                 border-color 0.12s;
         }
 
-        .card:hover {
-            transform: translateY(-2px);
 
-            border-color: #c7cbd1;
+        .card:hover {
+
+            transform:
+                translateY(-2px);
+
+            border-color:
+                #c7cbd1;
 
             box-shadow:
                 0 6px 18px
-                rgba(0, 0, 0, 0.08);
+                rgba(
+                    0,
+                    0,
+                    0,
+                    0.08
+                );
         }
 
+
         .card-icon {
+
             margin-bottom: 12px;
 
             font-size: 24px;
         }
 
+
         .card-title {
+
             margin-bottom: 7px;
 
             font-size: 17px;
+
             font-weight: 700;
         }
 
+
         .card-description {
+
             color: #646a73;
 
             font-size: 13px;
+
             line-height: 1.5;
         }
 
@@ -192,21 +201,33 @@
         ========================= */
 
         .coming-soon {
+
             opacity: 0.55;
+
             cursor: default;
         }
 
+
         .coming-soon:hover {
+
             transform: none;
 
-            border-color: #e5e6e8;
+            border-color:
+                #e5e6e8;
 
             box-shadow:
                 0 2px 8px
-                rgba(0, 0, 0, 0.04);
+                rgba(
+                    0,
+                    0,
+                    0,
+                    0.04
+                );
         }
 
+
         .badge {
+
             display: inline-block;
 
             margin-top: 10px;
@@ -220,6 +241,7 @@
             color: #646a73;
 
             font-size: 11px;
+
             font-weight: 600;
         }
 
@@ -228,28 +250,30 @@
            Mobile
         ========================= */
 
-        @media (max-width: 700px) {
-
-            .top-bar {
-                padding: 12px 15px;
-            }
-
-            .brand {
-                font-size: 15px;
-            }
+        @media (
+            max-width: 700px
+        ) {
 
             .page {
-                margin: 25px auto;
 
-                padding: 0 12px;
+                margin:
+                    25px auto;
+
+                padding:
+                    0 12px;
             }
 
+
             h1 {
+
                 font-size: 27px;
             }
 
+
             .grid {
-                grid-template-columns: 1fr;
+
+                grid-template-columns:
+                    1fr;
             }
 
         }
@@ -262,189 +286,261 @@
 <body>
 
 
-<div class="top-bar">
-
-    <div class="brand">
-        Operations System
-    </div>
-
-
-    <div class="user-info">
-
-        <span>
-            User:
-            <strong>
-                {{ current_user.username }}
-            </strong>
-        </span>
-
-        <a href="{{ url_for('auth.logout') }}">
-            Logout
-        </a>
-
-    </div>
-
-</div>
-
-
-
-<div class="page">
-
-    <h1>
-        Operations Dashboard
-    </h1>
-
-    <div class="subtitle">
-        Select a module to continue.
-    </div>
-
-
     <!-- =========================
-         Recording
+         Common Navbar
+         Dashboard page does not
+         show Dashboard button
     ========================= -->
 
-    <div class="section">
+    {% with show_dashboard=false %}
 
-        <div class="section-title">
-            Recording
-        </div>
+        {% include "navbar.html" %}
 
-
-        <div class="grid">
-
-
-            <a
-                class="card"
-                href="{{ url_for('recording.recording', store_code='TU') }}"
-            >
-
-                <div class="card-icon">
-                    🎥
-                </div>
-
-                <div class="card-title">
-                    TU Recording
-                </div>
-
-                <div class="card-description">
-                    Start or continue the TU live recording workflow.
-                </div>
-
-            </a>
-
-
-
-            <a
-                class="card"
-                href="{{ url_for('recording.recording', store_code='VB') }}"
-            >
-
-                <div class="card-icon">
-                    🎥
-                </div>
-
-                <div class="card-title">
-                    VB Recording
-                </div>
-
-                <div class="card-description">
-                    Start or continue the VB live recording workflow.
-                </div>
-
-            </a>
-
-
-
-            <a
-                class="card"
-                href="{{ url_for('weekly.weekly_inventory_page') }}"
-            >
-
-                <div class="card-icon">
-                    📦
-                </div>
-
-                <div class="card-title">
-                    Weekly Inventory
-                </div>
-
-                <div class="card-description">
-                    View planned, used and remaining weekly inventory.
-                </div>
-
-            </a>
-
-
-        </div>
-
-    </div>
+    {% endwith %}
 
 
 
     <!-- =========================
-         Staff Schedule
+         Main Page
     ========================= -->
 
-    <div class="section">
+    <div class="page">
 
-        <div class="section-title">
-            Staff Schedule
+
+        <h1>
+            Operations Dashboard
+        </h1>
+
+
+        <div class="subtitle">
+
+            Select a module to continue.
+
         </div>
 
 
-        <div class="grid">
+
+        <!-- =========================
+             Recording
+        ========================= -->
+
+        <div class="section">
 
 
-            <a
-                class="card"
-                href="{{ url_for('availability_management.availability_management_page') }}"
-            >
+            <div class="section-title">
 
-                <div class="card-icon">
-                    🕒
-                </div>
-
-                <div class="card-title">
-                    Availability Management
-                </div>
-
-                <div class="card-description">
-                    View and modify employee weekly availability.
-                </div>
-
-            </a>
-
-
-
-            <!-- Schedule is not built yet -->
-
-            <div class="card coming-soon">
-
-                <div class="card-icon">
-                    📅
-                </div>
-
-                <div class="card-title">
-                    Schedule
-                </div>
-
-                <div class="card-description">
-                    Build weekly TU and VB staff schedules.
-                </div>
-
-                <div class="badge">
-                    Coming Soon
-                </div>
+                Recording
 
             </div>
 
 
+            <div class="grid">
+
+
+                <!-- TU Recording -->
+
+                <a
+                    class="card"
+                    href="{{
+                        url_for(
+                            'recording.recording',
+                            store_code='TU'
+                        )
+                    }}"
+                >
+
+                    <div class="card-icon">
+                        🎥
+                    </div>
+
+
+                    <div class="card-title">
+
+                        TU Recording
+
+                    </div>
+
+
+                    <div class="card-description">
+
+                        Start or continue the TU
+                        live recording workflow.
+
+                    </div>
+
+                </a>
+
+
+
+                <!-- VB Recording -->
+
+                <a
+                    class="card"
+                    href="{{
+                        url_for(
+                            'recording.recording',
+                            store_code='VB'
+                        )
+                    }}"
+                >
+
+                    <div class="card-icon">
+                        🎥
+                    </div>
+
+
+                    <div class="card-title">
+
+                        VB Recording
+
+                    </div>
+
+
+                    <div class="card-description">
+
+                        Start or continue the VB
+                        live recording workflow.
+
+                    </div>
+
+                </a>
+
+
+
+                <!-- Weekly Inventory -->
+
+                <a
+                    class="card"
+                    href="{{
+                        url_for(
+                            'weekly.weekly_inventory_page'
+                        )
+                    }}"
+                >
+
+                    <div class="card-icon">
+                        📦
+                    </div>
+
+
+                    <div class="card-title">
+
+                        Weekly Inventory
+
+                    </div>
+
+
+                    <div class="card-description">
+
+                        View planned, used and
+                        remaining weekly inventory.
+
+                    </div>
+
+                </a>
+
+
+            </div>
+
         </div>
 
+
+
+        <!-- =========================
+             Staff Schedule
+        ========================= -->
+
+        <div class="section">
+
+
+            <div class="section-title">
+
+                Staff Schedule
+
+            </div>
+
+
+            <div class="grid">
+
+
+                <!-- Availability Management -->
+
+                <a
+                    class="card"
+                    href="{{
+                        url_for(
+                            'availability_management.availability_management_page'
+                        )
+                    }}"
+                >
+
+                    <div class="card-icon">
+                        🕒
+                    </div>
+
+
+                    <div class="card-title">
+
+                        Availability Management
+
+                    </div>
+
+
+                    <div class="card-description">
+
+                        View and modify employee
+                        weekly availability.
+
+                    </div>
+
+                </a>
+
+
+
+                <!-- Schedule -->
+
+                <div
+                    class="
+                        card
+                        coming-soon
+                    "
+                >
+
+                    <div class="card-icon">
+                        📅
+                    </div>
+
+
+                    <div class="card-title">
+
+                        Schedule
+
+                    </div>
+
+
+                    <div class="card-description">
+
+                        Build weekly TU and VB
+                        staff schedules.
+
+                    </div>
+
+
+                    <div class="badge">
+
+                        Coming Soon
+
+                    </div>
+
+                </div>
+
+
+            </div>
+
+        </div>
+
+
     </div>
-
-
-</div>
 
 
 </body>

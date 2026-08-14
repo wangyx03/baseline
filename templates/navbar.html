@@ -1,0 +1,49 @@
+<div class="top-nav">
+
+    {% if show_dashboard | default(true) %}
+
+        <a
+            href="{{ url_for('index') }}"
+            class="nav-button"
+        >
+            Dashboard
+        </a>
+
+    {% endif %}
+
+
+    {% if extra_nav_links %}
+
+        {% for link in extra_nav_links %}
+
+            <a
+                href="{{ link.url }}"
+                class="nav-button"
+            >
+                {{ link.label }}
+            </a>
+
+        {% endfor %}
+
+    {% endif %}
+
+
+    <div class="user-area">
+
+        <span>
+            User:
+            <strong>
+                {{ current_user.username }}
+            </strong>
+        </span>
+
+        <a
+            href="{{ url_for('auth.logout') }}"
+            class="logout-link"
+        >
+            Logout
+        </a>
+
+    </div>
+
+</div>

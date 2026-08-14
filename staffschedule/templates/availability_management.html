@@ -12,6 +12,11 @@
 
     <title>Availability Management</title>
 
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='navbar.css') }}"
+    >
+
 
     <style>
 
@@ -33,43 +38,6 @@
             background: #f5f6f8;
 
             color: #1f2329;
-        }
-
-
-        /* =========================
-           Top Login Bar
-        ========================= */
-
-        .top-bar {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-
-            gap: 10px;
-
-            padding: 12px 30px;
-
-            background: white;
-
-            border-bottom: 1px solid #e5e6e8;
-
-            font-size: 14px;
-        }
-
-
-        .top-bar strong {
-            font-weight: 700;
-        }
-
-
-        .top-bar a {
-            color: #5b21b6;
-            text-decoration: none;
-        }
-
-
-        .top-bar a:hover {
-            text-decoration: underline;
         }
 
 
@@ -521,11 +489,6 @@
 
         @media (max-width: 750px) {
 
-            .top-bar {
-                padding: 10px 15px;
-            }
-
-
             .page {
                 margin: 18px auto;
 
@@ -575,29 +538,7 @@
 <body>
 
 
-<!-- =========================
-     Login Information
-========================= -->
-
-<div class="top-bar">
-
-    <span>
-
-        User:
-
-        <strong>
-            {{ current_user.username }}
-        </strong>
-
-    </span>
-
-
-    <a href="{{ url_for('auth.logout') }}">
-        Logout
-    </a>
-
-</div>
-
+{% include "navbar.html" %}
 
 
 <div class="page">
