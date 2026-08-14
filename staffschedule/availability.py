@@ -60,51 +60,6 @@ def availability_page(staff_name):
 
 
 @availability_bp.route(
-    "/api/staff-list",
-    methods=["GET"]
-)
-def get_staff_list():
-
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
-
-    try:
-
-        cursor.execute(
-            """
-            SELECT
-                staff_id,
-                name
-
-            FROM staff
-
-            WHERE active = TRUE
-
-            ORDER BY name
-            """
-        )
-
-        rows = cursor.fetchall()
-
-        return jsonify({
-            "success": True,
-            "staff": rows
-        })
-
-    except Exception as e:
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-    finally:
-
-        cursor.close()
-        db.close()
-
-
-@availability_bp.route(
     "/api/staff-availability",
     methods=["GET"]
 )

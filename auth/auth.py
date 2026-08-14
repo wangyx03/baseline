@@ -1,8 +1,27 @@
-from flask import Blueprint, redirect, render_template, request, session, url_for
-from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
+from urllib.parse import urljoin, urlparse
+
+from flask import (
+    Blueprint,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for
+)
+
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    current_user,
+    login_required,
+    login_user,
+    logout_user
+)
+
 from werkzeug.security import check_password_hash
 
 from db import get_db
+
 
 auth_bp = Blueprint(
     "auth",
@@ -10,7 +29,9 @@ auth_bp = Blueprint(
     template_folder="templates"
 )
 
+
 login_manager = LoginManager()
+
 
 class User(UserMixin):
 
@@ -21,7 +42,9 @@ class User(UserMixin):
         is_active=True
     ):
 
-        self.id = str(user_id)
+        self.id = str(
+            user_id
+        )
 
         self.username = username
 
@@ -33,6 +56,7 @@ class User(UserMixin):
     def is_active(self):
 
         return self.active
+
 
 def load_user(user_id):
 
@@ -79,6 +103,7 @@ def load_user(user_id):
         cursor.close()
         db.close()
 
+
 def update_last_seen():
 
     if not current_user.is_authenticated:
@@ -110,6 +135,57 @@ def update_last_seen():
         cursor.close()
         db.close()
 
+
+def is_safe_url(target):
+
+    if not target:
+        return False
+
+    reference_url = urlparse(
+        request.host_url
+    )
+
+    test_url = urlparse(
+        urljoin(
+            request.host_url,
+            target
+        )
+    )
+
+    return (
+        test_url.scheme
+        in (
+            "http",
+            "https"
+        )
+        and
+        reference_url.netloc
+        ==
+        test_url.netloc
+    )
+
+
+def get_login_redirect():
+
+    next_url = request.args.get(
+        "next"
+    )
+
+    if (
+        next_url
+        and
+        is_safe_url(
+            next_url
+        )
+    ):
+
+        return next_url
+
+    return url_for(
+        "index"
+)
+
+
 @auth_bp.route(
     "/login",
     methods=[
@@ -122,10 +198,7 @@ def login():
     if current_user.is_authenticated:
 
         return redirect(
-            url_for(
-                "recording.recording",
-                store_code="TU"
-            )
+            get_login_redirect()
         )
 
     error = None
@@ -229,10 +302,7 @@ def login():
                 db.close()
 
             return redirect(
-                url_for(
-                    "recording.recording",
-                    store_code="TU"
-                )
+                get_login_redirect()
             )
 
         error = (
@@ -244,7 +314,10 @@ def login():
         error=error
     )
 
-@auth_bp.route("/logout")
+
+@auth_bp.route(
+    "/logout"
+)
 @login_required
 def logout():
 
@@ -253,13 +326,30 @@ def logout():
     session.clear()
 
     return redirect(
-        url_for("auth.login")
+        url_for(
+            "auth.login"
+        )
     )
 
 
 def init_auth(app):
-    login_manager.init_app(app)
-    login_manager.login_view = "auth.login"
-    login_manager.login_message = "Please log in first."
-    login_manager.user_loader(load_user)
-    app.before_request(update_last_seen)
+
+    login_manager.init_app(
+        app
+    )
+
+    login_manager.login_view = (
+        "auth.login"
+    )
+
+    login_manager.login_message = (
+        "Please log in first."
+    )
+
+    login_manager.user_loader(
+        load_user
+    )
+
+    app.before_request(
+        update_last_seen
+    )
