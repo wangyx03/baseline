@@ -1435,11 +1435,30 @@ def get_recordings():
 
         for row in rows:
 
-            row["recorded_at"] = (
-                format_et(
-                    row["recorded_at"]
-                )
+            weekly_status = get_weekly_item_status(
+                cursor=cursor,
+                week_id=week_id,
+                store_id=store_id,
+                sku=row["sku"]
             )
+
+            if (
+                weekly_status
+                and weekly_status.get(
+                    "in_weekly_inventory"
+                )
+            ):
+
+                row["remaining"] = (
+                    weekly_status.get(
+                        "remaining",
+                        0
+                    )
+                )
+
+            else:
+
+                row["remaining"] = None
 
 
         return jsonify({
