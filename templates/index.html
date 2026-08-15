@@ -197,6 +197,48 @@
 
 
         /* =========================
+           Schedule Update
+        ========================= */
+
+        .card-top {
+
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: flex-start;
+        }
+
+
+        .update-badge {
+
+            padding: 4px 9px;
+
+            border-radius: 999px;
+
+            background: #e8f7ed;
+
+            color: #248a3d;
+
+            font-size: 11px;
+
+            font-weight: 700;
+        }
+
+
+        .update-time {
+
+            margin-top: 12px;
+
+            color: #248a3d;
+
+            font-size: 12px;
+
+            font-weight: 600;
+        }
+
+
+        /* =========================
            Coming Soon
         ========================= */
 
@@ -508,8 +550,27 @@
                     }}"
                 >
 
-                    <div class="card-icon">
-                        📅
+                    <div class="card-top">
+
+
+                        <div class="card-icon">
+
+                            📅
+
+                        </div>
+
+
+                        {% if last_schedule_update %}
+
+                            <div class="update-badge">
+
+                                Updated
+
+                            </div>
+
+                        {% endif %}
+
+
                     </div>
 
 
@@ -526,6 +587,23 @@
                         staff schedules.
 
                     </div>
+
+
+                    {% if last_schedule_update %}
+
+                        <div class="update-time">
+
+                            Updated
+                            {{
+                                last_schedule_update.strftime(
+                                    '%b %d, %I:%M %p'
+                                )
+                            }}
+
+                        </div>
+
+                    {% endif %}
+
 
                 </a>
 

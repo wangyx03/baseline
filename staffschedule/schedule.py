@@ -1,11 +1,11 @@
 from datetime import date, datetime, time, timedelta
+
 from flask import (
     Blueprint,
     jsonify,
     render_template,
     request
 )
-
 from flask_login import login_required
 
 from db import get_db
@@ -27,12 +27,30 @@ VALID_ROLES = {
     "operator"
 }
 
+VALID_STATUSES = {
+    "draft",
+    "published"
+}
+
+OVERRIDE_DAILY_LIMIT = "daily_hour_limit"
+OVERRIDE_CONSECUTIVE = "consecutive_operator"
+
+OVERRIDE_MESSAGES = {
+    OVERRIDE_DAILY_LIMIT:
+        "Daily hour limit would be exceeded.",
+    OVERRIDE_CONSECUTIVE:
+        "Operator would work consecutive slots."
+}
+
 
 # =========================================================
 # Helpers
 # =========================================================
 
 def parse_date(value):
+
+    if isinstance(value, datetime):
+        return value.date()
 
     if isinstance(value, date):
         return value
@@ -88,17 +106,9 @@ def local_datetime(
     local_time
 ):
 
-    work_date = parse_date(
-        work_date
-    )
-
-    local_time = normalize_time(
-        local_time
-    )
-
     return datetime.combine(
-        work_date,
-        local_time
+        parse_date(work_date),
+        normalize_time(local_time)
     )
 
 
@@ -117,12 +127,9 @@ def get_slot_range(
         slot["end_time"]
     )
 
-    # Future support for overnight slot.
+    # Future support for overnight slots.
     if end_dt <= start_dt:
-
-        end_dt += timedelta(
-            days=1
-        )
+        end_dt += timedelta(days=1)
 
     return (
         start_dt,
@@ -186,21 +193,59 @@ def fully_covered(
     available_ranges
 ):
 
-    merged = merge_ranges(
+    for start, end in merge_ranges(
         available_ranges
-    )
-
-    for start, end in merged:
+    ):
 
         if (
             start <= target_start
             and
             end >= target_end
         ):
-
             return True
 
     return False
+
+
+def monday_for(value):
+
+    work_date = parse_date(
+        value
+    )
+
+    return (
+        work_date
+        -
+        timedelta(
+            days=work_date.weekday()
+        )
+    )
+
+
+def week_bounds(value):
+
+    monday = monday_for(
+        value
+    )
+
+    return (
+        monday,
+        monday + timedelta(days=6)
+    )
+
+
+def serialize_datetime(value):
+
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        return value.isoformat(
+            sep=" ",
+            timespec="seconds"
+        )
+
+    return str(value)
 
 
 def load_slot(
@@ -225,8 +270,7 @@ def load_slot(
         FROM slots_arrangement sa
 
         JOIN stores s
-            ON s.store_id =
-                sa.store_id
+            ON s.store_id = sa.store_id
 
         WHERE sa.slot_id = %s
         """,
@@ -236,6 +280,88 @@ def load_slot(
     )
 
     return cursor.fetchone()
+
+
+def get_week_status(
+    cursor,
+    week_start
+):
+
+    monday, week_end = week_bounds(
+        week_start
+    )
+
+    cursor.execute(
+        """
+        SELECT
+            COUNT(*) AS total_count,
+            SUM(
+                CASE
+                    WHEN status = 'draft'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS draft_count,
+            MAX(published_at) AS published_at
+
+        FROM staff_schedule
+
+        WHERE work_date
+            BETWEEN %s AND %s
+        """,
+        (
+            monday,
+            week_end
+        )
+    )
+
+    row = (
+        cursor.fetchone()
+        or
+        {}
+    )
+
+    total_count = int(
+        row.get("total_count")
+        or
+        0
+    )
+
+    draft_count = int(
+        row.get("draft_count")
+        or
+        0
+    )
+
+    if (
+        total_count > 0
+        and
+        draft_count == 0
+    ):
+
+        status = "published"
+
+    else:
+
+        status = "draft"
+
+    return {
+        "status":
+            status,
+
+        "total_count":
+            total_count,
+
+        "draft_count":
+            draft_count,
+
+        "published_at":
+            serialize_datetime(
+                row.get(
+                    "published_at"
+                )
+            )
+    }
 
 
 def get_staff_available_ranges(
@@ -284,10 +410,7 @@ def get_staff_available_ranges(
         )
 
         if end_dt <= start_dt:
-
-            end_dt += timedelta(
-                days=1
-            )
+            end_dt += timedelta(days=1)
 
         ranges.append(
             (
@@ -320,8 +443,7 @@ def get_staff_assignments_for_day(
         FROM staff_schedule ss
 
         JOIN slots_arrangement sa
-            ON sa.slot_id =
-                ss.slot_id
+            ON sa.slot_id = ss.slot_id
 
         WHERE ss.staff_id = %s
           AND ss.work_date = %s
@@ -370,10 +492,7 @@ def get_scheduled_hours(
         )
 
         if end_dt <= start_dt:
-
-            end_dt += timedelta(
-                days=1
-            )
+            end_dt += timedelta(days=1)
 
         total_seconds += (
             end_dt
@@ -398,6 +517,7 @@ def check_staff_eligibility(
 
     # -----------------------------------------------------
     # Staff / role
+    # Hard rule: cannot override.
     # -----------------------------------------------------
 
     cursor.execute(
@@ -410,8 +530,7 @@ def check_staff_eligibility(
         FROM staff st
 
         JOIN staff_live_roles slr
-            ON slr.staff_id =
-                st.staff_id
+            ON slr.staff_id = st.staff_id
 
         WHERE st.staff_id = %s
           AND st.active = TRUE
@@ -429,13 +548,16 @@ def check_staff_eligibility(
 
         return {
             "eligible": False,
+            "requires_override": False,
+            "violations": [],
+            "violation_messages": [],
             "reason":
                 "Staff is not active or does not have this role."
         }
 
 
     # -----------------------------------------------------
-    # Target slot local time range
+    # Target slot
     # -----------------------------------------------------
 
     slot_start_dt, slot_end_dt = (
@@ -448,6 +570,7 @@ def check_staff_eligibility(
 
     # -----------------------------------------------------
     # Availability
+    # Hard rule: cannot override.
     # -----------------------------------------------------
 
     available_ranges = (
@@ -466,6 +589,9 @@ def check_staff_eligibility(
 
         return {
             "eligible": False,
+            "requires_override": False,
+            "violations": [],
+            "violation_messages": [],
             "reason":
                 "Availability does not fully cover this slot."
         }
@@ -474,8 +600,8 @@ def check_staff_eligibility(
     # -----------------------------------------------------
     # Existing assignments today
     #
-    # Exclude target slot so editing a slot does not count
-    # its existing assignment twice.
+    # Exclude the target slot so replacing somebody in the
+    # same slot does not count that slot twice.
     # -----------------------------------------------------
 
     assignments = (
@@ -489,10 +615,11 @@ def check_staff_eligibility(
     )
 
 
+    violations = []
+
+
     # -----------------------------------------------------
-    # Time conflict
-    # +
-    # Operator cannot work consecutive slots
+    # Assignment conflicts
     # -----------------------------------------------------
 
     for assignment in assignments:
@@ -507,7 +634,6 @@ def check_staff_eligibility(
             assignment["end_time"]
         )
 
-        # Overnight support
         if (
             assignment_end_dt
             <=
@@ -519,10 +645,10 @@ def check_staff_eligibility(
             )
 
 
-        # ---------------------------------------------
-        # Rule 1:
-        # No overlapping assignments
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # Hard rule:
+        # No overlapping assignments.
+        # -------------------------------------------------
 
         if ranges_overlap(
             slot_start_dt,
@@ -533,24 +659,21 @@ def check_staff_eligibility(
 
             return {
                 "eligible": False,
+                "requires_override": False,
+                "violations": [],
+                "violation_messages": [],
                 "reason":
                     "Staff already has an overlapping assignment."
             }
 
 
-        # ---------------------------------------------
-        # Rule 2:
+        # -------------------------------------------------
+        # Soft rule:
         # Operator cannot work consecutive slots.
         #
-        # Store does NOT matter.
-        #
-        # Example:
-        #
-        # TU 11:00-14:00 Operator
-        # VB 14:00-17:00 Operator
-        #
-        # NOT allowed.
-        # ---------------------------------------------
+        # Store does not matter.
+        # This rule may be overridden.
+        # -------------------------------------------------
 
         if (
             role_type == "operator"
@@ -569,17 +692,23 @@ def check_staff_eligibility(
                 slot_end_dt
             )
 
-            if consecutive:
+            if (
+                consecutive
+                and
+                OVERRIDE_CONSECUTIVE
+                not in
+                violations
+            ):
 
-                return {
-                    "eligible": False,
-                    "reason":
-                        "Operator cannot work consecutive slots."
-                }
+                violations.append(
+                    OVERRIDE_CONSECUTIVE
+                )
 
 
     # -----------------------------------------------------
-    # Daily hour limit
+    # Soft rule:
+    # Daily hour limit.
+    # This rule may be overridden.
     # -----------------------------------------------------
 
     scheduled_hours = (
@@ -603,23 +732,45 @@ def check_staff_eligibility(
         staff["daily_hour_limit"]
     )
 
-    if (
+    total_hours_after = (
         scheduled_hours
         +
         slot_hours
+    )
+
+    if (
+        total_hours_after
         >
         daily_limit
     ):
 
-        return {
-            "eligible": False,
-            "reason":
-                "Daily hour limit would be exceeded."
-        }
+        violations.append(
+            OVERRIDE_DAILY_LIMIT
+        )
+
+
+    violation_messages = [
+        OVERRIDE_MESSAGES[
+            violation
+        ]
+        for violation
+        in violations
+    ]
 
 
     return {
         "eligible": True,
+
+        "requires_override":
+            bool(
+                violations
+            ),
+
+        "violations":
+            violations,
+
+        "violation_messages":
+            violation_messages,
 
         "staff_id":
             staff["staff_id"],
@@ -637,9 +788,7 @@ def check_staff_eligibility(
             slot_hours,
 
         "total_hours_after":
-            scheduled_hours
-            +
-            slot_hours
+            total_hours_after
     }
 
 
@@ -688,7 +837,7 @@ def get_schedule_week():
 
     try:
 
-        monday = parse_date(
+        monday = monday_for(
             week_start
         )
 
@@ -737,8 +886,7 @@ def get_schedule_week():
             FROM slots_arrangement sa
 
             JOIN stores s
-                ON s.store_id =
-                    sa.store_id
+                ON s.store_id = sa.store_id
 
             WHERE sa.active = TRUE
 
@@ -766,13 +914,17 @@ def get_schedule_week():
                 ss.position_no,
                 ss.status,
 
+                ss.override_daily_limit,
+                ss.override_consecutive,
+                ss.overridden_at,
+                ss.published_at,
+
                 st.name AS staff_name
 
             FROM staff_schedule ss
 
             JOIN staff st
-                ON st.staff_id =
-                    ss.staff_id
+                ON st.staff_id = ss.staff_id
 
             WHERE ss.work_date
                 BETWEEN %s AND %s
@@ -843,7 +995,35 @@ def get_schedule_week():
                 "status":
                     row[
                         "status"
-                    ]
+                    ],
+
+                "override_daily_limit":
+                    bool(
+                        row[
+                            "override_daily_limit"
+                        ]
+                    ),
+
+                "override_consecutive":
+                    bool(
+                        row[
+                            "override_consecutive"
+                        ]
+                    ),
+
+                "overridden_at":
+                    serialize_datetime(
+                        row[
+                            "overridden_at"
+                        ]
+                    ),
+
+                "published_at":
+                    serialize_datetime(
+                        row[
+                            "published_at"
+                        ]
+                    )
             })
 
 
@@ -949,6 +1129,12 @@ def get_schedule_week():
             })
 
 
+        week_state = get_week_status(
+            cursor,
+            monday
+        )
+
+
         return jsonify({
 
             "success": True,
@@ -958,6 +1144,21 @@ def get_schedule_week():
 
             "week_end":
                 week_end.isoformat(),
+
+            "week_status":
+                week_state[
+                    "status"
+                ],
+
+            "published_at":
+                week_state[
+                    "published_at"
+                ],
+
+            "assignment_count":
+                week_state[
+                    "total_count"
+                ],
 
             "days":
                 days
@@ -1039,6 +1240,21 @@ def get_schedule_candidates():
         }), 400
 
 
+    try:
+
+        parse_date(
+            work_date
+        )
+
+    except ValueError:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Invalid work_date"
+        }), 400
+
+
     db = get_db()
 
     cursor = db.cursor(
@@ -1047,6 +1263,26 @@ def get_schedule_candidates():
 
 
     try:
+
+        week_state = get_week_status(
+            cursor,
+            work_date
+        )
+
+        if (
+            week_state[
+                "status"
+            ]
+            ==
+            "published"
+        ):
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "Published schedule must be changed to Modify mode before editing."
+            }), 409
+
 
         slot = load_slot(
             cursor,
@@ -1083,8 +1319,7 @@ def get_schedule_candidates():
             FROM staff st
 
             JOIN staff_live_roles slr
-                ON slr.staff_id =
-                    st.staff_id
+                ON slr.staff_id = st.staff_id
 
             WHERE st.active = TRUE
               AND slr.role_type = %s
@@ -1097,10 +1332,7 @@ def get_schedule_candidates():
             )
         )
 
-        staff_rows = (
-            cursor.fetchall()
-        )
-
+        staff_rows = cursor.fetchall()
 
         candidates = []
 
@@ -1119,6 +1351,9 @@ def get_schedule_candidates():
                 )
             )
 
+            # Hard-rule failures are hidden.
+            # Soft-rule failures remain selectable and
+            # carry requires_override=True.
             if result[
                 "eligible"
             ]:
@@ -1130,6 +1365,9 @@ def get_schedule_candidates():
 
         candidates.sort(
             key=lambda item: (
+                item[
+                    "requires_override"
+                ],
                 item[
                     "scheduled_hours"
                 ],
@@ -1226,6 +1464,13 @@ def save_staff_schedule():
         1
     )
 
+    override_requested = bool(
+        data.get(
+            "override",
+            False
+        )
+    )
+
 
     if not work_date:
 
@@ -1233,6 +1478,21 @@ def save_staff_schedule():
             "success": False,
             "message":
                 "work_date is required"
+        }), 400
+
+
+    try:
+
+        parse_date(
+            work_date
+        )
+
+    except ValueError:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Invalid work_date"
         }), 400
 
 
@@ -1299,6 +1559,30 @@ def save_staff_schedule():
 
     try:
 
+        # -------------------------------------------------
+        # Published week is locked.
+        # -------------------------------------------------
+
+        week_state = get_week_status(
+            cursor,
+            work_date
+        )
+
+        if (
+            week_state[
+                "status"
+            ]
+            ==
+            "published"
+        ):
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "Published schedule must be changed to Modify mode before editing."
+            }), 409
+
+
         slot = load_slot(
             cursor,
             slot_id
@@ -1313,8 +1597,17 @@ def save_staff_schedule():
             }), 404
 
 
+        if not slot["active"]:
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "Slot is inactive"
+            }), 400
+
+
         # -------------------------------------------------
-        # Validate employee
+        # Validate employee.
         # -------------------------------------------------
 
         eligibility = (
@@ -1340,9 +1633,47 @@ def save_staff_schedule():
             }), 400
 
 
+        violations = eligibility[
+            "violations"
+        ]
+
+
         # -------------------------------------------------
-        # Same employee cannot occupy another role in
-        # the same slot.
+        # Soft rules require explicit override.
+        # -------------------------------------------------
+
+        if (
+            eligibility[
+                "requires_override"
+            ]
+            and
+            not override_requested
+        ):
+
+            return jsonify({
+
+                "success": False,
+
+                "requires_override":
+                    True,
+
+                "violations":
+                    violations,
+
+                "violation_messages":
+                    eligibility[
+                        "violation_messages"
+                    ],
+
+                "message":
+                    "This assignment requires an override."
+            }), 409
+
+
+        # -------------------------------------------------
+        # Same employee cannot occupy another role/position
+        # in the same slot.
+        # Hard rule: cannot override.
         # -------------------------------------------------
 
         cursor.execute(
@@ -1398,10 +1729,29 @@ def save_staff_schedule():
                 }), 400
 
 
+        override_daily_limit = (
+            OVERRIDE_DAILY_LIMIT
+            in
+            violations
+        )
+
+        override_consecutive = (
+            OVERRIDE_CONSECUTIVE
+            in
+            violations
+        )
+
+        has_override = (
+            override_daily_limit
+            or
+            override_consecutive
+        )
+
+
         # -------------------------------------------------
-        # Insert / replace the requested position
+        # Insert / replace requested position.
         #
-        # Requires UNIQUE:
+        # UNIQUE expected:
         # (
         #   work_date,
         #   slot_id,
@@ -1419,7 +1769,11 @@ def save_staff_schedule():
                 staff_id,
                 role_type,
                 position_no,
-                status
+                status,
+
+                override_daily_limit,
+                override_consecutive,
+                overridden_at
             )
 
             VALUES
@@ -1429,7 +1783,11 @@ def save_staff_schedule():
                 %s,
                 %s,
                 %s,
-                'draft'
+                'draft',
+
+                %s,
+                %s,
+                %s
             )
 
             ON DUPLICATE KEY UPDATE
@@ -1438,14 +1796,43 @@ def save_staff_schedule():
                     VALUES(staff_id),
 
                 status =
-                    'draft'
+                    'draft',
+
+                override_daily_limit =
+                    VALUES(
+                        override_daily_limit
+                    ),
+
+                override_consecutive =
+                    VALUES(
+                        override_consecutive
+                    ),
+
+                overridden_at =
+                    VALUES(
+                        overridden_at
+                    )
             """,
             (
                 work_date,
                 slot_id,
                 staff_id,
                 role_type,
-                position_no
+                position_no,
+
+                int(
+                    override_daily_limit
+                ),
+
+                int(
+                    override_consecutive
+                ),
+
+                (
+                    datetime.now()
+                    if has_override
+                    else None
+                )
             )
         )
 
@@ -1458,7 +1845,12 @@ def save_staff_schedule():
             "success": True,
 
             "message":
-                "Schedule saved.",
+                (
+                    "Schedule saved with override."
+                    if has_override
+                    else
+                    "Schedule saved."
+                ),
 
             "assignment": {
 
@@ -1480,7 +1872,16 @@ def save_staff_schedule():
                     role_type,
 
                 "position_no":
-                    position_no
+                    position_no,
+
+                "status":
+                    "draft",
+
+                "override_daily_limit":
+                    override_daily_limit,
+
+                "override_consecutive":
+                    override_consecutive,
             }
         })
 
@@ -1570,12 +1971,56 @@ def delete_staff_schedule():
         }), 400
 
 
+    try:
+
+        parse_date(
+            work_date
+        )
+
+        position_no = int(
+            position_no
+        )
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Invalid request"
+        }), 400
+
+
     db = get_db()
 
-    cursor = db.cursor()
+    cursor = db.cursor(
+        dictionary=True
+    )
 
 
     try:
+
+        week_state = get_week_status(
+            cursor,
+            work_date
+        )
+
+        if (
+            week_state[
+                "status"
+            ]
+            ==
+            "published"
+        ):
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "Published schedule must be changed to Modify mode before editing."
+            }), 409
+
 
         cursor.execute(
             """
@@ -1594,7 +2039,6 @@ def delete_staff_schedule():
             )
         )
 
-
         db.commit()
 
 
@@ -1604,6 +2048,301 @@ def delete_staff_schedule():
 
             "message":
                 "Assignment removed."
+        })
+
+
+    except Exception as e:
+
+        db.rollback()
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+
+# =========================================================
+# Confirm / Publish Week
+# =========================================================
+
+@schedule_bp.route(
+    "/api/schedule-confirm",
+    methods=["POST"]
+)
+@login_required
+def confirm_schedule_week():
+
+    data = (
+        request.get_json(
+            silent=True
+        )
+        or
+        {}
+    )
+
+    week_start = (
+        str(
+            data.get(
+                "week_start",
+                ""
+            )
+        )
+        .strip()
+    )
+
+
+    if not week_start:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "week_start is required"
+        }), 400
+
+
+    try:
+
+        monday, week_end = week_bounds(
+            week_start
+        )
+
+    except ValueError:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Invalid week_start"
+        }), 400
+
+
+    db = get_db()
+
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+
+    try:
+
+        week_state = get_week_status(
+            cursor,
+            monday
+        )
+
+        if (
+            week_state[
+                "total_count"
+            ]
+            ==
+            0
+        ):
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "There is no schedule to publish for this week."
+            }), 400
+
+
+        if (
+            week_state[
+                "status"
+            ]
+            ==
+            "published"
+        ):
+
+            return jsonify({
+                "success": True,
+                "message":
+                    "Schedule is already published.",
+                "week_status":
+                    "published",
+                "published_at":
+                    week_state[
+                        "published_at"
+                    ]
+            })
+
+
+        published_at = datetime.now()
+
+
+        cursor.execute(
+            """
+            UPDATE staff_schedule
+
+            SET
+                status = 'published',
+                published_at = %s
+
+            WHERE work_date
+                BETWEEN %s AND %s
+            """,
+            (
+                published_at,
+                monday,
+                week_end
+            )
+        )
+
+
+        db.commit()
+
+
+        return jsonify({
+
+            "success": True,
+
+            "message":
+                "Schedule published.",
+
+            "week_status":
+                "published",
+
+            "published_at":
+                serialize_datetime(
+                    published_at
+                )
+        })
+
+
+    except Exception as e:
+
+        db.rollback()
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+
+# =========================================================
+# Modify Published Week
+# =========================================================
+
+@schedule_bp.route(
+    "/api/schedule-modify",
+    methods=["POST"]
+)
+@login_required
+def modify_schedule_week():
+
+    data = (
+        request.get_json(
+            silent=True
+        )
+        or
+        {}
+    )
+
+    week_start = (
+        str(
+            data.get(
+                "week_start",
+                ""
+            )
+        )
+        .strip()
+    )
+
+
+    if not week_start:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "week_start is required"
+        }), 400
+
+
+    try:
+
+        monday, week_end = week_bounds(
+            week_start
+        )
+
+    except ValueError:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Invalid week_start"
+        }), 400
+
+
+    db = get_db()
+
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+
+    try:
+
+        week_state = get_week_status(
+            cursor,
+            monday
+        )
+
+        if (
+            week_state[
+                "total_count"
+            ]
+            ==
+            0
+        ):
+
+            return jsonify({
+                "success": True,
+                "message":
+                    "Schedule is already in draft mode.",
+                "week_status":
+                    "draft"
+            })
+
+
+        cursor.execute(
+            """
+            UPDATE staff_schedule
+
+            SET
+                status = 'draft'
+
+            WHERE work_date
+                BETWEEN %s AND %s
+            """,
+            (
+                monday,
+                week_end
+            )
+        )
+
+
+        db.commit()
+
+
+        return jsonify({
+
+            "success": True,
+
+            "message":
+                "Schedule is now editable.",
+
+            "week_status":
+                "draft"
         })
 
 

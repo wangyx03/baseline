@@ -545,6 +545,160 @@
             background: #fff0f0;
         }
 
+
+        /* =========================================================
+           Publish / Modify
+        ========================================================= */
+
+        .schedule-actions {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 14px;
+
+            margin-top: 18px;
+        }
+
+        .publish-state {
+            color: #646a73;
+
+            font-size: 12px;
+        }
+
+        .publish-button {
+            min-width: 120px;
+
+            border: none;
+            border-radius: 8px;
+
+            padding: 11px 22px;
+
+            background: #2f9e44;
+            color: white;
+
+            font-size: 14px;
+            font-weight: 700;
+
+            cursor: pointer;
+        }
+
+        .publish-button:hover {
+            filter: brightness(0.96);
+        }
+
+        .publish-button.modify {
+            background: #d9dce1;
+            color: #1f2329;
+        }
+
+        .publish-button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .assignment-button:disabled,
+        .operator-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.78;
+        }
+
+        .override-mark {
+            margin-left: 4px;
+
+            color: #b26a00;
+
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        /* =========================================================
+           Candidate soft-rule warning
+        ========================================================= */
+
+        .candidate-item.requires-override {
+            margin-bottom: 8px;
+
+            border: 1px solid #efc56f;
+
+            background: #fff8e8;
+        }
+
+        .candidate-item.requires-override:hover {
+            background: #fff3d4;
+        }
+
+        .candidate-warning {
+            margin-top: 6px;
+
+            color: #9a6700;
+
+            font-size: 12px;
+            font-weight: 650;
+
+            line-height: 1.35;
+        }
+
+        /* =========================================================
+           Override modal
+        ========================================================= */
+
+        .override-content {
+            padding: 18px 20px 20px 20px;
+        }
+
+        .override-warning-box {
+            margin-bottom: 16px;
+
+            padding: 12px 14px;
+
+            border: 1px solid #efc56f;
+            border-radius: 8px;
+
+            background: #fff8e8;
+
+            color: #704b00;
+
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .override-warning-box ul {
+            margin: 8px 0 0 20px;
+            padding: 0;
+        }
+
+
+        .override-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 9px;
+
+            margin-top: 16px;
+        }
+
+        .override-cancel,
+        .override-confirm {
+            border: none;
+            border-radius: 7px;
+
+            padding: 9px 15px;
+
+            font-size: 13px;
+            font-weight: 700;
+
+            cursor: pointer;
+        }
+
+        .override-cancel {
+            background: #eef0f2;
+            color: #353a40;
+        }
+
+        .override-confirm {
+            background: #b7791f;
+            color: white;
+        }
+
         @media (max-width: 900px) {
 
             .page {
@@ -658,6 +812,26 @@
 
     </div>
 
+
+    <div class="schedule-actions">
+
+        <div
+            id="publishState"
+            class="publish-state"
+        >
+        </div>
+
+        <button
+            type="button"
+            id="publishButton"
+            class="publish-button"
+            onclick="handlePublishButton()"
+        >
+            Confirm
+        </button>
+
+    </div>
+
 </div>
 
 
@@ -724,6 +898,81 @@
 </div>
 
 
+<div
+    id="overrideModalBackdrop"
+    class="modal-backdrop"
+    onclick="handleOverrideBackdropClick(event)"
+>
+
+    <div
+        class="modal"
+        onclick="event.stopPropagation()"
+    >
+
+        <div class="modal-header">
+
+            <div>
+
+                <h2 class="modal-title">
+                    Override Scheduling Rule
+                </h2>
+
+                <div
+                    class="modal-subtitle"
+                    id="overrideModalSubtitle"
+                >
+                </div>
+
+            </div>
+
+            <button
+                type="button"
+                class="modal-close"
+                onclick="closeOverrideModal(true)"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <div class="override-content">
+
+            <div
+                id="overrideWarnings"
+                class="override-warning-box"
+            >
+            </div>
+
+
+
+            <div class="override-actions">
+
+                <button
+                    type="button"
+                    class="override-cancel"
+                    onclick="closeOverrideModal(true)"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="button"
+                    class="override-confirm"
+                    onclick="confirmOverrideAssignment()"
+                >
+                    Override
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
 <script>
 
 /* =========================================================
@@ -761,6 +1010,10 @@ let scheduleData =
 
 
 let activeSelection =
+    null;
+
+
+let pendingOverrideCandidate =
     null;
 
 
@@ -992,6 +1245,8 @@ async function loadSchedule() {
         );
 
         renderMatrix();
+
+        updatePublishControl();
 
         hideStatus();
 
@@ -1393,10 +1648,49 @@ function buildCreatorButton(
                 : "empty"
         );
 
-    button.textContent =
+    if (
         assignment
-            ? assignment.staff_name
-            : "—";
+    ) {
+
+        const hasOverride =
+            assignment.override_daily_limit
+            ||
+            assignment.override_consecutive;
+
+        button.innerHTML =
+            escapeHtml(
+                assignment.staff_name
+            )
+            +
+            (
+                hasOverride
+                    ? '<span class="override-mark">⚠</span>'
+                    : ""
+            );
+
+        if (
+            hasOverride
+        ) {
+            button.title =
+                "Scheduling rule override";
+        }
+
+    } else {
+
+        button.textContent =
+            "—";
+
+    }
+
+
+    button.disabled =
+        (
+            scheduleData
+            &&
+            scheduleData.week_status
+            ===
+            "published"
+        );
 
 
     attachSelectionData(
@@ -1518,12 +1812,29 @@ function buildOperatorButton(
         assignment
     ) {
 
+        const hasOverride =
+            assignment.override_daily_limit
+            ||
+            assignment.override_consecutive;
+
         button.innerHTML = `
             <span class="operator-label">
                 ${escapeHtml(shortLabel)}
             </span>
             ${escapeHtml(assignment.staff_name)}
+            ${
+                hasOverride
+                    ? '<span class="override-mark">⚠</span>'
+                    : ""
+            }
         `;
+
+        if (
+            hasOverride
+        ) {
+            button.title =
+                "Scheduling rule override";
+        }
 
     } else {
 
@@ -1535,6 +1846,16 @@ function buildOperatorButton(
         `;
 
     }
+
+
+    button.disabled =
+        (
+            scheduleData
+            &&
+            scheduleData.week_status
+            ===
+            "published"
+        );
 
 
     attachSelectionData(
@@ -2005,7 +2326,13 @@ function renderCandidates(candidates) {
             "button";
 
         button.className =
-            "candidate-item";
+            "candidate-item"
+            +
+            (
+                candidate.requires_override
+                    ? " requires-override"
+                    : ""
+            );
 
 
         const left =
@@ -2059,6 +2386,37 @@ function renderCandidates(candidates) {
         );
 
 
+        if (
+            candidate.requires_override
+        ) {
+
+            const warning =
+                document.createElement(
+                    "div"
+                );
+
+            warning.className =
+                "candidate-warning";
+
+            warning.textContent =
+                "⚠ "
+                +
+                (
+                    candidate.violation_messages
+                    ||
+                    []
+                )
+                .join(
+                    " · "
+                );
+
+            left.appendChild(
+                warning
+            );
+
+        }
+
+
         const arrow =
             document.createElement(
                 "div"
@@ -2103,8 +2461,39 @@ function renderCandidates(candidates) {
    Save / delete
 ========================================================= */
 
-async function assignCandidate(
+function assignCandidate(
     candidate
+) {
+
+    if (
+        !activeSelection
+    ) {
+        return;
+    }
+
+
+    if (
+        candidate.requires_override
+    ) {
+
+        openOverrideModal(
+            candidate
+        );
+
+        return;
+    }
+
+
+    saveCandidateAssignment(
+        candidate,
+        false
+    );
+}
+
+
+async function saveCandidateAssignment(
+    candidate,
+    overrideRequested
 ) {
 
     if (
@@ -2117,7 +2506,9 @@ async function assignCandidate(
     try {
 
         showStatus(
-            "Saving schedule...",
+            overrideRequested
+                ? "Saving override..."
+                : "Saving schedule...",
             "info"
         );
 
@@ -2149,7 +2540,10 @@ async function assignCandidate(
                                 activeSelection.role_type,
 
                             position_no:
-                                activeSelection.position_no
+                                activeSelection.position_no,
+
+                            override:
+                                overrideRequested,
                         })
                 }
             );
@@ -2172,10 +2566,12 @@ async function assignCandidate(
         }
 
 
-        closeCandidateModal();
+        closeAllAssignmentModals();
 
 
         showStatus(
+            data.message
+            ||
             "Schedule saved.",
             "success"
         );
@@ -2303,6 +2699,429 @@ async function removeCurrentAssignment() {
 
 
 /* =========================================================
+   Publish / Modify
+========================================================= */
+
+function updatePublishControl() {
+
+    const button =
+        document.getElementById(
+            "publishButton"
+        );
+
+    const state =
+        document.getElementById(
+            "publishState"
+        );
+
+
+    if (
+        !scheduleData
+    ) {
+        return;
+    }
+
+
+    if (
+        scheduleData.week_status
+        ===
+        "published"
+    ) {
+
+        button.textContent =
+            "Modify";
+
+        button.classList.add(
+            "modify"
+        );
+
+        state.textContent =
+            scheduleData.published_at
+                ? "Published"
+                : "";
+
+    } else {
+
+        button.textContent =
+            "Confirm";
+
+        button.classList.remove(
+            "modify"
+        );
+
+        state.textContent =
+            "";
+
+    }
+
+
+    button.disabled =
+        (
+            scheduleData.week_status
+            !==
+            "published"
+            &&
+            Number(
+                scheduleData.assignment_count
+                ||
+                0
+            )
+            ===
+            0
+        );
+}
+
+
+async function handlePublishButton() {
+
+    if (
+        !scheduleData
+    ) {
+        return;
+    }
+
+
+    if (
+        scheduleData.week_status
+        ===
+        "published"
+    ) {
+
+        const proceed =
+            window.confirm(
+                "Modify this schedule?\\n\\n"
+                +
+                "The published schedule will return to draft status."
+            );
+
+        if (
+            !proceed
+        ) {
+            return;
+        }
+
+
+        await changeWeekPublishState(
+            "/api/schedule-modify",
+            "Changing schedule to draft..."
+        );
+
+        return;
+    }
+
+
+    const proceed =
+        window.confirm(
+            "Confirm and publish the schedule for "
+            +
+            displayDateString(
+                scheduleData.week_start
+            )
+            +
+            " - "
+            +
+            displayDateString(
+                scheduleData.week_end
+            )
+            +
+            "?"
+        );
+
+    if (
+        !proceed
+    ) {
+        return;
+    }
+
+
+    await changeWeekPublishState(
+        "/api/schedule-confirm",
+        "Publishing schedule..."
+    );
+}
+
+
+async function changeWeekPublishState(
+    url,
+    loadingMessage
+) {
+
+    const button =
+        document.getElementById(
+            "publishButton"
+        );
+
+    button.disabled =
+        true;
+
+
+    showStatus(
+        loadingMessage,
+        "info"
+    );
+
+
+    try {
+
+        const response =
+            await fetch(
+                url,
+                {
+                    method:
+                        "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            week_start:
+                                scheduleData.week_start
+                        })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message
+                ||
+                "Unable to update schedule status."
+            );
+        }
+
+
+        showStatus(
+            data.message
+            ||
+            "Schedule updated.",
+            "success"
+        );
+
+
+        await loadSchedule();
+
+    }
+
+    catch (error) {
+
+        console.error(
+            error
+        );
+
+
+        showStatus(
+            error.message
+            ||
+            "Unable to update schedule status.",
+            "error"
+        );
+
+
+        updatePublishControl();
+
+    }
+
+}
+
+
+/* =========================================================
+   Override modal
+========================================================= */
+
+function openOverrideModal(
+    candidate
+) {
+
+    pendingOverrideCandidate =
+        candidate;
+
+
+    document
+        .getElementById(
+            "candidateModalBackdrop"
+        )
+        .classList.remove(
+            "visible"
+        );
+
+
+    document
+        .getElementById(
+            "overrideModalSubtitle"
+        )
+        .textContent =
+            candidate.name
+            +
+            " · "
+            +
+            activeSelection.position_label;
+
+
+    const messages =
+        candidate.violation_messages
+        ||
+        [];
+
+
+    document
+        .getElementById(
+            "overrideWarnings"
+        )
+        .innerHTML =
+            "This assignment violates a soft scheduling rule:"
+            +
+            "<ul>"
+            +
+            messages
+                .map(
+                    message =>
+                        "<li>"
+                        +
+                        escapeHtml(
+                            message
+                        )
+                        +
+                        "</li>"
+                )
+                .join("")
+            +
+            "</ul>";
+    document
+        .getElementById(
+            "overrideModalBackdrop"
+        )
+        .classList.add(
+            "visible"
+        );
+
+}
+
+
+function closeOverrideModal(
+    returnToCandidates
+) {
+
+    document
+        .getElementById(
+            "overrideModalBackdrop"
+        )
+        .classList.remove(
+            "visible"
+        );
+
+
+    pendingOverrideCandidate =
+        null;
+
+
+    if (
+        returnToCandidates
+        &&
+        activeSelection
+    ) {
+
+        document
+            .getElementById(
+                "candidateModalBackdrop"
+            )
+            .classList.add(
+                "visible"
+            );
+
+    }
+
+}
+
+
+async function confirmOverrideAssignment() {
+
+    if (
+        !pendingOverrideCandidate
+        ||
+        !activeSelection
+    ) {
+        return;
+    }
+
+
+    const candidate =
+        pendingOverrideCandidate;
+
+
+    document
+        .getElementById(
+            "overrideModalBackdrop"
+        )
+        .classList.remove(
+            "visible"
+        );
+
+
+    pendingOverrideCandidate =
+        null;
+
+
+    await saveCandidateAssignment(
+        candidate,
+        true
+    );
+}
+
+
+function handleOverrideBackdropClick(
+    event
+) {
+
+    if (
+        event.target.id
+        ===
+        "overrideModalBackdrop"
+    ) {
+        closeOverrideModal(
+            true
+        );
+    }
+}
+
+
+function closeAllAssignmentModals() {
+
+    document
+        .getElementById(
+            "candidateModalBackdrop"
+        )
+        .classList.remove(
+            "visible"
+        );
+
+    document
+        .getElementById(
+            "overrideModalBackdrop"
+        )
+        .classList.remove(
+            "visible"
+        );
+
+    pendingOverrideCandidate =
+        null;
+
+    activeSelection =
+        null;
+}
+
+
+/* =========================================================
    Modal helpers
 ========================================================= */
 
@@ -2342,6 +3161,24 @@ document.addEventListener(
             ===
             "Escape"
         ) {
+
+            const overrideBackdrop =
+                document.getElementById(
+                    "overrideModalBackdrop"
+                );
+
+            if (
+                overrideBackdrop.classList.contains(
+                    "visible"
+                )
+            ) {
+                closeOverrideModal(
+                    true
+                );
+
+                return;
+            }
+
             closeCandidateModal();
         }
     }

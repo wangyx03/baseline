@@ -12,6 +12,8 @@ from staffschedule.availability import availability_bp
 from staffschedule.availability_management import availability_management_bp
 from staffschedule.schedule import schedule_bp
 
+from db import get_db
+
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -48,9 +50,12 @@ app.register_blueprint(weekly_bp)
 
 app.register_blueprint(availability_bp)
 
-app.register_blueprint(availability_management_bp)
+app.register_blueprint(
+    availability_management_bp
+)
 
 app.register_blueprint(schedule_bp)
+
 
 # =========================
 # 系统首页
@@ -60,9 +65,41 @@ app.register_blueprint(schedule_bp)
 @login_required
 def index():
 
+    db = get_db()
+
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+    try:
+
+        cursor.execute(
+            """
+            SELECT
+                MAX(published_at) AS last_published_at
+            FROM staff_schedule
+            WHERE status = 'published'
+            """
+        )
+
+        row = cursor.fetchone()
+
+        last_schedule_update = (
+            row["last_published_at"]
+            if row
+            else None
+        )
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+
     return render_template(
         "index.html",
-        show_dashboard=False
+        show_dashboard=False,
+        last_schedule_update=last_schedule_update
     )
 
 
