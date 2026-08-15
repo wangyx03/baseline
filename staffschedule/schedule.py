@@ -1242,7 +1242,7 @@ def get_schedule_candidates():
 
     try:
 
-        parse_date(
+        work_date_obj = parse_date(
             work_date
         )
 
@@ -1308,13 +1308,16 @@ def get_schedule_candidates():
 
 
         # -------------------------------------------------
-        # Staff with requested role
+        # 1) Load every active staff member for this role.
+        #    One query for the whole candidate pool.
         # -------------------------------------------------
 
         cursor.execute(
             """
             SELECT DISTINCT
-                st.staff_id
+                st.staff_id,
+                st.name,
+                st.daily_hour_limit
 
             FROM staff st
 
@@ -1334,65 +1337,298 @@ def get_schedule_candidates():
 
         staff_rows = cursor.fetchall()
 
+        if not staff_rows:
+
+            return jsonify({
+                "success": True,
+                "work_date": work_date,
+                "slot_id": slot_id,
+                "role_type": role_type,
+                "candidates": []
+            })
+
+
+        staff_ids = [
+            row["staff_id"]
+            for row in staff_rows
+        ]
+
+        placeholders = ", ".join(
+            ["%s"] * len(staff_ids)
+        )
+
+
+        # -------------------------------------------------
+        # 2) Load availability for every candidate at once.
+        # -------------------------------------------------
+
+        cursor.execute(
+            f"""
+            SELECT
+                staff_id,
+                work_date,
+                start_time,
+                end_time
+
+            FROM staff_availability
+
+            WHERE work_date = %s
+              AND is_available = TRUE
+              AND staff_id IN ({placeholders})
+
+            ORDER BY
+                staff_id,
+                start_time,
+                end_time
+            """,
+            tuple(
+                [work_date_obj]
+                + staff_ids
+            )
+        )
+
+        availability_rows = cursor.fetchall()
+
+        availability_map = {}
+
+        for row in availability_rows:
+
+            start_dt = local_datetime(
+                row["work_date"],
+                row["start_time"]
+            )
+
+            end_dt = local_datetime(
+                row["work_date"],
+                row["end_time"]
+            )
+
+            if end_dt <= start_dt:
+                end_dt += timedelta(days=1)
+
+            availability_map.setdefault(
+                row["staff_id"],
+                []
+            ).append((
+                start_dt,
+                end_dt
+            ))
+
+
+        # -------------------------------------------------
+        # 3) Load today's assignments for every candidate
+        #    at once. The target slot is excluded later in
+        #    Python, matching check_staff_eligibility().
+        # -------------------------------------------------
+
+        cursor.execute(
+            f"""
+            SELECT
+                ss.staff_id,
+                ss.schedule_id,
+                ss.slot_id,
+                ss.role_type,
+                ss.position_no,
+
+                sa.start_time,
+                sa.end_time,
+                sa.store_id
+
+            FROM staff_schedule ss
+
+            JOIN slots_arrangement sa
+                ON sa.slot_id = ss.slot_id
+
+            WHERE ss.work_date = %s
+              AND ss.staff_id IN ({placeholders})
+
+            ORDER BY
+                ss.staff_id,
+                sa.start_time,
+                sa.end_time
+            """,
+            tuple(
+                [work_date_obj]
+                + staff_ids
+            )
+        )
+
+        assignment_rows = cursor.fetchall()
+
+        assignment_map = {}
+
+        for row in assignment_rows:
+            assignment_map.setdefault(
+                row["staff_id"],
+                []
+            ).append(row)
+
+
+        # -------------------------------------------------
+        # Evaluate candidates entirely in Python.
+        # No per-staff SQL queries below this point.
+        # -------------------------------------------------
+
+        slot_start_dt, slot_end_dt = get_slot_range(
+            work_date_obj,
+            slot
+        )
+
+        slot_hours = (
+            (
+                slot_end_dt
+                -
+                slot_start_dt
+            ).total_seconds()
+            /
+            3600
+        )
+
         candidates = []
 
 
-        for staff_row in staff_rows:
+        for staff in staff_rows:
 
-            result = (
-                check_staff_eligibility(
-                    cursor,
-                    staff_row[
-                        "staff_id"
-                    ],
-                    work_date,
-                    slot,
-                    role_type
-                )
+            staff_id = staff["staff_id"]
+
+            available_ranges = availability_map.get(
+                staff_id,
+                []
             )
 
-            # Hard-rule failures are hidden.
-            # Soft-rule failures remain selectable and
-            # carry requires_override=True.
-            if result[
-                "eligible"
-            ]:
+            # Hard rule: availability must fully cover slot.
+            if not fully_covered(
+                slot_start_dt,
+                slot_end_dt,
+                available_ranges
+            ):
+                continue
 
-                candidates.append(
-                    result
+
+            assignments = [
+                assignment
+                for assignment in assignment_map.get(
+                    staff_id,
+                    []
                 )
+                if assignment["slot_id"] != slot_id
+            ]
+
+            violations = []
+            hard_conflict = False
+
+
+            for assignment in assignments:
+
+                assignment_start_dt = local_datetime(
+                    work_date_obj,
+                    assignment["start_time"]
+                )
+
+                assignment_end_dt = local_datetime(
+                    work_date_obj,
+                    assignment["end_time"]
+                )
+
+                if assignment_end_dt <= assignment_start_dt:
+                    assignment_end_dt += timedelta(days=1)
+
+
+                # Hard rule: no overlapping assignments.
+                if ranges_overlap(
+                    slot_start_dt,
+                    slot_end_dt,
+                    assignment_start_dt,
+                    assignment_end_dt
+                ):
+                    hard_conflict = True
+                    break
+
+
+                # Soft rule: operator cannot work
+                # consecutive operator slots.
+                if (
+                    role_type == "operator"
+                    and
+                    assignment["role_type"] == "operator"
+                ):
+
+                    consecutive = (
+                        assignment_end_dt == slot_start_dt
+                        or
+                        assignment_start_dt == slot_end_dt
+                    )
+
+                    if (
+                        consecutive
+                        and
+                        OVERRIDE_CONSECUTIVE not in violations
+                    ):
+                        violations.append(
+                            OVERRIDE_CONSECUTIVE
+                        )
+
+
+            if hard_conflict:
+                continue
+
+
+            scheduled_hours = get_scheduled_hours(
+                work_date_obj,
+                assignments
+            )
+
+            daily_limit = float(
+                staff["daily_hour_limit"]
+            )
+
+            total_hours_after = (
+                scheduled_hours
+                +
+                slot_hours
+            )
+
+            if total_hours_after > daily_limit:
+                violations.append(
+                    OVERRIDE_DAILY_LIMIT
+                )
+
+
+            violation_messages = [
+                OVERRIDE_MESSAGES[violation]
+                for violation in violations
+            ]
+
+
+            candidates.append({
+                "eligible": True,
+                "requires_override": bool(violations),
+                "violations": violations,
+                "violation_messages": violation_messages,
+                "staff_id": staff_id,
+                "name": staff["name"],
+                "daily_hour_limit": daily_limit,
+                "scheduled_hours": scheduled_hours,
+                "slot_hours": slot_hours,
+                "total_hours_after": total_hours_after
+            })
 
 
         candidates.sort(
             key=lambda item: (
-                item[
-                    "requires_override"
-                ],
-                item[
-                    "scheduled_hours"
-                ],
-                item[
-                    "name"
-                ].lower()
+                item["requires_override"],
+                item["scheduled_hours"],
+                item["name"].lower()
             )
         )
 
 
         return jsonify({
-
             "success": True,
-
-            "work_date":
-                work_date,
-
-            "slot_id":
-                slot_id,
-
-            "role_type":
-                role_type,
-
-            "candidates":
-                candidates
+            "work_date": work_date,
+            "slot_id": slot_id,
+            "role_type": role_type,
+            "candidates": candidates
         })
 
 
@@ -1408,7 +1644,6 @@ def get_schedule_candidates():
 
         cursor.close()
         db.close()
-
 
 # =========================================================
 # Save Assignment

@@ -2458,6 +2458,231 @@ function renderCandidates(candidates) {
 
 
 /* =========================================================
+   Local schedule updates
+========================================================= */
+
+function findLocalSlot(
+    workDate,
+    slotId
+) {
+
+    if (
+        !scheduleData
+        ||
+        !scheduleData.days
+    ) {
+        return null;
+    }
+
+
+    const day =
+        scheduleData.days.find(
+            item =>
+                item.work_date === workDate
+        );
+
+
+    if (
+        !day
+        ||
+        !day.slots
+    ) {
+        return null;
+    }
+
+
+    return (
+        day.slots.find(
+            item =>
+                Number(item.slot_id)
+                ===
+                Number(slotId)
+        )
+        ||
+        null
+    );
+}
+
+
+function applyAssignmentLocally(
+    assignment
+) {
+
+    const slot =
+        findLocalSlot(
+            assignment.work_date,
+            assignment.slot_id
+        );
+
+
+    if (!slot) {
+        return false;
+    }
+
+
+    if (!slot.assignments) {
+        slot.assignments = [];
+    }
+
+
+    const existingIndex =
+        slot.assignments.findIndex(
+            item =>
+                item.role_type
+                ===
+                assignment.role_type
+                &&
+                Number(item.position_no)
+                ===
+                Number(assignment.position_no)
+        );
+
+
+    const normalizedAssignment = {
+        schedule_id:
+            assignment.schedule_id
+            ??
+            null,
+
+        staff_id:
+            assignment.staff_id,
+
+        staff_name:
+            assignment.staff_name,
+
+        role_type:
+            assignment.role_type,
+
+        position_no:
+            Number(
+                assignment.position_no
+            ),
+
+        status:
+            assignment.status
+            ||
+            "draft",
+
+        override_daily_limit:
+            Boolean(
+                assignment.override_daily_limit
+            ),
+
+        override_consecutive:
+            Boolean(
+                assignment.override_consecutive
+            ),
+
+        overridden_at:
+            assignment.overridden_at
+            ??
+            null,
+
+        published_at:
+            null
+    };
+
+
+    if (existingIndex >= 0) {
+
+        slot.assignments[
+            existingIndex
+        ] = normalizedAssignment;
+
+    } else {
+
+        slot.assignments.push(
+            normalizedAssignment
+        );
+
+        scheduleData.assignment_count =
+            Number(
+                scheduleData.assignment_count
+                ||
+                0
+            )
+            +
+            1;
+    }
+
+
+    scheduleData.week_status =
+        "draft";
+
+    renderMatrixBody();
+    updatePublishControl();
+
+    return true;
+}
+
+
+function removeAssignmentLocally(
+    selection
+) {
+
+    const slot =
+        findLocalSlot(
+            selection.work_date,
+            selection.slot_id
+        );
+
+
+    if (
+        !slot
+        ||
+        !slot.assignments
+    ) {
+        return false;
+    }
+
+
+    const originalLength =
+        slot.assignments.length;
+
+
+    slot.assignments =
+        slot.assignments.filter(
+            item =>
+                !(
+                    item.role_type
+                    ===
+                    selection.role_type
+                    &&
+                    Number(item.position_no)
+                    ===
+                    Number(selection.position_no)
+                )
+        );
+
+
+    if (
+        slot.assignments.length
+        <
+        originalLength
+    ) {
+
+        scheduleData.assignment_count =
+            Math.max(
+                0,
+                Number(
+                    scheduleData.assignment_count
+                    ||
+                    0
+                )
+                -
+                1
+            );
+    }
+
+
+    renderMatrixBody();
+    updatePublishControl();
+
+    return true;
+}
+
+
+/* =========================================================
    Save / delete
 ========================================================= */
 
@@ -2577,7 +2802,9 @@ async function saveCandidateAssignment(
         );
 
 
-        await loadSchedule();
+        applyAssignmentLocally(
+            data.assignment
+        );
 
     }
 
@@ -2609,6 +2836,21 @@ async function removeCurrentAssignment() {
     ) {
         return;
     }
+
+
+    const selectionSnapshot = {
+        work_date:
+            activeSelection.work_date,
+
+        slot_id:
+            activeSelection.slot_id,
+
+        role_type:
+            activeSelection.role_type,
+
+        position_no:
+            activeSelection.position_no
+    };
 
 
     try {
@@ -2675,7 +2917,9 @@ async function removeCurrentAssignment() {
         );
 
 
-        await loadSchedule();
+        removeAssignmentLocally(
+            selectionSnapshot
+        );
 
     }
 
