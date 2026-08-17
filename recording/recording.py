@@ -6,6 +6,12 @@ from flask import (
     request,
     url_for
 )
+from permissions.permissions import(
+    module_required,
+    has_module,
+    MODULE_RECORDING,
+    MODULE_WEEKLY_INVENTORY
+)
 from flask_login import current_user, login_required
 import csv
 import io
@@ -20,6 +26,11 @@ recording_bp = Blueprint(
     __name__,
     template_folder="templates"
 )
+
+@recording_bp.before_request
+@module_required(MODULE_RECORDING)
+def require_recording_access():
+    pass
 
 # Maximum number of sequence positions allowed in each round.
 MAX_SEQ_PER_ROUND = 300
@@ -106,6 +117,16 @@ def recording(store_code):
 
             return "Invalid store", 404
 
+        extra_nav_links = []
+
+        if has_module(MODULE_WEEKLY_INVENTORY):
+            extra_nav_links.append({
+                "label": "Weekly Inventory",
+                "url": url_for(
+                    "weekly.weekly_inventory_page"
+                )
+            })
+
 
         return render_template(
             "recording.html",
@@ -119,14 +140,7 @@ def recording(store_code):
             store_code=
                 store["short_name"],
 
-            extra_nav_links=[
-                {
-                    "label": "Weekly Inventory",
-                    "url": url_for(
-                        "weekly.weekly_inventory_page"
-                    )
-                }
-            ]
+            extra_nav_links=extra_nav_links
         )
 
     finally:

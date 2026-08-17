@@ -2,7 +2,10 @@ from flask import Blueprint, render_template
 from flask_login import login_required
 
 from db import get_db
-
+from permissions.permissions import(
+    module_required,
+    MODULE_SCHEDULE_MANAGEMENT
+)
 
 availability_management_bp = Blueprint(
     "availability_management",
@@ -10,6 +13,10 @@ availability_management_bp = Blueprint(
     template_folder="templates"
 )
 
+@availability_management_bp.before_request
+@module_required(MODULE_SCHEDULE_MANAGEMENT)
+def require_availability_management_access():
+    pass
 
 @availability_management_bp.route(
     "/availability-management"

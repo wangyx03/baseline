@@ -14,8 +14,12 @@
         Weekly Availability
     </title>
 
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='navbar.css') }}"
+    >
 
-    <style>
+     <style>
 
         * {
             box-sizing: border-box;
@@ -635,6 +639,7 @@
 
 <body>
 
+{% include "navbar.html" %}
 
 <div class="page">
 

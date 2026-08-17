@@ -813,6 +813,8 @@
     </div>
 
 
+    {% if can_edit_schedule %}
+
     <div class="schedule-actions">
 
         <div
@@ -831,6 +833,8 @@
         </button>
 
     </div>
+
+    {% endif %}
 
 </div>
 
@@ -974,6 +978,14 @@
 
 
 <script>
+
+/* =========================================================
+   Permission
+========================================================= */
+
+const CAN_EDIT_SCHEDULE =
+    {{ can_edit_schedule | tojson }};
+
 
 /* =========================================================
    Layout
@@ -1685,11 +1697,15 @@ function buildCreatorButton(
 
     button.disabled =
         (
-            scheduleData
-            &&
-            scheduleData.week_status
-            ===
-            "published"
+            !CAN_EDIT_SCHEDULE
+            ||
+            (
+                scheduleData
+                &&
+                scheduleData.week_status
+                ===
+                "published"
+            )
         );
 
 
@@ -1850,11 +1866,15 @@ function buildOperatorButton(
 
     button.disabled =
         (
-            scheduleData
-            &&
-            scheduleData.week_status
-            ===
-            "published"
+            !CAN_EDIT_SCHEDULE
+            ||
+            (
+                scheduleData
+                &&
+                scheduleData.week_status
+                ===
+                "published"
+            )
         );
 
 
@@ -2092,6 +2112,10 @@ function findAssignment(
 async function openCandidateModal(
     button
 ) {
+
+    if (!CAN_EDIT_SCHEDULE) {
+        return;
+    }
 
     activeSelection = {
         button:
@@ -2829,6 +2853,10 @@ async function saveCandidateAssignment(
 
 async function removeCurrentAssignment() {
 
+    if (!CAN_EDIT_SCHEDULE) {
+        return;
+    }
+
     if (
         !activeSelection
         ||
@@ -2961,6 +2989,10 @@ function updatePublishControl() {
 
     if (
         !scheduleData
+        ||
+        !button
+        ||
+        !state
     ) {
         return;
     }
@@ -3001,22 +3033,30 @@ function updatePublishControl() {
 
     button.disabled =
         (
-            scheduleData.week_status
-            !==
-            "published"
-            &&
-            Number(
-                scheduleData.assignment_count
-                ||
+            !CAN_EDIT_SCHEDULE
+            ||
+            (
+                scheduleData.week_status
+                !==
+                "published"
+                &&
+                Number(
+                    scheduleData.assignment_count
+                    ||
+                    0
+                )
+                ===
                 0
             )
-            ===
-            0
         );
 }
 
 
 async function handlePublishButton() {
+
+    if (!CAN_EDIT_SCHEDULE) {
+        return;
+    }
 
     if (
         !scheduleData

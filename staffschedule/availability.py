@@ -1,6 +1,23 @@
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import (
+    Blueprint,
+    abort,
+    jsonify,
+    render_template,
+    request
+)
+
+from flask_login import (
+    current_user,
+    login_required
+)
+
+from permissions.permissions import(
+    module_required,
+    MODULE_AVAILABILITY,
+    MODULE_SCHEDULE_MANAGEMENT
+)
 
 from db import get_db
 
@@ -12,6 +29,45 @@ availability_bp = Blueprint(
 )
 
 
+# =========================
+# Availability Access
+# =========================
+
+@availability_bp.before_request
+@module_required(MODULE_AVAILABILITY)
+def require_availability_access():
+    pass
+
+
+# =========================
+# Staff Access Check
+# =========================
+
+def can_access_staff(staff_id):
+
+    # Availability Management users
+    # can access every staff member.
+    if current_user.has_access(
+        MODULE_SCHEDULE_MANAGEMENT
+    ):
+        return True
+
+    # Normal Availability users
+    # can only access their own staff_id.
+    if current_user.staff_id is None:
+        return False
+
+    return (
+        int(current_user.staff_id)
+        ==
+        int(staff_id)
+    )
+
+
+# =========================
+# Time Blocks
+# =========================
+
 TIME_BLOCKS = [
     ("11:00", "14:00"),
     ("14:00", "16:00"),
@@ -21,13 +77,23 @@ TIME_BLOCKS = [
 ]
 
 
-@availability_bp.route("/availability/<staff_name>")
+# =========================
+# Availability Page
+# =========================
+
+@availability_bp.route(
+    "/availability/<staff_name>"
+)
+@login_required
 def availability_page(staff_name):
 
     staff_name = staff_name.strip()
 
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+
+    cursor = db.cursor(
+        dictionary=True
+    )
 
     try:
 
@@ -36,17 +102,32 @@ def availability_page(staff_name):
             SELECT
                 staff_id,
                 name
+
             FROM staff
+
             WHERE LOWER(name) = LOWER(%s)
               AND active = TRUE
             """,
-            (staff_name,)
+            (
+                staff_name,
+            )
         )
 
         staff = cursor.fetchone()
 
         if not staff:
             return "Employee not found", 404
+
+
+        # =========================
+        # Permission Check
+        # =========================
+
+        if not can_access_staff(
+            staff["staff_id"]
+        ):
+            abort(403)
+
 
         return render_template(
             "availability.html",
@@ -55,14 +136,20 @@ def availability_page(staff_name):
         )
 
     finally:
+
         cursor.close()
         db.close()
 
+
+# =========================
+# Get Availability
+# =========================
 
 @availability_bp.route(
     "/api/staff-availability",
     methods=["GET"]
 )
+@login_required
 def get_staff_availability():
 
     staff_id = request.args.get(
@@ -75,23 +162,40 @@ def get_staff_availability():
         ""
     ).strip()
 
+
     if not staff_id:
 
         return jsonify({
             "success": False,
-            "message": "staff_id is required"
+            "message":
+                "staff_id is required"
         }), 400
+
 
     if not week_start:
 
         return jsonify({
             "success": False,
-            "message": "week_start is required"
+            "message":
+                "week_start is required"
         }), 400
 
 
+    # =========================
+    # Permission Check
+    # =========================
+
+    if not can_access_staff(
+        staff_id
+    ):
+        abort(403)
+
+
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+
+    cursor = db.cursor(
+        dictionary=True
+    )
 
     try:
 
@@ -135,23 +239,42 @@ def get_staff_availability():
         for row in rows:
 
             results.append({
+
                 "availability_id":
-                    row["availability_id"],
+                    row[
+                        "availability_id"
+                    ],
 
                 "staff_id":
-                    row["staff_id"],
+                    row[
+                        "staff_id"
+                    ],
 
                 "work_date":
-                    row["work_date"].isoformat(),
+                    row[
+                        "work_date"
+                    ].isoformat(),
 
                 "start_time":
-                    str(row["start_time"]),
+                    str(
+                        row[
+                            "start_time"
+                        ]
+                    ),
 
                 "end_time":
-                    str(row["end_time"]),
+                    str(
+                        row[
+                            "end_time"
+                        ]
+                    ),
 
                 "is_available":
-                    bool(row["is_available"])
+                    bool(
+                        row[
+                            "is_available"
+                        ]
+                    )
             })
 
 
@@ -160,6 +283,7 @@ def get_staff_availability():
             "availability": results
         })
 
+
     except Exception as e:
 
         return jsonify({
@@ -167,21 +291,28 @@ def get_staff_availability():
             "message": str(e)
         }), 500
 
+
     finally:
 
         cursor.close()
         db.close()
 
 
+# =========================
+# Save Availability
+# =========================
+
 @availability_bp.route(
     "/api/staff-availability",
     methods=["POST"]
 )
+@login_required
 def save_staff_availability():
 
     data = request.get_json(
         silent=True
     ) or {}
+
 
     staff_id = data.get(
         "staff_id"
@@ -197,11 +328,41 @@ def save_staff_availability():
 
         return jsonify({
             "success": False,
-            "message": "staff_id is required"
+            "message":
+                "staff_id is required"
         }), 400
 
 
+    try:
+
+        staff_id = int(
+            staff_id
+        )
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Invalid staff_id"
+        }), 400
+
+
+    # =========================
+    # Permission Check
+    # =========================
+
+    if not can_access_staff(
+        staff_id
+    ):
+        abort(403)
+
+
     db = get_db()
+
     cursor = db.cursor()
 
     try:
@@ -280,6 +441,7 @@ def save_staff_availability():
             "success": False,
             "message": str(e)
         }), 500
+
 
     finally:
 

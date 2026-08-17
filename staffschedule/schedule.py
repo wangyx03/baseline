@@ -6,8 +6,15 @@ from flask import (
     render_template,
     request
 )
-from flask_login import login_required
-
+from flask_login import (
+    current_user,
+    login_required
+)
+from permissions.permissions import(
+    module_required,
+    MODULE_SCHEDULE,
+    MODULE_SCHEDULE_MANAGEMENT
+)
 from db import get_db
 
 
@@ -17,6 +24,33 @@ schedule_bp = Blueprint(
     template_folder="templates"
 )
 
+@schedule_bp.before_request
+@module_required(MODULE_SCHEDULE)
+def require_schedule_access():
+    pass
+
+
+# =========================================================
+# Schedule Edit Permission
+# =========================================================
+
+def can_edit_schedule():
+
+    return current_user.has_access(
+        MODULE_SCHEDULE_MANAGEMENT
+    )
+
+
+def require_schedule_edit_access():
+
+    if can_edit_schedule():
+        return None
+
+    return jsonify({
+        "success": False,
+        "message":
+            "You do not have permission to modify the schedule."
+    }), 403
 
 # =========================================================
 # Settings
@@ -803,7 +837,8 @@ def check_staff_eligibility(
 def schedule_page():
 
     return render_template(
-        "schedule.html"
+        "schedule.html",
+        can_edit_schedule=can_edit_schedule()
     )
 
 
@@ -1656,6 +1691,13 @@ def get_schedule_candidates():
 @login_required
 def save_staff_schedule():
 
+    permission_error = (
+        require_schedule_edit_access()
+    )
+
+    if permission_error:
+        return permission_error
+
     data = (
         request.get_json(
             silent=True
@@ -2148,6 +2190,13 @@ def save_staff_schedule():
 @login_required
 def delete_staff_schedule():
 
+    permission_error = (
+        require_schedule_edit_access()
+    )
+
+    if permission_error:
+        return permission_error
+
     data = (
         request.get_json(
             silent=True
@@ -2313,6 +2362,13 @@ def delete_staff_schedule():
 @login_required
 def confirm_schedule_week():
 
+    permission_error = (
+        require_schedule_edit_access()
+    )
+
+    if permission_error:
+        return permission_error
+
     data = (
         request.get_json(
             silent=True
@@ -2474,6 +2530,13 @@ def confirm_schedule_week():
 )
 @login_required
 def modify_schedule_week():
+
+    permission_error = (
+        require_schedule_edit_access()
+    )
+
+    if permission_error:
+        return permission_error
 
     data = (
         request.get_json(

@@ -22,6 +22,10 @@ from werkzeug.security import check_password_hash
 
 from db import get_db
 
+from permissions.permissions import(
+    load_module_permissions
+)
+
 
 auth_bp = Blueprint(
     "auth",
@@ -33,13 +37,19 @@ auth_bp = Blueprint(
 login_manager = LoginManager()
 
 
+# =========================
+# User
+# =========================
+
 class User(UserMixin):
 
     def __init__(
         self,
         user_id,
         username,
-        is_active=True
+        staff_id=None,
+        is_active=True,
+        module_permissions=None
     ):
 
         self.id = str(
@@ -48,8 +58,14 @@ class User(UserMixin):
 
         self.username = username
 
+        self.staff_id = staff_id
+
         self.active = bool(
             is_active
+        )
+
+        self.module_permissions = set(
+            module_permissions or []
         )
 
     @property
@@ -57,6 +73,20 @@ class User(UserMixin):
 
         return self.active
 
+    def has_access(
+        self,
+        module_id
+    ):
+
+        return (
+            module_id
+            in self.module_permissions
+        )
+
+
+# =========================
+# Load User
+# =========================
 
 def load_user(user_id):
 
@@ -73,6 +103,7 @@ def load_user(user_id):
             SELECT
                 user_id,
                 username,
+                staff_id,
                 is_active
 
             FROM login_info
@@ -92,17 +123,31 @@ def load_user(user_id):
         if not row["is_active"]:
             return None
 
-        return User(
-            row["user_id"],
-            row["username"],
-            row["is_active"]
-        )
-
     finally:
 
         cursor.close()
         db.close()
 
+
+    module_permissions = (
+        load_module_permissions(
+            row["user_id"]
+        )
+    )
+
+
+    return User(
+        row["user_id"],
+        row["username"],
+        row["staff_id"],
+        row["is_active"],
+        module_permissions
+    )
+
+
+# =========================
+# Update Last Seen
+# =========================
 
 def update_last_seen():
 
@@ -136,6 +181,10 @@ def update_last_seen():
         db.close()
 
 
+# =========================
+# Safe URL Check
+# =========================
+
 def is_safe_url(target):
 
     if not target:
@@ -165,6 +214,10 @@ def is_safe_url(target):
     )
 
 
+# =========================
+# Login Redirect
+# =========================
+
 def get_login_redirect():
 
     next_url = request.args.get(
@@ -183,8 +236,12 @@ def get_login_redirect():
 
     return url_for(
         "index"
-)
+    )
 
+
+# =========================
+# Login
+# =========================
 
 @auth_bp.route(
     "/login",
@@ -232,6 +289,7 @@ def login():
                 SELECT
                     user_id,
                     username,
+                    staff_id,
                     password_hash,
                     is_active
 
@@ -251,6 +309,7 @@ def login():
             cursor.close()
             db.close()
 
+
         if (
             row
             and row["is_active"]
@@ -260,11 +319,21 @@ def login():
             )
         ):
 
+            module_permissions = (
+                load_module_permissions(
+                    row["user_id"]
+                )
+            )
+
+
             user = User(
                 row["user_id"],
                 row["username"],
-                row["is_active"]
+                row["staff_id"],
+                row["is_active"],
+                module_permissions
             )
+
 
             login_user(
                 user,
@@ -272,6 +341,7 @@ def login():
             )
 
             session.permanent = False
+
 
             db = get_db()
 
@@ -301,19 +371,26 @@ def login():
                 cursor.close()
                 db.close()
 
+
             return redirect(
                 get_login_redirect()
             )
 
+
         error = (
             "Invalid username or password"
         )
+
 
     return render_template(
         "login.html",
         error=error
     )
 
+
+# =========================
+# Logout
+# =========================
 
 @auth_bp.route(
     "/logout"
@@ -331,6 +408,10 @@ def logout():
         )
     )
 
+
+# =========================
+# Init Auth
+# =========================
 
 def init_auth(app):
 

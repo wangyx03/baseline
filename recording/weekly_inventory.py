@@ -7,6 +7,13 @@ from flask import (
 )
 from flask_login import login_required
 
+from permissions.permissions import(
+    module_required,
+    has_module,
+    MODULE_WEEKLY_INVENTORY,
+    MODULE_RECORDING
+)
+
 from db import get_db
 
 weekly_bp = Blueprint(
@@ -15,16 +22,22 @@ weekly_bp = Blueprint(
     template_folder="templates"
 )
 
+@weekly_bp.before_request
+@module_required(MODULE_WEEKLY_INVENTORY)
+def require_weekly_inventory_access():
+    pass
+
 @weekly_bp.route(
     "/weekly-inventory"
 )
 @login_required
 def weekly_inventory_page():
 
-    return render_template(
-        "weekly_inventory.html",
+    extra_nav_links = []
 
-        extra_nav_links=[
+    if has_module(MODULE_RECORDING):
+
+        extra_nav_links.extend([
             {
                 "label": "TU Recording",
                 "url": url_for(
@@ -39,7 +52,11 @@ def weekly_inventory_page():
                     store_code="VB"
                 )
             }
-        ]
+        ])
+
+    return render_template(
+        "weekly_inventory.html",
+        extra_nav_links=extra_nav_links
     )
 
 @weekly_bp.route(

@@ -348,272 +348,321 @@
 
     <div class="page">
 
-
         <h1>
             Operations Dashboard
         </h1>
 
-
         <div class="subtitle">
-
             Select a module to continue.
-
         </div>
 
 
-
-        <!-- =========================
-             Recording
-        ========================= -->
-
-        <div class="section">
-
-
-            <div class="section-title">
-
-                Recording
-
-            </div>
-
-
-            <div class="grid">
-
-
-                <!-- TU Recording -->
-
-                <a
-                    class="card"
-                    href="{{
-                        url_for(
-                            'recording.recording',
-                            store_code='TU'
-                        )
-                    }}"
-                >
-
-                    <div class="card-icon">
-                        🎥
-                    </div>
-
-
-                    <div class="card-title">
-
-                        TU Recording
-
-                    </div>
-
-
-                    <div class="card-description">
-
-                        Start or continue the TU
-                        live recording workflow.
-
-                    </div>
-
-                </a>
-
-
-
-                <!-- VB Recording -->
-
-                <a
-                    class="card"
-                    href="{{
-                        url_for(
-                            'recording.recording',
-                            store_code='VB'
-                        )
-                    }}"
-                >
-
-                    <div class="card-icon">
-                        🎥
-                    </div>
-
-
-                    <div class="card-title">
-
-                        VB Recording
-
-                    </div>
-
-
-                    <div class="card-description">
-
-                        Start or continue the VB
-                        live recording workflow.
-
-                    </div>
-
-                </a>
-
-
-
-                <!-- Weekly Inventory -->
-
-                <a
-                    class="card"
-                    href="{{
-                        url_for(
-                            'weekly.weekly_inventory_page'
-                        )
-                    }}"
-                >
-
-                    <div class="card-icon">
-                        📦
-                    </div>
-
-
-                    <div class="card-title">
-
-                        Weekly Inventory
-
-                    </div>
-
-
-                    <div class="card-description">
-
-                        View planned, used and
-                        remaining weekly inventory.
-
-                    </div>
-
-                </a>
-
-
-            </div>
-
-        </div>
-
-
-
-        <!-- =========================
-             Staff Schedule
-        ========================= -->
-
-        <div class="section">
-
-
-            <div class="section-title">
-
-                Staff Schedule
-
-            </div>
-
-
-            <div class="grid">
-
-
-                <!-- Availability Management -->
-
-                <a
-                    class="card"
-                    href="{{
-                        url_for(
-                            'availability_management.availability_management_page'
-                        )
-                    }}"
-                >
-
-                    <div class="card-icon">
-                        🕒
-                    </div>
-
-
-                    <div class="card-title">
-
-                        Availability Management
-
-                    </div>
-
-
-                    <div class="card-description">
-
-                        View and modify employee
-                        weekly availability.
-
-                    </div>
-
-                </a>
-
-
-
-                <!-- Schedule -->
-
-                <a
-                    class="card"
-                    href="{{
-                        url_for(
-                            'schedule.schedule_page'
-                        )
-                    }}"
-                >
-
-                    <div class="card-top">
-
-
-                        <div class="card-icon">
-
-                            📅
-
-                        </div>
-
-
-                        {% if last_schedule_update %}
-
-                            <div class="update-badge">
-
-                                Updated
-
+        {% if (
+            current_user.has_access(MODULE_RECORDING)
+            or
+            current_user.has_access(MODULE_WEEKLY_INVENTORY)
+        ) %}
+
+            <div class="section">
+
+                <div class="section-title">
+                    Recording
+                </div>
+
+                <div class="grid">
+
+
+                    {% if current_user.has_access(MODULE_RECORDING) %}
+
+                        <a
+                            class="card"
+                            href="{{
+                                url_for(
+                                    'recording.recording',
+                                    store_code='TU'
+                                )
+                            }}"
+                        >
+
+                            <div class="card-icon">
+                                🎥
                             </div>
 
-                        {% endif %}
+                            <div class="card-title">
+                                TU Recording
+                            </div>
+
+                            <div class="card-description">
+                                Start or continue the TU
+                                live recording workflow.
+                            </div>
+
+                        </a>
 
 
-                    </div>
-
-
-                    <div class="card-title">
-
-                        Schedule
-
-                    </div>
-
-
-                    <div class="card-description">
-
-                        Build weekly TU and VB
-                        staff schedules.
-
-                    </div>
-
-
-                    {% if last_schedule_update %}
-
-                        <div class="update-time">
-
-                            Updated
-                            {{
-                                last_schedule_update.strftime(
-                                    '%b %d, %I:%M %p'
+                        <a
+                            class="card"
+                            href="{{
+                                url_for(
+                                    'recording.recording',
+                                    store_code='VB'
                                 )
-                            }}
+                            }}"
+                        >
 
-                        </div>
+                            <div class="card-icon">
+                                🎥
+                            </div>
+
+                            <div class="card-title">
+                                VB Recording
+                            </div>
+
+                            <div class="card-description">
+                                Start or continue the VB
+                                live recording workflow.
+                            </div>
+
+                        </a>
 
                     {% endif %}
 
 
-                </a>
+                    {% if current_user.has_access(
+                        MODULE_WEEKLY_INVENTORY
+                    ) %}
 
+                        <a
+                            class="card"
+                            href="{{
+                                url_for(
+                                    'weekly.weekly_inventory_page'
+                                )
+                            }}"
+                        >
+
+                            <div class="card-icon">
+                                📦
+                            </div>
+
+                            <div class="card-title">
+                                Weekly Inventory
+                            </div>
+
+                            <div class="card-description">
+                                View planned, used and
+                                remaining weekly inventory.
+                            </div>
+
+                        </a>
+
+                    {% endif %}
+
+
+                </div>
 
             </div>
 
-        </div>
+        {% endif %}
 
 
-    </div>
+
+        {% if (
+            current_user.has_access(MODULE_AVAILABILITY)
+            or
+            current_user.has_access(
+                MODULE_SCHEDULE_MANAGEMENT
+            )
+            or
+            current_user.has_access(MODULE_SCHEDULE)
+        ) %}
+
+            <div class="section">
+
+                <div class="section-title">
+                    Staff Schedule
+                </div>
+
+                <div class="grid">
+
+
+                    {% if (
+                        current_user.has_access(
+                            MODULE_AVAILABILITY
+                        )
+                        and
+                        current_staff_name
+                    ) %}
+
+                        <a
+                            class="card"
+                            href="{{
+                                url_for(
+                                    'availability.availability_page',
+                                    staff_name=current_staff_name
+                                )
+                            }}"
+                        >
+
+                            <div class="card-icon">
+                                🕒
+                            </div>
+
+                            <div class="card-title">
+                                My Availability
+                            </div>
+
+                            <div class="card-description">
+                                View and update your weekly
+                                availability.
+                            </div>
+
+                        </a>
+
+                    {% endif %}
+
+
+                    {% if current_user.has_access(
+                        MODULE_SCHEDULE_MANAGEMENT
+                    ) %}
+
+                        <a
+                            class="card"
+                            href="{{
+                                url_for(
+                                    'availability_management.availability_management_page'
+                                )
+                            }}"
+                        >
+
+                            <div class="card-icon">
+                                🕒
+                            </div>
+
+                            <div class="card-title">
+                                Availability Management
+                            </div>
+
+                            <div class="card-description">
+                                View and modify employee
+                                weekly availability.
+                            </div>
+
+                        </a>
+
+                    {% endif %}
+
+
+                    {% if current_user.has_access(
+                        MODULE_SCHEDULE
+                    ) %}
+
+                        <a
+                            class="card"
+                            href="{{
+                                url_for(
+                                    'schedule.schedule_page'
+                                )
+                            }}"
+                        >
+
+                            <div class="card-top">
+
+                                <div class="card-icon">
+                                    📅
+                                </div>
+
+                                {% if last_schedule_update %}
+
+                                    <div class="update-badge">
+                                        Updated
+                                    </div>
+
+                                {% endif %}
+
+                            </div>
+
+
+                            <div class="card-title">
+                                Schedule
+                            </div>
+
+
+                            <div class="card-description">
+                                Build weekly TU and VB
+                                staff schedules.
+                            </div>
+
+
+                            {% if last_schedule_update %}
+
+                                <div class="update-time">
+
+                                    Updated
+                                    {{
+                                        last_schedule_update.strftime(
+                                            '%b %d, %I:%M %p'
+                                        )
+                                    }}
+
+                                </div>
+
+                            {% endif %}
+
+                        </a>
+
+                    {% endif %}
+
+
+                </div>
+
+            </div>
+
+        {% endif %}
+
+        {% if current_user.has_access(
+            MODULE_PERMISSION_MANAGEMENT
+        ) %}
+
+            <div class="section">
+
+                <div class="section-title">
+                    System Management
+                </div>
+
+                <div class="grid">
+
+                    <a
+                        class="card"
+                        href="{{
+                            url_for(
+                                'permission_management.permission_management_page'
+                            )
+                        }}"
+                    >
+
+                        <div class="card-icon">
+                            🔐
+                        </div>
+
+                        <div class="card-title">
+                            Permission Management
+                        </div>
+
+                        <div class="card-description">
+                            Manage module access
+                            for system users.
+                        </div>
+
+                    </a>
+
+                </div>
+
+            </div>
+
+        {% endif %}
+
+    </div>  
 
 
 </body>

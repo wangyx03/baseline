@@ -2,59 +2,112 @@ from pathlib import Path
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, render_template
-from flask_login import login_required
 
-from auth.auth import auth_bp, init_auth
+from flask import (
+    Flask,
+    render_template
+)
+
+from flask_login import (
+    current_user,
+    login_required
+)
+
+from auth.auth import (
+    auth_bp,
+    init_auth
+)
+
+from permissions.permissions import(
+    MODULE_RECORDING,
+    MODULE_WEEKLY_INVENTORY,
+    MODULE_AVAILABILITY,
+    MODULE_SCHEDULE_MANAGEMENT,
+    MODULE_SCHEDULE,
+    MODULE_PERMISSION_MANAGEMENT
+)
+
 from recording.recording import recording_bp
 from recording.weekly_inventory import weekly_bp
-from staffschedule.availability import availability_bp
-from staffschedule.availability_management import availability_management_bp
-from staffschedule.schedule import schedule_bp
 
+from staffschedule.availability import availability_bp
+from staffschedule.availability_management import (
+    availability_management_bp
+)
+from staffschedule.schedule import schedule_bp
+from permissions.permission_management import (
+    permission_management_bp
+)
 from db import get_db
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(
+    __file__
+).resolve().parent
+
 
 load_dotenv(
     BASE_DIR / ".env"
 )
 
 
-app = Flask(__name__)
+app = Flask(
+    __name__
+)
 
-app.config["SECRET_KEY"] = os.getenv(
+
+app.config[
+    "SECRET_KEY"
+] = os.getenv(
     "SECRET_KEY"
 )
 
-app.config["SESSION_PERMANENT"] = False
+
+app.config[
+    "SESSION_PERMANENT"
+] = False
 
 
 # =========================
 # 初始化登录
 # =========================
 
-init_auth(app)
+init_auth(
+    app
+)
 
 
 # =========================
 # 注册功能模块
 # =========================
 
-app.register_blueprint(auth_bp)
+app.register_blueprint(
+    auth_bp
+)
 
-app.register_blueprint(recording_bp)
+app.register_blueprint(
+    recording_bp
+)
 
-app.register_blueprint(weekly_bp)
+app.register_blueprint(
+    weekly_bp
+)
 
-app.register_blueprint(availability_bp)
+app.register_blueprint(
+    availability_bp
+)
 
 app.register_blueprint(
     availability_management_bp
 )
 
-app.register_blueprint(schedule_bp)
+app.register_blueprint(
+    schedule_bp
+)
+
+app.register_blueprint(
+    permission_management_bp
+)
 
 
 # =========================
@@ -65,41 +118,128 @@ app.register_blueprint(schedule_bp)
 @login_required
 def index():
 
-    db = get_db()
+    last_schedule_update = None
 
-    cursor = db.cursor(
-        dictionary=True
-    )
+    current_staff_name = None
 
-    try:
 
-        cursor.execute(
-            """
-            SELECT
-                MAX(published_at) AS last_published_at
-            FROM staff_schedule
-            WHERE status = 'published'
-            """
+    # =========================
+    # Current Staff
+    # =========================
+
+    if current_user.staff_id is not None:
+
+        db = get_db()
+
+        cursor = db.cursor(
+            dictionary=True
         )
 
-        row = cursor.fetchone()
+        try:
 
-        last_schedule_update = (
-            row["last_published_at"]
-            if row
-            else None
+            cursor.execute(
+                """
+                SELECT
+                    name
+
+                FROM staff
+
+                WHERE staff_id = %s
+                  AND active = TRUE
+                """,
+                (
+                    current_user.staff_id,
+                )
+            )
+
+            staff_row = cursor.fetchone()
+
+            if staff_row:
+
+                current_staff_name = (
+                    staff_row["name"]
+                )
+
+        finally:
+
+            cursor.close()
+            db.close()
+
+
+    # =========================
+    # Schedule Update
+    # =========================
+
+    if current_user.has_access(
+        MODULE_SCHEDULE
+    ):
+
+        db = get_db()
+
+        cursor = db.cursor(
+            dictionary=True
         )
 
-    finally:
+        try:
 
-        cursor.close()
-        db.close()
+            cursor.execute(
+                """
+                SELECT
+                    MAX(published_at)
+                        AS last_published_at
 
+                FROM staff_schedule
+
+                WHERE status = 'published'
+                """
+            )
+
+            row = cursor.fetchone()
+
+            last_schedule_update = (
+                row["last_published_at"]
+                if row
+                else None
+            )
+
+        finally:
+
+            cursor.close()
+            db.close()
+
+
+    # =========================
+    # Render Dashboard
+    # =========================
 
     return render_template(
         "index.html",
+
         show_dashboard=False,
-        last_schedule_update=last_schedule_update
+
+        last_schedule_update=
+            last_schedule_update,
+
+        current_staff_name=
+            current_staff_name,
+
+        MODULE_RECORDING=
+            MODULE_RECORDING,
+
+        MODULE_WEEKLY_INVENTORY=
+            MODULE_WEEKLY_INVENTORY,
+
+        MODULE_AVAILABILITY=
+            MODULE_AVAILABILITY,
+
+        MODULE_SCHEDULE_MANAGEMENT=
+            MODULE_SCHEDULE_MANAGEMENT,
+
+        MODULE_SCHEDULE=
+            MODULE_SCHEDULE,
+
+        MODULE_PERMISSION_MANAGEMENT=
+            MODULE_PERMISSION_MANAGEMENT
     )
 
 
