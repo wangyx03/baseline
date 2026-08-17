@@ -12,6 +12,10 @@
 }
 
 
+/* =========================
+   Navigation Buttons
+   ========================= */
+
 .nav-button,
 .nav-button:link,
 .nav-button:visited {
@@ -43,13 +47,15 @@
 }
 
 
+/* =========================
+   User Area
+   ========================= */
+
 .user-area {
     margin-left: auto;
 
     display: flex;
     align-items: center;
-
-    gap: 10px;
 
     font-size: 16px;
 
@@ -57,20 +63,92 @@
 }
 
 
-.user-area strong {
-    font-weight: 700;
+/* =========================
+   User Menu
+   ========================= */
+
+.user-menu {
+    position: relative;
 }
 
 
-.logout-link,
-.logout-link:link,
-.logout-link:visited {
-    color: #5b21b6;
+.user-menu-button {
+    border: none;
 
-    text-decoration: underline;
+    background: transparent;
+
+    color: #111;
+
+    padding: 9px 12px;
+
+    border-radius: 6px;
+
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+
+    cursor: pointer;
 }
 
 
-.logout-link:hover {
-    color: #4c1d95;
+.user-menu-button:hover {
+    background: #f0f1f3;
+}
+
+
+/* =========================
+   Dropdown
+   ========================= */
+
+.user-dropdown {
+    display: none;
+
+    position: absolute;
+
+    top: calc(100% + 8px);
+    right: 0;
+
+    min-width: 180px;
+
+    background: white;
+
+    border: 1px solid #e5e6e8;
+
+    border-radius: 8px;
+
+    box-shadow:
+        0 6px 20px
+        rgba(0, 0, 0, 0.12);
+
+    overflow: hidden;
+
+    z-index: 1000;
+}
+
+
+.user-dropdown.show {
+    display: block;
+}
+
+
+.user-dropdown a,
+.user-dropdown a:link,
+.user-dropdown a:visited {
+    display: block;
+
+    padding: 11px 14px;
+
+    color: #1f2329;
+
+    text-decoration: none;
+
+    font-size: 14px;
+    font-weight: 500;
+}
+
+
+.user-dropdown a:hover {
+    background: #f5f6f8;
+
+    color: #1f2329;
 }

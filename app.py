@@ -31,13 +31,10 @@ from recording.recording import recording_bp
 from recording.weekly_inventory import weekly_bp
 
 from staffschedule.availability import availability_bp
-from staffschedule.availability_management import (
-    availability_management_bp
-)
+from staffschedule.availability_management import availability_management_bp
 from staffschedule.schedule import schedule_bp
-from permissions.permission_management import (
-    permission_management_bp
-)
+from permissions.permission_management import permission_management_bp
+from security.security import security_bp
 from db import get_db
 
 
@@ -109,6 +106,7 @@ app.register_blueprint(
     permission_management_bp
 )
 
+app.register_blueprint(security_bp)
 
 # =========================
 # 系统首页

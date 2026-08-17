@@ -1,49 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
+{% block title %}
+Operations Dashboard
+{% endblock %}
 
-    <meta charset="UTF-8">
+{% block navbar %}
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    {% with show_dashboard=false %}
+        {% include "navbar.html" %}
+    {% endwith %}
 
-    <title>Operations Dashboard</title>
+{% endblock %}
 
+{% block styles %}
 
-    <!-- Common Navbar CSS -->
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='navbar.css') }}"
-    >
-
-
-    <style>
-
-        * {
-            box-sizing: border-box;
-        }
-
-
-        body {
-            margin: 0;
-
-            font-family:
-                -apple-system,
-                BlinkMacSystemFont,
-                "Segoe UI",
-                Arial,
-                sans-serif;
-
-            background: #f5f6f8;
-
-            color: #1f2329;
-        }
-
-
-        /* =========================
+/* =========================
            Page
         ========================= */
 
@@ -320,33 +291,11 @@
 
         }
 
-    </style>
+{% endblock %}
 
-</head>
+{% block content %}
 
-
-<body>
-
-
-    <!-- =========================
-         Common Navbar
-         Dashboard page does not
-         show Dashboard button
-    ========================= -->
-
-    {% with show_dashboard=false %}
-
-        {% include "navbar.html" %}
-
-    {% endwith %}
-
-
-
-    <!-- =========================
-         Main Page
-    ========================= -->
-
-    <div class="page">
+<div class="page">
 
         <h1>
             Operations Dashboard
@@ -662,9 +611,63 @@
 
         {% endif %}
 
-    </div>  
+    </div>
 
+{% endblock %}
 
-</body>
+{% block scripts %}
 
-</html>
+<script>
+
+    const userMenuButton =
+        document.getElementById(
+            "userMenuButton"
+        );
+
+    const userDropdown =
+        document.getElementById(
+            "userDropdown"
+        );
+
+    if (
+        userMenuButton &&
+        userDropdown
+    ) {
+
+        userMenuButton.addEventListener(
+            "click",
+            function(event) {
+
+                event.stopPropagation();
+
+                userDropdown.classList.toggle(
+                    "show"
+                );
+
+            }
+        );
+
+        document.addEventListener(
+            "click",
+            function(event) {
+
+                if (
+                    !event.target.closest(
+                        ".user-menu"
+                    )
+                ) {
+
+                    userDropdown.classList.remove(
+                        "show"
+                    );
+
+                }
+
+            }
+        );
+
+    }
+
+</script>
+
+{% endblock %}

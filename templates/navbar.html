@@ -30,19 +30,38 @@
 
     <div class="user-area">
 
-        <span>
-            User:
-            <strong>
-                {{ current_user.username }}
-            </strong>
-        </span>
+        <div class="user-menu">
 
-        <a
-            href="{{ url_for('auth.logout') }}"
-            class="logout-link"
-        >
-            Logout
-        </a>
+            <button
+                type="button"
+                class="user-menu-button"
+                id="userMenuButton"
+            >
+                {{ current_user.username }}
+                ▾
+            </button>
+
+
+            <div
+                id="userDropdown"
+                class="user-dropdown"
+            >
+
+                <a
+                    href="{{ url_for('security.change_password') }}"
+                >
+                    Change Password
+                </a>
+
+                <a
+                    href="{{ url_for('auth.logout') }}"
+                >
+                    Logout
+                </a>
+
+            </div>
+
+        </div>
 
     </div>
 
