@@ -279,6 +279,17 @@
             background: #f9fafb;
         }
 
+        .permission-item:has(
+            input:disabled
+        ) {
+            background: #f7f8fa;
+        }
+
+        .permission-item:has(
+            input:disabled
+        ) input {
+            cursor: not-allowed;
+        }
 
         .permission-item input {
 
@@ -809,8 +820,37 @@
                         === true;
 
 
-                    checkbox.disabled =
-                        false;
+                    const isPermissionManagement =
+                        moduleId
+                        ===
+                        Number(
+                            data.permission_management_module_id
+                        );
+
+
+                    const alreadyHasPermissionManagement =
+                        data.permissions[
+                            moduleId
+                        ]
+                        === true;
+
+
+                    if (
+                        isPermissionManagement
+                        &&
+                        alreadyHasPermissionManagement
+                    ) {
+
+                        checkbox.checked = true;
+
+                        checkbox.disabled = true;
+
+                    }
+                    else {
+
+                        checkbox.disabled = false;
+
+                    }
 
                 }
             );

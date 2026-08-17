@@ -296,27 +296,6 @@ def save_user_permissions(user_id):
                 module_id
             )
 
-
-    # =========================
-    # Protect Own
-    # Permission Management
-    # =========================
-
-    if (
-        int(current_user.id)
-        ==
-        int(user_id)
-        and
-        MODULE_PERMISSION_MANAGEMENT
-        not in
-        cleaned_module_ids
-    ):
-
-        cleaned_module_ids.append(
-            MODULE_PERMISSION_MANAGEMENT
-        )
-
-
     db = get_db()
 
     cursor = db.cursor(
@@ -350,6 +329,45 @@ def save_user_permissions(user_id):
                 "message":
                     "User not found"
             }), 404
+
+        # =========================
+        # Protect Existing
+        # Permission Administrator
+        # =========================
+
+        cursor.execute(
+            """
+            SELECT
+                access
+
+            FROM module_permissions
+
+            WHERE user_id = %s
+            AND module_id = %s
+            AND access = TRUE
+            """,
+            (
+                user_id,
+                MODULE_PERMISSION_MANAGEMENT
+            )
+        )
+
+        existing_admin_permission = (
+            cursor.fetchone()
+        )
+
+
+        if (
+            existing_admin_permission
+            and
+            MODULE_PERMISSION_MANAGEMENT
+            not in
+            cleaned_module_ids
+        ):
+
+            cleaned_module_ids.append(
+                MODULE_PERMISSION_MANAGEMENT
+            )
 
 
         # =========================
