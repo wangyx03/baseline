@@ -773,6 +773,61 @@ let insertBeforeRound = null;
 
 let insertBeforeSeq = null;
 
+// =========================================================
+// Auto Refresh Recording List
+// =========================================================
+
+let recordingRefreshTimer = null;
+
+
+function startRecordingAutoRefresh() {
+
+    stopRecordingAutoRefresh();
+
+    if (
+        !currentWeekId
+        ||
+        !currentLiveId
+    ) {
+        return;
+    }
+
+    recordingRefreshTimer =
+        setInterval(
+            async function() {
+
+                if (
+                    !currentWeekId
+                    ||
+                    !currentLiveId
+                ) {
+                    return;
+                }
+
+                await loadRecordings(
+                    currentPage
+                );
+
+            },
+            2000
+        );
+
+}
+
+
+function stopRecordingAutoRefresh() {
+
+    if (recordingRefreshTimer) {
+
+        clearInterval(
+            recordingRefreshTimer
+        );
+
+        recordingRefreshTimer =
+            null;
+    }
+
+}
 
 // =========================================================
 // Elements
@@ -1111,6 +1166,7 @@ async function startLive() {
 
     if (currentLiveId) {
 
+        stopRecordingAutoRefresh();
 
         clearRecordingSession();
 
@@ -1631,6 +1687,8 @@ function activateRecordingSession() {
 
 
     updateRoundDisplay();
+
+    startRecordingAutoRefresh();
 
 }
 
