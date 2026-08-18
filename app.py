@@ -18,7 +18,7 @@ from auth.auth import (
     init_auth
 )
 
-from permissions.permissions import(
+from permissions.permissions import (
     MODULE_RECORDING,
     MODULE_WEEKLY_INVENTORY,
     MODULE_AVAILABILITY,
@@ -31,10 +31,17 @@ from recording.recording import recording_bp
 from recording.weekly_inventory import weekly_bp
 
 from staffschedule.availability import availability_bp
-from staffschedule.availability_management import availability_management_bp
+from staffschedule.availability_management import (
+    availability_management_bp
+)
 from staffschedule.schedule import schedule_bp
-from permissions.permission_management import permission_management_bp
+
+from permissions.permission_management import (
+    permission_management_bp
+)
+
 from security.security import security_bp
+
 from db import get_db
 
 
@@ -106,7 +113,10 @@ app.register_blueprint(
     permission_management_bp
 )
 
-app.register_blueprint(security_bp)
+app.register_blueprint(
+    security_bp
+)
+
 
 # =========================
 # 系统首页
@@ -117,6 +127,8 @@ app.register_blueprint(security_bp)
 def index():
 
     last_schedule_update = None
+
+    schedule_has_update = False
 
     current_staff_name = None
 
@@ -180,6 +192,10 @@ def index():
 
         try:
 
+            # ---------------------------------
+            # Latest published schedule
+            # ---------------------------------
+
             cursor.execute(
                 """
                 SELECT
@@ -200,6 +216,55 @@ def index():
                 else None
             )
 
+
+            # ---------------------------------
+            # Current user's last seen time
+            # ---------------------------------
+
+            cursor.execute(
+                """
+                SELECT
+                    last_seen_at
+
+                FROM staff_schedule_notify
+
+                WHERE user_id = %s
+
+                LIMIT 1
+                """,
+                (
+                    current_user.id,
+                )
+            )
+
+            seen_row = cursor.fetchone()
+
+            last_seen_at = (
+                seen_row["last_seen_at"]
+                if seen_row
+                else None
+            )
+
+
+            # ---------------------------------
+            # Has unread schedule update?
+            # ---------------------------------
+
+            if last_schedule_update is not None:
+
+                if last_seen_at is None:
+
+                    schedule_has_update = True
+
+                elif (
+                    last_schedule_update
+                    >
+                    last_seen_at
+                ):
+
+                    schedule_has_update = True
+
+
         finally:
 
             cursor.close()
@@ -217,6 +282,9 @@ def index():
 
         last_schedule_update=
             last_schedule_update,
+
+        schedule_has_update=
+            schedule_has_update,
 
         current_staff_name=
             current_staff_name,

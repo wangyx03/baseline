@@ -53,6 +53,7 @@
                     Change Password
                 </a>
 
+
                 <a
                     href="{{ url_for('auth.logout') }}"
                 >
@@ -66,3 +67,85 @@
     </div>
 
 </div>
+
+
+<script>
+
+(function () {
+
+    const userMenuButton =
+        document.getElementById(
+            "userMenuButton"
+        );
+
+    const userDropdown =
+        document.getElementById(
+            "userDropdown"
+        );
+
+
+    if (
+        !userMenuButton
+        ||
+        !userDropdown
+    ) {
+        return;
+    }
+
+
+    userMenuButton.addEventListener(
+        "click",
+        function(event) {
+
+            event.preventDefault();
+
+            event.stopPropagation();
+
+            userDropdown.classList.toggle(
+                "show"
+            );
+
+        }
+    );
+
+
+    document.addEventListener(
+        "click",
+        function(event) {
+
+            if (
+                !event.target.closest(
+                    ".user-menu"
+                )
+            ) {
+
+                userDropdown.classList.remove(
+                    "show"
+                );
+
+            }
+
+        }
+    );
+
+
+    document.addEventListener(
+        "keydown",
+        function(event) {
+
+            if (
+                event.key === "Escape"
+            ) {
+
+                userDropdown.classList.remove(
+                    "show"
+                );
+
+            }
+
+        }
+    );
+
+})();
+
+</script>

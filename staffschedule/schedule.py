@@ -836,6 +836,57 @@ def check_staff_eligibility(
 @login_required
 def schedule_page():
 
+    db = get_db()
+
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+    try:
+
+        # =====================================================
+        # Mark Schedule notification as seen
+        # =====================================================
+
+        cursor.execute(
+            """
+            INSERT INTO staff_schedule_notify
+            (
+                user_id,
+                last_seen_at
+            )
+
+            VALUES
+            (
+                %s,
+                %s
+            )
+
+            ON DUPLICATE KEY UPDATE
+
+                last_seen_at =
+                    VALUES(last_seen_at)
+            """,
+            (
+                current_user.id,
+                datetime.now()
+            )
+        )
+
+        db.commit()
+
+    except Exception:
+
+        db.rollback()
+
+        raise
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+
     return render_template(
         "schedule.html",
         can_edit_schedule=can_edit_schedule()

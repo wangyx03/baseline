@@ -16,11 +16,12 @@
         {% endblock %}
     </title>
 
-    <!-- Common Navbar CSS -->
+
     <link
         rel="stylesheet"
         href="{{ url_for('static', filename='navbar.css') }}"
     >
+
 
     <style>
 
@@ -29,6 +30,7 @@
         }
 
         body {
+
             margin: 0;
 
             font-family:
@@ -41,6 +43,7 @@
             background: #f5f6f8;
 
             color: #1f2329;
+
         }
 
         {% block styles %}
@@ -50,14 +53,19 @@
 
 </head>
 
+
 <body>
 
     {% block navbar %}
+
         {% include "navbar.html" %}
+
     {% endblock %}
+
 
     {% block content %}
     {% endblock %}
+
 
     {% block scripts %}
     {% endblock %}

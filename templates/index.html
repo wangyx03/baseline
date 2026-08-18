@@ -521,7 +521,7 @@ Operations Dashboard
                                     📅
                                 </div>
 
-                                {% if last_schedule_update %}
+                                {% if schedule_has_update %}
 
                                     <div class="update-badge">
                                         Updated
@@ -615,59 +615,4 @@ Operations Dashboard
 
 {% endblock %}
 
-{% block scripts %}
 
-<script>
-
-    const userMenuButton =
-        document.getElementById(
-            "userMenuButton"
-        );
-
-    const userDropdown =
-        document.getElementById(
-            "userDropdown"
-        );
-
-    if (
-        userMenuButton &&
-        userDropdown
-    ) {
-
-        userMenuButton.addEventListener(
-            "click",
-            function(event) {
-
-                event.stopPropagation();
-
-                userDropdown.classList.toggle(
-                    "show"
-                );
-
-            }
-        );
-
-        document.addEventListener(
-            "click",
-            function(event) {
-
-                if (
-                    !event.target.closest(
-                        ".user-menu"
-                    )
-                ) {
-
-                    userDropdown.classList.remove(
-                        "show"
-                    );
-
-                }
-
-            }
-        );
-
-    }
-
-</script>
-
-{% endblock %}
