@@ -327,6 +327,29 @@
 
         }
 
+    
+        .table-sort-button {
+            border: 0;
+            background: transparent;
+            padding: 0;
+            font: inherit;
+            font-weight: inherit;
+            color: inherit;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .table-sort-button:hover {
+            text-decoration: underline;
+        }
+
+        #roundSeqSortArrow {
+            font-size: 18px;
+            line-height: 1;
+        }
+
     </style>
 
 </head>
@@ -625,13 +648,26 @@
             </div>
 
 
-            <button
-                id="downloadButton"
-                onclick="downloadCSV()"
-                disabled
-            >
-                Download CSV
-            </button>
+            <div style="display:flex; gap:10px; align-items:center;">
+
+                <button
+                    id="deleteAllButton"
+                    class="delete-button"
+                    onclick="deleteAllRecordings()"
+                    disabled
+                >
+                    Delete All
+                </button>
+
+                <button
+                    id="downloadButton"
+                    onclick="downloadCSV()"
+                    disabled
+                >
+                    Download CSV
+                </button>
+
+            </div>
 
 
         </div>
@@ -645,7 +681,16 @@
                 <tr>
 
                     <th>
-                        Round / Seq
+                        <button
+                            id="roundSeqSortButton"
+                            class="table-sort-button"
+                            type="button"
+                            onclick="toggleRoundSeqSort()"
+                            title="Change Round / Seq sort order"
+                        >
+                            Round / Seq
+                            <span id="roundSeqSortArrow">↓</span>
+                        </button>
                     </th>
 
                     <th>
@@ -927,6 +972,23 @@ const roundInput =
 const downloadButton =
     document.getElementById(
         "downloadButton"
+    );
+
+
+const roundSeqSortButton =
+    document.getElementById(
+        "roundSeqSortButton"
+    );
+
+const roundSeqSortArrow =
+    document.getElementById(
+        "roundSeqSortArrow"
+    );
+
+
+const deleteAllButton =
+    document.getElementById(
+        "deleteAllButton"
     );
 
 
@@ -1253,6 +1315,10 @@ async function startLive() {
 
 
         downloadButton.disabled =
+            true;
+
+
+        deleteAllButton.disabled =
             true;
 
 
@@ -1694,6 +1760,10 @@ function activateRecordingSession() {
 
 
     downloadButton.disabled =
+        false;
+
+
+    deleteAllButton.disabled =
         false;
 
 
@@ -2509,6 +2579,12 @@ async function loadRecordings(
             data.pagination.total_pages;
 
 
+        roundSeqSortArrow.textContent =
+            data.sort_direction === "ASC"
+            ? "↑"
+            : "↓";
+
+
         saveRecordingSession();
 
 
@@ -2976,6 +3052,74 @@ async function saveRecording(
 
 
 // =========================================================
+// Delete All Current LIVE Recordings
+// =========================================================
+
+async function deleteAllRecordings() {
+
+    if (
+        !currentWeekId
+        ||
+        !currentLiveId
+    ) {
+        return;
+    }
+
+    const confirmed = confirm(
+        "Delete ALL recordings for this LIVE?\n\n"
+        + "Week: " + currentWeekId + "\n"
+        + "LIVE ID: " + currentLiveId + "\n\n"
+        + "This cannot be undone."
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    const response = await fetch(
+        "/api/recordings/delete-all",
+        {
+            method: "DELETE",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                week_id: currentWeekId,
+                store_id: STORE_ID,
+                live_id: currentLiveId
+            })
+        }
+    );
+
+    const data = await response.json();
+
+    if (
+        !response.ok
+        ||
+        !data.success
+    ) {
+        alert(
+            data.message
+            ||
+            "Delete all failed."
+        );
+        return;
+    }
+
+    currentPage = 1;
+    saveRecordingSession();
+
+    showMessage(
+        "✓ Deleted " + data.deleted_rows + " recordings",
+        "success"
+    );
+
+    await loadRecordings(1);
+    skuInput.focus();
+}
+
+
+// =========================================================
 // Delete
 // =========================================================
 
@@ -3194,6 +3338,58 @@ function showBookInfo(
         .style.display =
             "block";
 
+}
+
+
+// =========================================================
+// Round / Seq Sort
+// =========================================================
+
+async function toggleRoundSeqSort() {
+
+    roundSeqSortButton.disabled = true;
+
+    try {
+
+        const response = await fetch(
+            "/api/recordings/sort-direction",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            showMessage(
+                data.message || "Could not change sort order.",
+                "error"
+            );
+            return;
+        }
+
+        roundSeqSortArrow.textContent =
+            data.sort_direction === "ASC"
+            ? "↑"
+            : "↓";
+
+        currentPage = 1;
+        await loadRecordings(1);
+
+    }
+    catch (error) {
+        console.error(error);
+        showMessage(
+            "Could not change sort order.",
+            "error"
+        );
+    }
+    finally {
+        roundSeqSortButton.disabled = false;
+    }
 }
 
 

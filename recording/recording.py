@@ -35,6 +35,82 @@ def require_recording_access():
 # Maximum number of sequence positions allowed in each round.
 MAX_SEQ_PER_ROUND = 300
 
+
+# =========================================================
+# Global Recording sort setting
+#
+# Shared by every user and every Gunicorn worker because the
+# value is stored in MySQL rather than in browser/session memory.
+# DESC = newest Round / Seq first.
+# ASC  = oldest Round / Seq first.
+# =========================================================
+
+RECORDING_SORT_SETTING_KEY = "round_seq_sort_direction"
+DEFAULT_RECORDING_SORT_DIRECTION = "DESC"
+
+
+def ensure_recording_settings_table(cursor):
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recording_settings (
+            setting_key VARCHAR(100) PRIMARY KEY,
+            setting_value VARCHAR(50) NOT NULL,
+            updated_at TIMESTAMP NOT NULL
+                DEFAULT CURRENT_TIMESTAMP
+                ON UPDATE CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        INSERT IGNORE INTO recording_settings (
+            setting_key,
+            setting_value
+        )
+        VALUES (%s, %s)
+        """,
+        (
+            RECORDING_SORT_SETTING_KEY,
+            DEFAULT_RECORDING_SORT_DIRECTION
+        )
+    )
+
+
+def get_recording_sort_direction(cursor):
+
+    ensure_recording_settings_table(cursor)
+
+    cursor.execute(
+        """
+        SELECT setting_value
+
+        FROM recording_settings
+
+        WHERE setting_key = %s
+
+        LIMIT 1
+        """,
+        (
+            RECORDING_SORT_SETTING_KEY,
+        )
+    )
+
+    row = cursor.fetchone()
+
+    if not row:
+        return DEFAULT_RECORDING_SORT_DIRECTION
+
+    direction = str(
+        row.get("setting_value", "")
+    ).upper().strip()
+
+    if direction not in ("ASC", "DESC"):
+        return DEFAULT_RECORDING_SORT_DIRECTION
+
+    return direction
+
 def write_recording_log(
     cursor,
     recording_id,
@@ -1286,6 +1362,72 @@ def change_recorded_live_id():
         db.close()
 
 
+# =========================================================
+# Global Round / Seq sort direction
+# =========================================================
+
+@recording_bp.route(
+    "/api/recordings/sort-direction",
+    methods=["POST"]
+)
+@login_required
+def toggle_recording_sort_direction():
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+
+        current_direction = (
+            get_recording_sort_direction(cursor)
+        )
+
+        new_direction = (
+            "ASC"
+            if current_direction == "DESC"
+            else "DESC"
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO recording_settings (
+                setting_key,
+                setting_value
+            )
+
+            VALUES (%s, %s)
+
+            ON DUPLICATE KEY UPDATE
+                setting_value = VALUES(setting_value)
+            """,
+            (
+                RECORDING_SORT_SETTING_KEY,
+                new_direction
+            )
+        )
+
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "sort_direction": new_direction
+        })
+
+    except Exception as e:
+
+        db.rollback()
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+
 @recording_bp.route(
     "/api/recordings",
     methods=["GET"]
@@ -1407,8 +1549,14 @@ def get_recordings():
         ) * page_size
 
 
+        sort_direction = (
+            get_recording_sort_direction(cursor)
+        )
+
+        # sort_direction is restricted to ASC/DESC by the helper above,
+        # so it is safe to place into the ORDER BY clause.
         cursor.execute(
-            """
+            f"""
             SELECT
                 sr.recording_id,
                 sr.round_no,
@@ -1429,9 +1577,9 @@ def get_recordings():
               AND sr.live_id = %s
 
             ORDER BY
-                sr.round_no ASC,
-                sr.seq ASC,
-                sr.recording_id ASC
+                sr.round_no {sort_direction},
+                sr.seq {sort_direction},
+                sr.recording_id {sort_direction}
 
             LIMIT %s
             OFFSET %s
@@ -1480,6 +1628,9 @@ def get_recordings():
 
             "items":
                 rows,
+
+            "sort_direction":
+                sort_direction,
 
             "pagination": {
 
@@ -1724,6 +1875,122 @@ def update_recording(recording_id):
 
         cursor.close()
         db.close()
+
+@recording_bp.route(
+    "/api/recordings/delete-all",
+    methods=["DELETE"]
+)
+@login_required
+def delete_all_recordings():
+
+    data = request.get_json() or {}
+
+    week_id = str(
+        data.get("week_id", "")
+    ).strip()
+
+    live_id = str(
+        data.get("live_id", "")
+    ).strip()
+
+    store_id = data.get("store_id")
+
+    if not week_id:
+        return jsonify({
+            "success": False,
+            "message": "Week ID is required"
+        }), 400
+
+    if not live_id:
+        return jsonify({
+            "success": False,
+            "message": "LIVE ID is required"
+        }), 400
+
+    if store_id is None:
+        return jsonify({
+            "success": False,
+            "message": "Store ID is required"
+        }), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+        cursor.execute(
+            """
+            SELECT
+                recording_id,
+                sku
+
+            FROM sku_recording
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+            """,
+            (
+                week_id,
+                store_id,
+                live_id
+            )
+        )
+
+        rows = cursor.fetchall()
+
+        if not rows:
+            return jsonify({
+                "success": True,
+                "deleted_rows": 0
+            })
+
+        for row in rows:
+            write_recording_log(
+                cursor=cursor,
+                recording_id=row["recording_id"],
+                action_type="DELETE",
+                old_sku=row["sku"],
+                new_sku=None,
+                store_id=store_id,
+                live_id=live_id
+            )
+
+        cursor.execute(
+            """
+            DELETE FROM sku_recording
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+            """,
+            (
+                week_id,
+                store_id,
+                live_id
+            )
+        )
+
+        deleted_rows = cursor.rowcount
+
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "deleted_rows": deleted_rows
+        })
+
+    except Exception as e:
+        db.rollback()
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+        cursor.close()
+        db.close()
+
 
 @recording_bp.route(
     "/api/recordings/<int:recording_id>",
@@ -1997,8 +2264,13 @@ def download_recordings():
             )
 
 
+        sort_direction = (
+            get_recording_sort_direction(cursor)
+        )
+
+        # Keep CSV in exactly the same Round / Seq direction as the UI.
         cursor.execute(
-            """
+            f"""
             SELECT
                 sr.round_no,
                 sr.seq,
@@ -2017,9 +2289,9 @@ def download_recordings():
               AND sr.live_id = %s
 
             ORDER BY
-                sr.round_no ASC,
-                sr.seq ASC,
-                sr.recording_id ASC
+                sr.round_no {sort_direction},
+                sr.seq {sort_direction},
+                sr.recording_id {sort_direction}
             """,
             (
                 week_id,
