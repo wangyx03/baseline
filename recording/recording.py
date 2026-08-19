@@ -18,7 +18,10 @@ import io
 import math
 
 from db import get_db
-from .inventory_service import get_weekly_item_status
+from .inventory_service import (
+    get_weekly_item_status,
+    get_weekly_item_statuses
+)
 from utils import format_et
 
 recording_bp = Blueprint(
@@ -1595,13 +1598,22 @@ def get_recordings():
 
         rows = cursor.fetchall()
 
+        # Fetch weekly status for the whole page in one query.
+        # Previously this executed one expensive query per row (N+1).
+        weekly_statuses = get_weekly_item_statuses(
+            cursor=cursor,
+            week_id=week_id,
+            store_id=store_id,
+            skus=[
+                row["sku"]
+                for row in rows
+            ]
+        )
+
         for row in rows:
 
-            weekly_status = get_weekly_item_status(
-                cursor=cursor,
-                week_id=week_id,
-                store_id=store_id,
-                sku=row["sku"]
+            weekly_status = weekly_statuses.get(
+                str(row["sku"]).strip()
             )
 
             if (
