@@ -144,6 +144,89 @@ def get_weekly_weeks():
         db.close()
 
 @weekly_bp.route(
+    "/api/weekly-inventory/version",
+    methods=["GET"]
+)
+@login_required
+def get_weekly_inventory_version():
+
+    week_id = str(
+        request.args.get(
+            "week_id",
+            ""
+        )
+    ).strip()
+
+    store_id = request.args.get(
+        "store_id",
+        type=int
+    )
+
+    if not week_id:
+
+        return jsonify({
+            "success": False,
+            "message": "Week ID is required"
+        }), 400
+
+    if store_id is None:
+
+        return jsonify({
+            "success": False,
+            "message": "Store ID is required"
+        }), 400
+
+    db = get_db()
+
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+    try:
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(
+                    MAX(log_id),
+                    0
+                ) AS version
+
+            FROM sku_recording_log
+
+            WHERE week_id = %s
+              AND store_id = %s
+            """,
+            (
+                week_id,
+                store_id
+            )
+        )
+
+        row = cursor.fetchone()
+
+        return jsonify({
+            "success": True,
+            "version": int(
+                row["version"]
+                or 0
+            )
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+
+@weekly_bp.route(
     "/api/weekly-inventory",
     methods=["GET"]
 )
@@ -188,6 +271,36 @@ def get_weekly_inventory():
     )
 
     try:
+
+        # Capture the current log version before the heavier inventory
+        # calculation. If another recording change happens while this
+        # query is running, the next lightweight version check will
+        # detect it and trigger another refresh.
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(
+                    MAX(log_id),
+                    0
+                ) AS version
+
+            FROM sku_recording_log
+
+            WHERE week_id = %s
+              AND store_id = %s
+            """,
+            (
+                week_id,
+                store_id
+            )
+        )
+
+        version_row = cursor.fetchone()
+
+        current_version = int(
+            version_row["version"]
+            or 0
+        )
 
         cursor.execute(
             """
@@ -322,6 +435,8 @@ def get_weekly_inventory():
                 week_id,
             "store_id":
                 store_id,
+            "version":
+                current_version,
             "items":
                 rows
         })

@@ -120,6 +120,7 @@ def write_recording_log(
     action_type,
     old_sku,
     new_sku,
+    week_id,
     store_id,
     live_id
 ):
@@ -131,6 +132,7 @@ def write_recording_log(
             action_type,
             old_sku,
             new_sku,
+            week_id,
             store_id,
             live_id,
             user_id,
@@ -147,6 +149,7 @@ def write_recording_log(
             %s,
             %s,
             %s,
+            %s,
             %s
         )
         """,
@@ -155,6 +158,7 @@ def write_recording_log(
             action_type,
             old_sku,
             new_sku,
+            week_id,
             store_id,
             live_id,
             current_user.id,
@@ -226,6 +230,75 @@ def recording(store_code):
 
         cursor.close()
         db.close()
+
+@recording_bp.route(
+    "/api/recordings/version",
+    methods=["GET"]
+)
+@login_required
+def recording_version():
+
+    week_id = str(
+        request.args.get("week_id", "")
+    ).strip()
+
+    store_id = request.args.get(
+        "store_id",
+        type=int
+    )
+
+    live_id = str(
+        request.args.get("live_id", "")
+    ).strip()
+
+    if not week_id or store_id is None or not live_id:
+        return jsonify({
+            "success": False,
+            "message": "Week ID, Store ID and LIVE ID are required"
+        }), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(MAX(log_id), 0) AS version
+
+            FROM sku_recording_log
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+            """,
+            (
+                week_id,
+                store_id,
+                live_id
+            )
+        )
+
+        row = cursor.fetchone()
+
+        return jsonify({
+            "success": True,
+            "version": int(row["version"] or 0)
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+
+        cursor.close()
+        db.close()
+
 
 @recording_bp.route(
     "/api/recordings/session-info",
@@ -624,6 +697,7 @@ def record():
             action_type="CREATE",
             old_sku=None,
             new_sku=sku,
+            week_id=week_id,
             store_id=store_id,
             live_id=live_id
         )
@@ -1025,6 +1099,7 @@ def insert_recording_before():
             action_type="CREATE",
             old_sku=None,
             new_sku=sku,
+            week_id=week_id,
             store_id=store_id,
             live_id=live_id
         )
@@ -1336,6 +1411,19 @@ def change_recorded_live_id():
 
 
         changed_rows = cursor.rowcount
+
+        # One session-level log entry is enough to signal all clients
+        # that this Recording session changed.
+        write_recording_log(
+            cursor=cursor,
+            recording_id=None,
+            action_type="RENAME_LIVE",
+            old_sku=None,
+            new_sku=None,
+            week_id=week_id,
+            store_id=store_id,
+            live_id=new_live_id
+        )
 
 
         db.commit()
@@ -1860,6 +1948,7 @@ def update_recording(recording_id):
             action_type="UPDATE",
             old_sku=old_sku,
             new_sku=sku,
+            week_id=week_id,
             store_id=store_id,
             live_id=live_id
         )
@@ -1963,6 +2052,7 @@ def delete_all_recordings():
                 action_type="DELETE",
                 old_sku=row["sku"],
                 new_sku=None,
+            week_id=week_id,
                 store_id=store_id,
                 live_id=live_id
             )
@@ -2165,6 +2255,7 @@ def delete_recording(recording_id):
             action_type="DELETE",
             old_sku=old_sku,
             new_sku=None,
+            week_id=week_id,
             store_id=store_id,
             live_id=live_id
         )

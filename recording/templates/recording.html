@@ -843,6 +843,87 @@ let insertBeforeSeq = null;
 
 let recordingRefreshTimer = null;
 
+let lastRecordingVersion = null;
+
+let recordingVersionCheckRunning = false;
+
+
+async function checkRecordingVersion() {
+
+    if (
+        recordingVersionCheckRunning
+        ||
+        !currentWeekId
+        ||
+        !currentLiveId
+    ) {
+        return;
+    }
+
+    recordingVersionCheckRunning = true;
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/recordings/version"
+                + "?week_id="
+                + encodeURIComponent(currentWeekId)
+                + "&store_id="
+                + encodeURIComponent(STORE_ID)
+                + "&live_id="
+                + encodeURIComponent(currentLiveId),
+                {
+                    cache: "no-store"
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+            return;
+        }
+
+        const version =
+            Number(data.version || 0);
+
+        if (lastRecordingVersion === null) {
+
+            lastRecordingVersion = version;
+
+            return;
+        }
+
+        if (version !== lastRecordingVersion) {
+
+            lastRecordingVersion = version;
+
+            await loadRecordings(
+                currentPage
+            );
+        }
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Recording version check failed:",
+            error
+        );
+    }
+
+    finally {
+
+        recordingVersionCheckRunning = false;
+    }
+}
+
 
 function startRecordingAutoRefresh() {
 
@@ -858,21 +939,7 @@ function startRecordingAutoRefresh() {
 
     recordingRefreshTimer =
         setInterval(
-            async function() {
-
-                if (
-                    !currentWeekId
-                    ||
-                    !currentLiveId
-                ) {
-                    return;
-                }
-
-                await loadRecordings(
-                    currentPage
-                );
-
-            },
+            checkRecordingVersion,
             2000
         );
 
@@ -1080,6 +1147,9 @@ function saveRecordingSession() {
 // =========================================================
 
 function clearRecordingSession() {
+
+
+    lastRecordingVersion = null;
 
 
     sessionStorage.removeItem(
