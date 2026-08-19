@@ -696,9 +696,28 @@
                 Previous
             </button>
 
+            <span>
+                Page
 
-            <span id="pageText">
-                Page 1 / 1
+                <input
+                    id="pageInput"
+                    type="number"
+                    min="1"
+                    value="1"
+                    style="
+                        width: 60px;
+                        padding: 8px 6px;
+                        font-size: 16px;
+                        text-align: center;
+                    "
+                    onkeydown="
+                        if (event.key === 'Enter') {
+                            goToPage();
+                        }
+                    "
+                >
+
+                / <span id="totalPagesText">1</span>
             </span>
 
 
@@ -2684,17 +2703,36 @@ function updatePagination(
     p
 ) {
 
+    const pageInput =
+        document.getElementById(
+            "pageInput"
+        );
+
+
+    // 用户正在输入页码时，
+    // 2秒自动刷新不要覆盖他的输入
+    if (
+        document.activeElement
+        !==
+        pageInput
+    ) {
+
+        pageInput.value =
+            p.page;
+
+    }
+
+
+    pageInput.max =
+        p.total_pages;
+
 
     document
         .getElementById(
-            "pageText"
+            "totalPagesText"
         )
         .textContent =
-
-            "Page "
-            + p.page
-            + " / "
-            + p.total_pages;
+            p.total_pages;
 
 
     document
@@ -2728,6 +2766,69 @@ function updatePagination(
 
 }
 
+function goToPage() {
+
+    const pageInput =
+        document.getElementById(
+            "pageInput"
+        );
+
+
+    let page =
+        parseInt(
+            pageInput.value
+        );
+
+
+    if (
+        isNaN(page)
+    ) {
+
+        pageInput.value =
+            currentPage;
+
+        return;
+
+    }
+
+
+    if (
+        page < 1
+    ) {
+
+        page = 1;
+
+    }
+
+
+    if (
+        page > totalPages
+    ) {
+
+        page =
+            totalPages;
+
+    }
+
+
+    pageInput.value =
+        page;
+
+
+    if (
+        page === currentPage
+    ) {
+
+        return;
+
+    }
+
+
+    loadRecordings(
+        page
+    );
+
+}
 
 function previousPage() {
 
