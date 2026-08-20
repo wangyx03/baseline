@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse
+from zoneinfo import ZoneInfo
 
 from flask import (
     Blueprint,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -144,6 +147,144 @@ def load_user(user_id):
         module_permissions
     )
 
+
+
+# =========================
+# Session Policy
+# =========================
+
+SESSION_IDLE_DAYS = 7
+
+SESSION_ABSOLUTE_DAYS = 30
+
+SESSION_TIMEZONE = ZoneInfo(
+    "America/New_York"
+)
+
+ABSOLUTE_TIMEOUT_EXEMPT_PATHS = {
+    "/api/recordings/version",
+}
+
+
+def get_client_ip():
+
+    cloudflare_ip = (
+        request.headers
+        .get(
+            "CF-Connecting-IP",
+            ""
+        )
+        .strip()
+    )
+
+    if cloudflare_ip:
+        return cloudflare_ip[:45]
+
+    forwarded_for = (
+        request.headers
+        .get(
+            "X-Forwarded-For",
+            ""
+        )
+        .split(",")[0]
+        .strip()
+    )
+
+    if forwarded_for:
+        return forwarded_for[:45]
+
+    return (
+        request.remote_addr
+        or ""
+    )[:45]
+
+
+def enforce_absolute_session_timeout():
+
+    if not current_user.is_authenticated:
+        return None
+
+    if request.path in ABSOLUTE_TIMEOUT_EXEMPT_PATHS:
+        return None
+
+    login_started_date = session.get(
+        "login_started_date"
+    )
+
+    if not login_started_date:
+
+        # Existing sessions created before this feature was added:
+        # start their 30-day window from the first non-exempt request.
+        session["login_started_date"] = (
+            datetime.now(
+                SESSION_TIMEZONE
+            )
+            .date()
+            .isoformat()
+        )
+
+        return None
+
+    try:
+
+        started_date = (
+            datetime.fromisoformat(
+                login_started_date
+            )
+            .date()
+        )
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        logout_user()
+        session.clear()
+
+        return redirect(
+            url_for(
+                "auth.login"
+            )
+        )
+
+    today = (
+        datetime.now(
+            SESSION_TIMEZONE
+        )
+        .date()
+    )
+
+    if (
+        today
+        <
+        started_date
+        +
+        timedelta(
+            days=SESSION_ABSOLUTE_DAYS
+        )
+    ):
+
+        return None
+
+    logout_user()
+    session.clear()
+
+    if request.path.startswith(
+        "/api/"
+    ):
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Login expired. Please log in again."
+        }), 401
+
+    return redirect(
+        url_for(
+            "auth.login"
+        )
+    )
 
 
 # =========================
@@ -305,7 +446,15 @@ def login():
                 remember=False
             )
 
-            session.permanent = False
+            session.permanent = True
+
+            session["login_started_date"] = (
+                datetime.now(
+                    SESSION_TIMEZONE
+                )
+                .date()
+                .isoformat()
+            )
 
 
             db = get_db()
@@ -319,11 +468,13 @@ def login():
                     UPDATE login_info
 
                     SET
-                        last_login_at = NOW()
+                        last_login_at = NOW(),
+                        last_login_ip = %s
 
                     WHERE user_id = %s
                     """,
                     (
+                        get_client_ip(),
                         row["user_id"],
                     )
                 )
@@ -379,6 +530,16 @@ def logout():
 
 def init_auth(app):
 
+    app.config[
+        "PERMANENT_SESSION_LIFETIME"
+    ] = timedelta(
+        days=SESSION_IDLE_DAYS
+    )
+
+    app.config[
+        "SESSION_REFRESH_EACH_REQUEST"
+    ] = True
+
     login_manager.init_app(
         app
     )
@@ -393,4 +554,8 @@ def init_auth(app):
 
     login_manager.user_loader(
         load_user
+    )
+
+    app.before_request(
+        enforce_absolute_session_timeout
     )
