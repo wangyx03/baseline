@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import secrets
 from urllib.parse import urljoin, urlparse
 from zoneinfo import ZoneInfo
 
@@ -104,16 +105,30 @@ def load_user(user_id):
         cursor.execute(
             """
             SELECT
-                user_id,
-                username,
-                staff_id,
-                is_active
+                li.user_id,
+                li.username,
+                li.staff_id,
+                li.is_active,
 
-            FROM login_info
+                EXISTS (
+                    SELECT 1
 
-            WHERE user_id = %s
+                    FROM user_sessions us
+
+                    WHERE us.user_id =
+                              li.user_id
+                      AND us.session_token = %s
+                      AND us.is_active = TRUE
+                ) AS device_session_valid
+
+            FROM login_info li
+
+            WHERE li.user_id = %s
             """,
             (
+                session.get(
+                    "device_session_token"
+                ),
                 user_id,
             )
         )
@@ -130,6 +145,13 @@ def load_user(user_id):
 
         cursor.close()
         db.close()
+
+
+    if not row[
+        "device_session_valid"
+    ]:
+
+        return None
 
 
     module_permissions = (
@@ -239,6 +261,7 @@ def enforce_absolute_session_timeout():
         ValueError
     ):
 
+        deactivate_current_device_session()
         logout_user()
         session.clear()
 
@@ -267,6 +290,7 @@ def enforce_absolute_session_timeout():
 
         return None
 
+    deactivate_current_device_session()
     logout_user()
     session.clear()
 
@@ -285,6 +309,168 @@ def enforce_absolute_session_timeout():
             "auth.login"
         )
     )
+
+
+# =========================
+# Login Device Sessions
+# =========================
+
+MAX_ACTIVE_SESSIONS = 3
+
+
+def deactivate_current_device_session():
+
+    session_token = session.get(
+        "device_session_token"
+    )
+
+    if not session_token:
+        return
+
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+
+        cursor.execute(
+            """
+            UPDATE user_sessions
+            SET is_active = FALSE
+            WHERE session_token = %s
+            """,
+            (
+                session_token,
+            )
+        )
+
+        db.commit()
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+
+def create_device_session(user_id):
+
+    session_token = secrets.token_urlsafe(
+        48
+    )
+
+    db = get_db()
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+    try:
+
+        # Lock this user's active rows while we decide which one to evict.
+        cursor.execute(
+            """
+            SELECT
+                session_id
+
+            FROM user_sessions
+
+            WHERE user_id = %s
+              AND is_active = TRUE
+
+            ORDER BY
+                created_at ASC,
+                session_id ASC
+
+            FOR UPDATE
+            """,
+            (
+                user_id,
+            )
+        )
+
+        active_rows = cursor.fetchall()
+
+        if (
+            len(active_rows)
+            >=
+            MAX_ACTIVE_SESSIONS
+        ):
+
+            sessions_to_disable = (
+                len(active_rows)
+                -
+                MAX_ACTIVE_SESSIONS
+                +
+                1
+            )
+
+            oldest_session_ids = [
+                row["session_id"]
+                for row
+                in active_rows[
+                    :sessions_to_disable
+                ]
+            ]
+
+            placeholders = ", ".join(
+                ["%s"]
+                *
+                len(oldest_session_ids)
+            )
+
+            cursor.execute(
+                f"""
+                UPDATE user_sessions
+
+                SET is_active = FALSE
+
+                WHERE session_id IN (
+                    {placeholders}
+                )
+                """,
+                tuple(
+                    oldest_session_ids
+                )
+            )
+
+        cursor.execute(
+            """
+            INSERT INTO user_sessions
+            (
+                user_id,
+                session_token,
+                login_ip,
+                is_active
+            )
+
+            VALUES
+            (
+                %s,
+                %s,
+                %s,
+                TRUE
+            )
+            """,
+            (
+                user_id,
+                session_token,
+                get_client_ip(),
+            )
+        )
+
+        db.commit()
+
+    except Exception:
+
+        db.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+    session[
+        "device_session_token"
+    ] = session_token
 
 
 # =========================
@@ -456,6 +642,10 @@ def login():
                 .isoformat()
             )
 
+            create_device_session(
+                row["user_id"]
+            )
+
 
             db = get_db()
 
@@ -512,6 +702,8 @@ def login():
 )
 @login_required
 def logout():
+
+    deactivate_current_device_session()
 
     logout_user()
 
