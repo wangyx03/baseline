@@ -145,41 +145,6 @@ def load_user(user_id):
     )
 
 
-# =========================
-# Update Last Seen
-# =========================
-
-def update_last_seen():
-
-    if not current_user.is_authenticated:
-        return
-
-    db = get_db()
-
-    cursor = db.cursor()
-
-    try:
-
-        cursor.execute(
-            """
-            UPDATE login_info
-
-            SET last_seen_at = NOW()
-
-            WHERE user_id = %s
-            """,
-            (
-                current_user.id,
-            )
-        )
-
-        db.commit()
-
-    finally:
-
-        cursor.close()
-        db.close()
-
 
 # =========================
 # Safe URL Check
@@ -354,8 +319,7 @@ def login():
                     UPDATE login_info
 
                     SET
-                        last_login_at = NOW(),
-                        last_seen_at = NOW()
+                        last_login_at = NOW()
 
                     WHERE user_id = %s
                     """,
@@ -429,8 +393,4 @@ def init_auth(app):
 
     login_manager.user_loader(
         load_user
-    )
-
-    app.before_request(
-        update_last_seen
     )
