@@ -350,6 +350,126 @@
             line-height: 1;
         }
 
+
+        /* =====================================================
+           Round controls - responsive two-row layout
+           ===================================================== */
+
+        .round-actions {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .round-actions button {
+            width: 100%;
+            min-width: 0;
+            padding: 9px 6px;
+            font-size: 14px;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+
+        .round-set-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .round-set-row span {
+            flex: 0 0 auto;
+            font-weight: 600;
+        }
+
+        .round-set-row input {
+            flex: 0 0 70px;
+            width: 70px;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+
+        .round-set-row button {
+            flex: 0 0 auto;
+            padding: 9px 14px;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 900px) {
+            .round-actions {
+                grid-template-columns: 1fr;
+            }
+        }
+
+
+        /* =====================================================
+           Compact recording table on narrower / half-screen views
+           ===================================================== */
+
+        @media (max-width: 1400px) {
+
+            .right-panel {
+                padding-top: 24px;
+                padding-bottom: 24px;
+            }
+
+            .right-header {
+                margin-bottom: 14px;
+            }
+
+            table th,
+            table td {
+                padding-top: 6px;
+                padding-bottom: 6px;
+            }
+
+            table td {
+                line-height: 1.15;
+            }
+
+            .sku-edit {
+                height: 30px;
+                padding: 3px 7px;
+                box-sizing: border-box;
+            }
+
+            .action-buttons {
+                gap: 4px;
+                flex-wrap: nowrap;
+            }
+
+            .action-buttons button {
+                padding: 5px 8px;
+                font-size: 13px;
+                line-height: 1.1;
+                white-space: nowrap;
+            }
+
+            .pagination {
+                margin-top: 12px;
+            }
+        }
+
+        @media (max-width: 1100px) {
+
+            table th,
+            table td {
+                padding-top: 4px;
+                padding-bottom: 4px;
+            }
+
+            .sku-edit {
+                height: 28px;
+                padding: 2px 6px;
+            }
+
+            .action-buttons button {
+                padding: 4px 7px;
+                font-size: 12px;
+            }
+        }
+
     </style>
 
 </head>
@@ -470,7 +590,7 @@
             </strong>
 
 
-            <div class="round-row">
+            <div class="round-actions">
 
                 <button
                     type="button"
@@ -479,6 +599,30 @@
                     Start New Round
                 </button>
 
+                <button
+                    type="button"
+                    id="mergeRoundButton"
+                    onclick="mergePreviousRound()"
+                >
+                    Merge Previous
+                </button>
+
+                <button
+                    type="button"
+                    id="splitRoundButton"
+                    onclick="splitCurrentRound()"
+                >
+                    Split Round
+                </button>
+
+            </div>
+
+
+            <div class="round-set-row">
+
+                <span>
+                    Round
+                </span>
 
                 <input
                     id="roundInput"
@@ -486,7 +630,6 @@
                     min="1"
                     value="1"
                 >
-
 
                 <button
                     type="button"
@@ -1033,6 +1176,18 @@ const currentRoundText =
 const roundInput =
     document.getElementById(
         "roundInput"
+    );
+
+
+const mergeRoundButton =
+    document.getElementById(
+        "mergeRoundButton"
+    );
+
+
+const splitRoundButton =
+    document.getElementById(
+        "splitRoundButton"
     );
 
 
@@ -2013,6 +2168,379 @@ function updateRoundDisplay() {
     roundInput.value =
         currentRound;
 
+
+    if (mergeRoundButton) {
+
+        mergeRoundButton.disabled =
+            currentRound <= 1;
+
+    }
+
+}
+
+
+async function mergePreviousRound() {
+
+
+    if (
+        !currentWeekId
+        ||
+        !currentLiveId
+    ) {
+
+        showMessage(
+            "Start LIVE first.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    if (currentRound <= 1) {
+
+        showMessage(
+            "Round 1 has no previous round.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    const previousRound =
+        currentRound - 1;
+
+
+    const confirmed =
+        confirm(
+            "Merge Round "
+            + currentRound
+            + " into Round "
+            + previousRound
+            + "?\n\n"
+            + "Items in the current round will be appended "
+            + "to the previous round.\n"
+            + "Later rounds will be renumbered automatically."
+        );
+
+
+    if (!confirmed) {
+        return;
+    }
+
+
+    mergeRoundButton.disabled =
+        true;
+
+    splitRoundButton.disabled =
+        true;
+
+
+    try {
+
+
+        const response =
+            await fetch(
+                "/api/recordings/merge-previous-round",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body:
+                        JSON.stringify({
+                            week_id:
+                                currentWeekId,
+                            store_id:
+                                STORE_ID,
+                            live_id:
+                                currentLiveId,
+                            round_no:
+                                currentRound
+                        })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+
+            showMessage(
+                data.message
+                ||
+                "Could not merge rounds.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        currentRound =
+            Number(
+                data.result_round
+            );
+
+
+        updateRoundDisplay();
+
+        currentPage = 1;
+
+        saveRecordingSession();
+
+
+        showMessage(
+            "✓ Merged "
+            + data.moved_items
+            + " items into Round "
+            + currentRound
+            + ". Round "
+            + currentRound
+            + " now has "
+            + data.result_items
+            + " items.",
+            "success"
+        );
+
+
+        await loadRecordings(
+            1
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        showMessage(
+            "Could not merge rounds.",
+            "error"
+        );
+
+    }
+
+    finally {
+
+        updateRoundDisplay();
+
+        splitRoundButton.disabled =
+            false;
+
+        skuInput.focus();
+
+    }
+
+}
+
+
+async function splitCurrentRound() {
+
+
+    if (
+        !currentWeekId
+        ||
+        !currentLiveId
+    ) {
+
+        showMessage(
+            "Start LIVE first.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    const answer =
+        prompt(
+            "How many items should remain in Round "
+            + currentRound
+            + "?\n\n"
+            + "Example: enter 50 to keep the first 50 items "
+            + "in this Round. The rest will move into a new "
+            + "Round "
+            + (currentRound + 1)
+            + "."
+        );
+
+
+    if (answer === null) {
+        return;
+    }
+
+
+    const keepCount =
+        parseInt(
+            answer,
+            10
+        );
+
+
+    if (
+        Number.isNaN(
+            keepCount
+        )
+        ||
+        keepCount < 1
+    ) {
+
+        showMessage(
+            "Enter a valid number of items to keep.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    const confirmed =
+        confirm(
+            "Split Round "
+            + currentRound
+            + " after its first "
+            + keepCount
+            + " items?\n\n"
+            + "The remaining items will become Round "
+            + (currentRound + 1)
+            + ".\n"
+            + "Existing later rounds will move back by one."
+        );
+
+
+    if (!confirmed) {
+        return;
+    }
+
+
+    mergeRoundButton.disabled =
+        true;
+
+    splitRoundButton.disabled =
+        true;
+
+
+    try {
+
+
+        const response =
+            await fetch(
+                "/api/recordings/split-round",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body:
+                        JSON.stringify({
+                            week_id:
+                                currentWeekId,
+                            store_id:
+                                STORE_ID,
+                            live_id:
+                                currentLiveId,
+                            round_no:
+                                currentRound,
+                            keep_count:
+                                keepCount
+                        })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+
+            showMessage(
+                data.message
+                ||
+                "Could not split round.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        // Continue working in the newly-created Round.
+        currentRound =
+            Number(
+                data.new_round
+            );
+
+
+        updateRoundDisplay();
+
+        currentPage = 1;
+
+        saveRecordingSession();
+
+
+        showMessage(
+            "✓ Split complete. "
+            + data.kept_items
+            + " items remain in Round "
+            + data.original_round
+            + "; "
+            + data.moved_items
+            + " items moved to Round "
+            + data.new_round
+            + ".",
+            "success"
+        );
+
+
+        await loadRecordings(
+            1
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        showMessage(
+            "Could not split round.",
+            "error"
+        );
+
+    }
+
+    finally {
+
+        updateRoundDisplay();
+
+        splitRoundButton.disabled =
+            false;
+
+        skuInput.focus();
+
+    }
+
 }
 
 
@@ -2303,8 +2831,11 @@ async function recordSku(
         );
 
 
+        currentPage =
+            1;
+
         await loadRecordings(
-            999999
+            1
         );
 
 

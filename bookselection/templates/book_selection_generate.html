@@ -1,0 +1,3582 @@
+{% extends "base.html" %}
+
+{% block title %}
+Book Selection
+{% endblock %}
+
+
+{% block styles %}
+
+.page-container {
+    max-width: 1500px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.page-header h1 {
+    margin: 0;
+    font-size: 28px;
+}
+
+
+.confirm-btn {
+    min-width: 110px;
+}
+
+.confirm-btn.confirmed {
+    background: #555;
+}
+
+.panel {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 18px;
+    margin-bottom: 18px;
+}
+
+.controls {
+    display: flex;
+    align-items: end;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+label {
+    font-weight: 600;
+}
+
+select,
+input[type="number"] {
+    width: 180px;
+    padding: 9px 10px;
+    border: 1px solid #bbb;
+    border-radius: 5px;
+    background: white;
+    font-size: 15px;
+}
+
+#batchSelect {
+    width: 310px;
+}
+
+button {
+    padding: 10px 18px;
+    border: 0;
+    border-radius: 6px;
+    background: #111;
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #333;
+}
+
+button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.store-settings {
+    display: grid;
+    grid-template-columns: 110px 180px 180px 180px;
+    gap: 12px 16px;
+    align-items: center;
+    margin-top: 16px;
+}
+
+.store-settings .header {
+    font-weight: 700;
+    color: #555;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(auto-fit, minmax(250px, 1fr));
+    gap: 14px;
+}
+
+.summary-card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 14px;
+    background: #fff;
+}
+
+.summary-card h3 {
+    margin: 0 0 10px 0;
+}
+
+.summary-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 0;
+}
+
+.warning-box {
+    display: none;
+    border: 1px solid #e0b04c;
+    background: #fff8e6;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+}
+
+.warning-box.show {
+    display: block;
+}
+
+.warning-box ul {
+    margin: 8px 0 0 20px;
+    padding: 0;
+}
+
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.tab-btn {
+    background: #e9ebee;
+    color: #1f2329;
+}
+
+.tab-btn.active {
+    background: #111;
+    color: white;
+}
+
+.table-wrap {
+    overflow-x: auto;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+th,
+td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #e5e5e5;
+    text-align: left;
+    font-size: 14px;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+th {
+    background: #f0f0f0;
+}
+
+th.sortable {
+    cursor: pointer;
+    user-select: text;
+}
+
+th.sortable:hover {
+    background: #e7e7e7;
+}
+
+.sort-arrow {
+    margin-left: 4px;
+    color: #666;
+    font-size: 11px;
+}
+
+.num {
+    text-align: right;
+}
+
+.role-resident {
+    font-weight: 700;
+}
+
+.shared-row td {
+    background: #fff8e6;
+}
+
+.status {
+    min-height: 20px;
+    margin-top: 12px;
+    color: #555;
+}
+
+.status.error {
+    color: #b00020;
+}
+
+.status.success {
+    color: #16794b;
+}
+
+.empty {
+    padding: 28px;
+    text-align: center;
+    color: #666;
+}
+
+@media (max-width: 760px) {
+    .store-settings {
+        grid-template-columns: 1fr;
+    }
+
+    .store-settings .header {
+        display: none;
+    }
+}
+
+
+.edit-sku {
+    width: 145px;
+    padding: 6px 7px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.edit-qty {
+    width: 90px;
+    padding: 6px 7px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-size: 13px;
+    text-align: right;
+}
+
+
+.stock-warning {
+    color: #b00020;
+    font-weight: 700;
+}
+
+.stock-safe {
+    font-weight: 600;
+}
+
+.row-action-btn {
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+.manual-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+
+.unused-controls {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.unused-controls.show {
+    display: flex;
+}
+
+.unused-controls input,
+.unused-controls select {
+    width: 180px;
+}
+
+.add-store-btn {
+    padding: 6px 10px;
+    font-size: 13px;
+    margin-right: 6px;
+}
+
+.add-store-btn:disabled {
+    opacity: 0.45;
+}
+
+.loaded-week {
+    font-weight: 700;
+}
+
+
+{% endblock %}
+
+
+{% block content %}
+
+<div class="page-container">
+
+    <div class="page-header">
+        <h1>Book Selection</h1>
+
+        <button
+            id="confirmBtn"
+            type="button"
+            class="confirm-btn"
+            disabled
+        >
+            Confirm
+        </button>
+    </div>
+
+    <div class="panel">
+
+        <div class="controls">
+
+            <div class="field">
+                <label for="batchSelect">
+                    Candidate Batch
+                </label>
+                <select id="batchSelect">
+                    <option value="">
+                        Loading...
+                    </option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="targetWeek">
+                    Target Week
+                </label>
+                <select id="targetWeek">
+                    <option value="">
+                        Select week
+                    </option>
+                </select>
+            </div>
+
+
+            <div class="field">
+                <label for="reserveQty">
+                    Min Reserve Qty
+                </label>
+                <input
+                    id="reserveQty"
+                    type="number"
+                    min="0"
+                    value="5"
+                >
+            </div>
+
+            <button
+                id="generateBtn"
+                type="button"
+            >
+                Generate Book Selection
+            </button>
+
+
+        </div>
+
+
+        <div class="store-settings">
+
+            <div class="header">
+                Store
+            </div>
+
+            <div class="header">
+                Books
+            </div>
+
+            <div class="header">
+                Planned Qty
+            </div>
+
+            <div class="header">
+                Spice %
+            </div>
+
+
+            <strong>VB</strong>
+
+            <input
+                id="vbBooks"
+                type="number"
+                min="0"
+                value="100"
+            >
+
+            <input
+                id="vbQty"
+                type="number"
+                min="0"
+                value="5000"
+            >
+
+            <input
+                id="vbSpice"
+                type="number"
+                min="0"
+                max="100"
+                value="100"
+            >
+
+
+            <strong>TU</strong>
+
+            <input
+                id="tuBooks"
+                type="number"
+                min="0"
+                value="100"
+            >
+
+            <input
+                id="tuQty"
+                type="number"
+                min="0"
+                value="5000"
+            >
+
+            <input
+                id="tuSpice"
+                type="number"
+                min="0"
+                max="100"
+                value="0"
+            >
+
+        </div>
+
+        <div
+            id="status"
+            class="status"
+        ></div>
+
+    </div>
+
+
+    <div
+        id="warningBox"
+        class="warning-box"
+    >
+        <strong>Warnings</strong>
+        <ul id="warningList"></ul>
+    </div>
+
+
+    <div
+        id="summaryPanel"
+        class="panel"
+        style="display:none;"
+    >
+        <div
+            id="summaryGrid"
+            class="summary-grid"
+        ></div>
+    </div>
+
+
+    <div
+        id="resultPanel"
+        style="display:none;"
+    >
+
+        <div class="manual-toolbar">
+
+            <div class="tabs">
+                <button
+                    class="tab-btn active"
+                    data-store="VB"
+                    type="button"
+                >
+                    VB
+                </button>
+
+                <button
+                    class="tab-btn"
+                    data-store="TU"
+                    type="button"
+                >
+                    TU
+                </button>
+
+                <button
+                    class="tab-btn"
+                    data-store="Unused"
+                    type="button"
+                >
+                    Unused
+                </button>
+            </div>
+
+            <button
+                id="addBookBtn"
+                type="button"
+            >
+                Add Book
+            </button>
+
+        </div>
+
+        <div
+            id="unusedControls"
+            class="unused-controls"
+        >
+            <input
+                id="unusedSearch"
+                type="text"
+                placeholder="Search SKU / Book Title"
+            >
+
+            <select id="unusedSpiceFilter">
+                <option value="all">
+                    All Types
+                </option>
+                <option value="spice">
+                    Spice
+                </option>
+                <option value="non-spice">
+                    Non-Spice
+                </option>
+            </select>
+
+            <select id="unusedSort">
+                <option value="available_desc">
+                    Available Qty ↓
+                </option>
+                <option value="available_asc">
+                    Available Qty ↑
+                </option>
+                <option value="stock_desc">
+                    Candidate Stock ↓
+                </option>
+                <option value="stock_asc">
+                    Candidate Stock ↑
+                </option>
+                <option value="title_asc">
+                    Book Title A-Z
+                </option>
+            </select>
+        </div>
+
+        <div class="table-wrap">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th
+                            class="sortable"
+                            data-sort-key="sku"
+                        >
+                            SKU
+                            <span class="sort-arrow"></span>
+                        </th>
+
+                        <th
+                            class="sortable"
+                            data-sort-key="book_title"
+                        >
+                            Book Title
+                            <span class="sort-arrow"></span>
+                        </th>
+
+                        <th
+                            class="sortable"
+                            data-sort-key="spice_type"
+                        >
+                            Spice Type
+                            <span class="sort-arrow"></span>
+                        </th>
+
+                        <th
+                            class="sortable"
+                            data-sort-key="role"
+                        >
+                            Role
+                            <span class="sort-arrow"></span>
+                        </th>
+
+                        <th
+                            class="sortable num"
+                            data-sort-key="candidate_stock"
+                            data-sort-type="number"
+                        >
+                            Candidate Stock
+                            <span class="sort-arrow"></span>
+                        </th>
+
+                        <th
+                            class="sortable num"
+                            data-sort-key="planned_qty"
+                            data-sort-type="number"
+                        >
+                            Planned Qty
+                            <span class="sort-arrow"></span>
+                        </th>
+
+                        <th
+                            class="sortable"
+                            data-sort-key="shared_across_store"
+                        >
+                            Shared
+                            <span class="sort-arrow"></span>
+                        </th>
+
+                        <th>
+                            Action
+                        </th>
+                    </tr>
+                </thead>
+
+                <tbody id="resultBody">
+                    <tr>
+                        <td
+                            colspan="8"
+                            class="empty"
+                        >
+                            Generate a Book Selection to view results.
+                        </td>
+                    </tr>
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+
+{% block scripts %}
+
+<script>
+
+(function () {
+
+    const batchSelect =
+        document.getElementById("batchSelect");
+
+    const targetWeek =
+        document.getElementById("targetWeek");
+
+    const reserveQty =
+        document.getElementById("reserveQty");
+
+    const vbBooks =
+        document.getElementById("vbBooks");
+
+    const vbQty =
+        document.getElementById("vbQty");
+
+    const tuBooks =
+        document.getElementById("tuBooks");
+
+    const tuQty =
+        document.getElementById("tuQty");
+
+    const vbSpice =
+        document.getElementById("vbSpice");
+
+    const tuSpice =
+        document.getElementById("tuSpice");
+
+    const generateBtn =
+        document.getElementById("generateBtn");
+
+    const confirmBtn =
+        document.getElementById("confirmBtn");
+
+    const status =
+        document.getElementById("status");
+
+    const warningBox =
+        document.getElementById("warningBox");
+
+    const warningList =
+        document.getElementById("warningList");
+
+    const summaryPanel =
+        document.getElementById("summaryPanel");
+
+    const summaryGrid =
+        document.getElementById("summaryGrid");
+
+    const resultPanel =
+        document.getElementById("resultPanel");
+
+    const resultBody =
+        document.getElementById("resultBody");
+
+    const addBookBtn =
+        document.getElementById("addBookBtn");
+
+
+    const unusedControls =
+        document.getElementById("unusedControls");
+
+    const unusedSearch =
+        document.getElementById("unusedSearch");
+
+    const unusedSpiceFilter =
+        document.getElementById("unusedSpiceFilter");
+
+    const unusedSort =
+        document.getElementById("unusedSort");
+
+    let currentStore = "VB";
+    let itemsByStore = {
+        VB: [],
+        TU: []
+    };
+
+    let sortKey = "planned_qty";
+    let sortDirection = "desc";
+    let batchMeta = {};
+    let lastPayload = null;
+    let hasGeneratedResult = false;
+    let loadedExistingWeek = false;
+
+    let candidatePool = [];
+
+
+    async function loadCandidatePool() {
+
+        const batchId =
+            Number(
+                batchSelect.value
+            );
+
+        if (!batchId) {
+            candidatePool = [];
+            return;
+        }
+
+        const response =
+            await fetch(
+                `/api/next-week-candidates/batches/${batchId}`
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message
+                ||
+                "Failed to load Candidate Batch."
+            );
+        }
+
+        candidatePool =
+            Array.isArray(
+                data.items
+            )
+            ? data.items.map(
+                item => ({
+                    sku:
+                        String(
+                            item.sku
+                            || ""
+                        ).trim(),
+                    book_title:
+                        item.book_title
+                        || "",
+                    spice_type:
+                        item.spice_type
+                        || "",
+                    candidate_stock:
+                        Number(
+                            item.candidate_stock
+                            || 0
+                        )
+                })
+            )
+            : [];
+    }
+
+
+    function storeHasSku(
+        store,
+        sku
+    ) {
+
+        return (
+            itemsByStore[
+                store
+            ]
+            || []
+        ).some(
+            item =>
+                String(
+                    item.sku
+                    || ""
+                ).trim()
+                ===
+                String(
+                    sku
+                    || ""
+                ).trim()
+        );
+    }
+
+
+    function candidateBaseStock(
+        sku
+    ) {
+
+        const found =
+            candidatePool.find(
+                item =>
+                    item.sku
+                    ===
+                    String(
+                        sku
+                        || ""
+                    ).trim()
+            );
+
+        return found
+            ? Number(
+                found.candidate_stock
+                || 0
+            )
+            : 0;
+    }
+
+
+    function unusedAvailableQty(
+        sku
+    ) {
+
+        const base =
+            candidateBaseStock(
+                sku
+            );
+
+        const reserve =
+            Number(
+                reserveQty.value
+                || 0
+            );
+
+        return Math.max(
+            0,
+            base
+            -
+            totalPlannedForSku(
+                sku
+            )
+            -
+            reserve
+        );
+    }
+
+
+    function getUnusedItems() {
+
+        const search =
+            String(
+                unusedSearch.value
+                || ""
+            )
+            .trim()
+            .toLowerCase();
+
+        const filter =
+            unusedSpiceFilter.value;
+
+        let rows =
+            candidatePool
+                .map(
+                    item => {
+
+                        const availableQty =
+                            unusedAvailableQty(
+                                item.sku
+                            );
+
+                        return {
+                            ...item,
+                            available_qty:
+                                availableQty,
+                            in_vb:
+                                storeHasSku(
+                                    "VB",
+                                    item.sku
+                                ),
+                            in_tu:
+                                storeHasSku(
+                                    "TU",
+                                    item.sku
+                                )
+                        };
+                    }
+                )
+                .filter(
+                    item =>
+                        item.available_qty
+                        >
+                        0
+                );
+
+        if (search) {
+            rows =
+                rows.filter(
+                    item =>
+                        item.sku
+                            .toLowerCase()
+                            .includes(
+                                search
+                            )
+                        ||
+                        String(
+                            item.book_title
+                            || ""
+                        )
+                            .toLowerCase()
+                            .includes(
+                                search
+                            )
+                );
+        }
+
+        if (
+            filter
+            !==
+            "all"
+        ) {
+            rows =
+                rows.filter(
+                    item => {
+
+                        const value =
+                            String(
+                                item.spice_type
+                                || ""
+                            )
+                            .trim()
+                            .toLowerCase();
+
+                        const isSpice =
+                            value.startsWith(
+                                "spice"
+                            )
+                            &&
+                            !value.startsWith(
+                                "non"
+                            );
+
+                        return (
+                            filter
+                            ===
+                            "spice"
+                        )
+                        ? isSpice
+                        : !isSpice;
+                    }
+                );
+        }
+
+        const sortMode =
+            unusedSort.value;
+
+        rows.sort(
+            (a, b) => {
+
+                if (
+                    sortMode
+                    ===
+                    "available_desc"
+                ) {
+                    return (
+                        b.available_qty
+                        -
+                        a.available_qty
+                    );
+                }
+
+                if (
+                    sortMode
+                    ===
+                    "available_asc"
+                ) {
+                    return (
+                        a.available_qty
+                        -
+                        b.available_qty
+                    );
+                }
+
+                if (
+                    sortMode
+                    ===
+                    "stock_desc"
+                ) {
+                    return (
+                        b.candidate_stock
+                        -
+                        a.candidate_stock
+                    );
+                }
+
+                if (
+                    sortMode
+                    ===
+                    "stock_asc"
+                ) {
+                    return (
+                        a.candidate_stock
+                        -
+                        b.candidate_stock
+                    );
+                }
+
+                return String(
+                    a.book_title
+                    || ""
+                ).localeCompare(
+                    String(
+                        b.book_title
+                        || ""
+                    ),
+                    undefined,
+                    {
+                        sensitivity:
+                            "base"
+                    }
+                );
+            }
+        );
+
+        return rows;
+    }
+
+
+    function addUnusedToStore(
+        item,
+        store
+    ) {
+
+        if (
+            storeHasSku(
+                store,
+                item.sku
+            )
+        ) {
+            return;
+        }
+
+        const availableQty =
+            unusedAvailableQty(
+                item.sku
+            );
+
+        if (
+            availableQty
+            <=
+            0
+        ) {
+            status.className =
+                "status error";
+
+            status.textContent =
+                `${item.sku} has no available quantity left.`;
+
+            return;
+        }
+
+        itemsByStore[
+            store
+        ].push({
+            store:
+                store,
+            sku:
+                item.sku,
+            book_title:
+                item.book_title
+                || "",
+            spice_type:
+                item.spice_type
+                || "",
+            role:
+                "Regular",
+            candidate_stock:
+                item.candidate_stock,
+            _base_candidate_stock:
+                item.candidate_stock,
+            planned_qty:
+                1,
+            shared_across_store:
+                false,
+            fallback_duplicate:
+                false
+        });
+
+        recalculateSharedFlags();
+
+        markManualChange(
+            `${item.sku} added to ${store}.`
+        );
+
+        renderCurrentTab();
+    }
+
+
+    function parseISOWeek(
+        weekId
+    ) {
+        const match =
+            /^(\d{4})-W(\d{2})$/
+                .exec(
+                    String(
+                        weekId || ""
+                    )
+                );
+
+        if (!match) {
+            return null;
+        }
+
+        return {
+            year: Number(match[1]),
+            week: Number(match[2])
+        };
+    }
+
+
+    function isoWeekFromDate(
+        date
+    ) {
+        const temp =
+            new Date(
+                Date.UTC(
+                    date.getUTCFullYear(),
+                    date.getUTCMonth(),
+                    date.getUTCDate()
+                )
+            );
+
+        const day =
+            temp.getUTCDay() || 7;
+
+        temp.setUTCDate(
+            temp.getUTCDate()
+            + 4
+            - day
+        );
+
+        const yearStart =
+            new Date(
+                Date.UTC(
+                    temp.getUTCFullYear(),
+                    0,
+                    1
+                )
+            );
+
+        const week =
+            Math.ceil(
+                (
+                    (
+                        temp
+                        - yearStart
+                    )
+                    /
+                    86400000
+                    + 1
+                )
+                /
+                7
+            );
+
+        return (
+            temp.getUTCFullYear()
+            + "-W"
+            + String(week).padStart(2, "0")
+        );
+    }
+
+
+    function mondayOfISOWeek(
+        year,
+        week
+    ) {
+        const jan4 =
+            new Date(
+                Date.UTC(
+                    year,
+                    0,
+                    4
+                )
+            );
+
+        const jan4Day =
+            jan4.getUTCDay()
+            || 7;
+
+        const monday =
+            new Date(jan4);
+
+        monday.setUTCDate(
+            jan4.getUTCDate()
+            - jan4Day
+            + 1
+            + (week - 1) * 7
+        );
+
+        return monday;
+    }
+
+
+    function populateTargetWeeks(
+        baseWeekId
+    ) {
+        const parsed =
+            parseISOWeek(
+                baseWeekId
+            );
+
+        targetWeek.innerHTML = "";
+
+        if (!parsed) {
+            targetWeek.innerHTML =
+                '<option value="">Select week</option>';
+            return;
+        }
+
+        const baseMonday =
+            mondayOfISOWeek(
+                parsed.year,
+                parsed.week
+            );
+
+        // Allow the user to choose the next 16 weeks.
+        for (
+            let offset = 1;
+            offset <= 16;
+            offset++
+        ) {
+            const date =
+                new Date(
+                    baseMonday
+                );
+
+            date.setUTCDate(
+                date.getUTCDate()
+                + offset * 7
+            );
+
+            const weekId =
+                isoWeekFromDate(
+                    date
+                );
+
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+            option.value =
+                weekId;
+
+            option.textContent =
+                weekId;
+
+            targetWeek.appendChild(
+                option
+            );
+        }
+    }
+
+
+    async function loadBatches() {
+
+        const response =
+            await fetch(
+                "/api/next-week-candidates/batches"
+            );
+
+        const data =
+            await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(
+                data.message
+                ||
+                "Failed to load Candidate Batches."
+            );
+        }
+
+        batchSelect.innerHTML = "";
+
+        const batches =
+            data.items || [];
+
+        if (!batches.length) {
+
+            const option =
+                document.createElement("option");
+
+            option.value = "";
+            option.textContent =
+                "No Candidate Batch";
+
+            batchSelect.appendChild(option);
+
+            generateBtn.disabled = true;
+
+            return;
+        }
+
+        batchMeta = {};
+
+        batches.forEach(item => {
+
+            batchMeta[
+                String(item.batch_id)
+            ] = item;
+
+            const option =
+                document.createElement("option");
+
+            option.value =
+                String(item.batch_id);
+
+            const remaining =
+                Number(
+                    item.include_weekly_remaining
+                )
+                ? "Remaining ON"
+                : "Remaining OFF";
+
+            option.textContent =
+                `#${item.batch_id} | ${item.week_id} | ${item.generated_at} | ${remaining}`;
+
+            batchSelect.appendChild(option);
+        });
+
+        // API returns newest first.
+        batchSelect.value =
+            String(batches[0].batch_id);
+
+        populateTargetWeeks(
+            batches[0].week_id
+        );
+
+        generateBtn.disabled = false;
+    }
+
+
+    function getNumberValue(
+        element,
+        fieldName
+    ) {
+
+        const value =
+            Number(element.value);
+
+        if (
+            !Number.isInteger(value)
+            ||
+            value < 0
+        ) {
+            throw new Error(
+                `${fieldName} must be a non-negative integer.`
+            );
+        }
+
+        return value;
+    }
+
+
+    function renderWarnings(
+        warnings
+    ) {
+
+        warningList.innerHTML = "";
+
+        if (!warnings || !warnings.length) {
+            warningBox.classList.remove("show");
+            return;
+        }
+
+        warnings.forEach(message => {
+
+            const li =
+                document.createElement("li");
+
+            li.textContent = message;
+
+            warningList.appendChild(li);
+        });
+
+        warningBox.classList.add("show");
+    }
+
+
+    function renderSummary(
+        summary
+    ) {
+
+        summaryGrid.innerHTML = "";
+
+        (summary || []).forEach(item => {
+
+            const card =
+                document.createElement("div");
+
+            card.className =
+                "summary-card";
+
+            card.innerHTML = `
+                <h3>${item.store}</h3>
+
+                <div class="summary-line">
+                    <span>Books</span>
+                    <strong>
+                        ${item.book_count}
+                        /
+                        ${item.book_target ?? ""}
+                    </strong>
+                </div>
+
+                <div class="summary-line">
+                    <span>Planned Qty</span>
+                    <strong>
+                        ${item.planned_qty}
+                        /
+                        ${item.planned_qty_target ?? ""}
+                    </strong>
+                </div>
+
+                <div class="summary-line">
+                    <span>Resident</span>
+                    <strong>${item.resident_count}</strong>
+                </div>
+
+                <div class="summary-line">
+                    <span>Regular</span>
+                    <strong>${item.regular_count}</strong>
+                </div>
+
+                <div class="summary-line">
+                    <span>Spice</span>
+                    <strong>
+                        ${item.spice_count}
+                        (${item.actual_spice_percent ?? 0}% / target ${item.spice_target_percent ?? 0}%)
+                    </strong>
+                </div>
+
+                <div class="summary-line">
+                    <span>Non-Spice</span>
+                    <strong>${item.non_spice_count}</strong>
+                </div>
+
+                <div class="summary-line">
+                    <span>Shared SKU</span>
+                    <strong>${item.shared_sku_count}</strong>
+                </div>
+            `;
+
+            summaryGrid.appendChild(card);
+        });
+
+        summaryPanel.style.display =
+            "block";
+    }
+
+
+    function sortedItems(
+        items
+    ) {
+
+        return [...items].sort(
+            (a, b) => {
+
+                let aValue =
+                    a[sortKey];
+
+                let bValue =
+                    b[sortKey];
+
+                if (
+                    sortKey ===
+                    "candidate_stock"
+                    ||
+                    sortKey ===
+                    "planned_qty"
+                ) {
+
+                    aValue =
+                        Number(aValue || 0);
+
+                    bValue =
+                        Number(bValue || 0);
+
+                    return (
+                        sortDirection === "asc"
+                        ? aValue - bValue
+                        : bValue - aValue
+                    );
+                }
+
+                aValue =
+                    String(aValue ?? "");
+
+                bValue =
+                    String(bValue ?? "");
+
+                const result =
+                    aValue.localeCompare(
+                        bValue,
+                        undefined,
+                        {
+                            numeric: true,
+                            sensitivity: "base"
+                        }
+                    );
+
+                return (
+                    sortDirection === "asc"
+                    ? result
+                    : -result
+                );
+            }
+        );
+    }
+
+
+    function updateSortIndicators() {
+
+        document
+            .querySelectorAll(
+                "th.sortable"
+            )
+            .forEach(th => {
+
+                const arrow =
+                    th.querySelector(
+                        ".sort-arrow"
+                    );
+
+                if (!arrow) {
+                    return;
+                }
+
+                if (
+                    th.dataset.sortKey
+                    ===
+                    sortKey
+                ) {
+                    arrow.textContent =
+                        sortDirection === "asc"
+                        ? "▲"
+                        : "▼";
+                } else {
+                    arrow.textContent = "";
+                }
+            });
+    }
+
+
+    function recalculateSharedFlags() {
+
+        const storesBySku = {};
+
+        ["VB", "TU"].forEach(
+            store => {
+
+                (
+                    itemsByStore[store]
+                    || []
+                ).forEach(
+                    item => {
+
+                        const sku =
+                            String(
+                                item.sku
+                                || ""
+                            ).trim();
+
+                        if (!sku) {
+                            return;
+                        }
+
+                        if (!storesBySku[sku]) {
+                            storesBySku[sku] =
+                                new Set();
+                        }
+
+                        storesBySku[sku].add(
+                            store
+                        );
+                    }
+                );
+            }
+        );
+
+        ["VB", "TU"].forEach(
+            store => {
+
+                (
+                    itemsByStore[store]
+                    || []
+                ).forEach(
+                    item => {
+
+                        const sku =
+                            String(
+                                item.sku
+                                || ""
+                            ).trim();
+
+                        item.shared_across_store =
+                            Boolean(
+                                sku
+                                &&
+                                storesBySku[sku]
+                                &&
+                                storesBySku[sku].size
+                                > 1
+                            );
+                    }
+                );
+            }
+        );
+    }
+
+
+    function ensureBaseCandidateStock(
+        item
+    ) {
+
+        if (
+            item._base_candidate_stock
+            === undefined
+            ||
+            item._base_candidate_stock
+            === null
+        ) {
+            item._base_candidate_stock =
+                Number(
+                    item.candidate_stock
+                    || 0
+                );
+        }
+
+        return Number(
+            item._base_candidate_stock
+            || 0
+        );
+    }
+
+
+    function totalPlannedForSku(
+        sku
+    ) {
+
+        const normalizedSku =
+            String(
+                sku
+                || ""
+            ).trim();
+
+        if (!normalizedSku) {
+            return 0;
+        }
+
+        let total = 0;
+
+        ["VB", "TU"].forEach(
+            store => {
+
+                (
+                    itemsByStore[store]
+                    || []
+                ).forEach(
+                    item => {
+
+                        if (
+                            String(
+                                item.sku
+                                || ""
+                            ).trim()
+                            ===
+                            normalizedSku
+                        ) {
+                            total +=
+                                Number(
+                                    item.planned_qty
+                                    || 0
+                                );
+                        }
+                    }
+                );
+            }
+        );
+
+        return total;
+    }
+
+
+    function remainingCandidateStock(
+        item
+    ) {
+
+        const base =
+            ensureBaseCandidateStock(
+                item
+            );
+
+        return (
+            base
+            -
+            totalPlannedForSku(
+                item.sku
+            )
+        );
+    }
+
+
+    function maxAllowedPlannedQty(
+        item
+    ) {
+
+        const base =
+            ensureBaseCandidateStock(
+                item
+            );
+
+        const reserve =
+            Number(
+                reserveQty.value
+                || 0
+            );
+
+        const currentQty =
+            Number(
+                item.planned_qty
+                || 0
+            );
+
+        const totalPlanned =
+            totalPlannedForSku(
+                item.sku
+            );
+
+        const otherStoresPlanned =
+            Math.max(
+                0,
+                totalPlanned
+                -
+                currentQty
+            );
+
+        return Math.max(
+            0,
+            base
+            -
+            reserve
+            -
+            otherStoresPlanned
+        );
+    }
+
+
+    function renderLocalSummary() {
+
+        recalculateSharedFlags();
+
+        const summary = [
+            "VB",
+            "TU"
+        ].map(
+            store => {
+
+                const rows =
+                    itemsByStore[store]
+                    || [];
+
+                const spiceCount =
+                    rows.filter(
+                        item => {
+
+                            const value =
+                                String(
+                                    item.spice_type
+                                    || ""
+                                )
+                                .trim()
+                                .toLowerCase();
+
+                            return (
+                                value.startsWith(
+                                    "spice"
+                                )
+                                &&
+                                !value.startsWith(
+                                    "non"
+                                )
+                            );
+                        }
+                    ).length;
+
+                const plannedQty =
+                    rows.reduce(
+                        (
+                            total,
+                            item
+                        ) =>
+                            total
+                            +
+                            Number(
+                                item.planned_qty
+                                || 0
+                            ),
+                        0
+                    );
+
+                const targetBooks =
+                    store === "VB"
+                    ? Number(
+                        vbBooks.value
+                        || 0
+                    )
+                    : Number(
+                        tuBooks.value
+                        || 0
+                    );
+
+                const targetQty =
+                    store === "VB"
+                    ? Number(
+                        vbQty.value
+                        || 0
+                    )
+                    : Number(
+                        tuQty.value
+                        || 0
+                    );
+
+                const targetSpice =
+                    store === "VB"
+                    ? Number(
+                        vbSpice.value
+                        || 0
+                    )
+                    : Number(
+                        tuSpice.value
+                        || 0
+                    );
+
+                return {
+                    store:
+                        store,
+                    book_count:
+                        rows.length,
+                    book_target:
+                        targetBooks,
+                    planned_qty:
+                        plannedQty,
+                    planned_qty_target:
+                        targetQty,
+                    resident_count:
+                        rows.filter(
+                            item =>
+                                item.role
+                                ===
+                                "Resident"
+                        ).length,
+                    regular_count:
+                        rows.filter(
+                            item =>
+                                item.role
+                                !==
+                                "Resident"
+                        ).length,
+                    spice_count:
+                        spiceCount,
+                    non_spice_count:
+                        rows.length
+                        -
+                        spiceCount,
+                    spice_target_percent:
+                        targetSpice,
+                    actual_spice_percent:
+                        rows.length
+                        ? Math.round(
+                            spiceCount
+                            * 1000
+                            / rows.length
+                        )
+                        / 10
+                        : 0,
+                    shared_sku_count:
+                        rows.filter(
+                            item =>
+                                item.shared_across_store
+                        ).length
+                };
+            }
+        );
+
+        renderSummary(
+            summary
+        );
+    }
+
+
+    function markManualChange(
+        message =
+            "Manual changes are not confirmed."
+    ) {
+
+        hasGeneratedResult =
+            true;
+
+        confirmBtn.disabled =
+            false;
+
+        confirmBtn.classList.remove(
+            "confirmed"
+        );
+
+        confirmBtn.textContent =
+            "Confirm";
+
+        status.className =
+            "status";
+
+        status.textContent =
+            message;
+
+        renderLocalSummary();
+    }
+
+
+    async function refreshEditedSku(
+        item,
+        input,
+        oldSku
+    ) {
+
+        const sku =
+            String(
+                input.value
+                || ""
+            ).trim();
+
+        if (
+            sku === oldSku
+        ) {
+            return;
+        }
+
+        if (
+            sku.length !== 13
+            ||
+            !/^\d{13}$/.test(
+                sku
+            )
+        ) {
+            input.value =
+                oldSku;
+
+            status.className =
+                "status error";
+
+            status.textContent =
+                "SKU must be a 13-digit ISBN.";
+
+            return;
+        }
+
+        const duplicate =
+            (
+                itemsByStore[
+                    currentStore
+                ]
+                || []
+            ).some(
+                other =>
+                    other !== item
+                    &&
+                    String(
+                        other.sku
+                        || ""
+                    )
+                    === sku
+            );
+
+        if (duplicate) {
+
+            input.value =
+                oldSku;
+
+            status.className =
+                "status error";
+
+            status.textContent =
+                `${sku} already exists in ${currentStore}.`;
+
+            return;
+        }
+
+        const params =
+            new URLSearchParams({
+                batch_id:
+                    batchSelect.value,
+                store:
+                    currentStore,
+                sku:
+                    sku
+            });
+
+        const response =
+            await fetch(
+                `/api/book-selection/lookup-sku?${params.toString()}`
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+            input.value =
+                oldSku;
+
+            throw new Error(
+                data.message
+                ||
+                "SKU lookup failed."
+            );
+        }
+
+        item.sku =
+            data.item.sku;
+
+        item.book_title =
+            data.item.book_title
+            || "";
+
+        item.spice_type =
+            data.item.spice_type
+            || "";
+
+        item.candidate_stock =
+            Number(
+                data.item.candidate_stock
+                || 0
+            );
+
+        item._base_candidate_stock =
+            Number(
+                data.item.candidate_stock
+                || 0
+            );
+
+        item.role =
+            data.item.role
+            || "Regular";
+
+        recalculateSharedFlags();
+        markManualChange();
+        renderStore();
+    }
+
+
+    function renderUnused() {
+
+        unusedControls.classList.add(
+            "show"
+        );
+
+        addBookBtn.style.display =
+            "none";
+
+        resultBody.innerHTML = "";
+
+        const rows =
+            getUnusedItems();
+
+        if (!rows.length) {
+            resultBody.innerHTML = `
+                <tr>
+                    <td
+                        colspan="8"
+                        class="empty"
+                    >
+                        No unused books with available quantity.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        rows.forEach(
+            item => {
+
+                const row =
+                    document.createElement(
+                        "tr"
+                    );
+
+                const usage = [];
+
+                if (item.in_vb) {
+                    usage.push(
+                        "VB"
+                    );
+                }
+
+                if (item.in_tu) {
+                    usage.push(
+                        "TU"
+                    );
+                }
+
+                row.innerHTML = `
+                    <td>${item.sku}</td>
+                    <td>${item.book_title ?? ""}</td>
+                    <td>${item.spice_type ?? ""}</td>
+                    <td>${usage.length ? "Used: " + usage.join(", ") : "Unused"}</td>
+                    <td class="num">${item.candidate_stock}</td>
+                    <td class="num"><strong>${item.available_qty}</strong></td>
+                    <td>${usage.length ? "Available" : ""}</td>
+                    <td class="unused-actions"></td>
+                `;
+
+                const actionCell =
+                    row.querySelector(
+                        ".unused-actions"
+                    );
+
+                const vbBtn =
+                    document.createElement(
+                        "button"
+                    );
+
+                vbBtn.type =
+                    "button";
+
+                vbBtn.className =
+                    "add-store-btn";
+
+                vbBtn.textContent =
+                    "Add VB";
+
+                vbBtn.disabled =
+                    item.in_vb;
+
+                vbBtn.addEventListener(
+                    "click",
+                    function() {
+                        addUnusedToStore(
+                            item,
+                            "VB"
+                        );
+                    }
+                );
+
+                const tuBtn =
+                    document.createElement(
+                        "button"
+                    );
+
+                tuBtn.type =
+                    "button";
+
+                tuBtn.className =
+                    "add-store-btn";
+
+                tuBtn.textContent =
+                    "Add TU";
+
+                tuBtn.disabled =
+                    item.in_tu;
+
+                tuBtn.addEventListener(
+                    "click",
+                    function() {
+                        addUnusedToStore(
+                            item,
+                            "TU"
+                        );
+                    }
+                );
+
+                actionCell.appendChild(
+                    vbBtn
+                );
+
+                actionCell.appendChild(
+                    tuBtn
+                );
+
+                resultBody.appendChild(
+                    row
+                );
+            }
+        );
+    }
+
+
+    function renderCurrentTab() {
+
+        if (
+            currentStore
+            ===
+            "Unused"
+        ) {
+            renderUnused();
+            return;
+        }
+
+        unusedControls.classList.remove(
+            "show"
+        );
+
+        addBookBtn.style.display =
+            "inline-block";
+
+        renderStore();
+    }
+
+
+    function renderStore() {
+
+        recalculateSharedFlags();
+
+        const items =
+            sortedItems(
+                itemsByStore[currentStore]
+                || []
+            );
+
+        resultBody.innerHTML = "";
+
+        if (!items.length) {
+            resultBody.innerHTML = `
+                <tr>
+                    <td
+                        colspan="8"
+                        class="empty"
+                    >
+                        No books for ${currentStore}.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        items.forEach(item => {
+
+            ensureBaseCandidateStock(
+                item
+            );
+
+            const row =
+                document.createElement(
+                    "tr"
+                );
+
+            if (
+                item.shared_across_store
+            ) {
+                row.classList.add(
+                    "shared-row"
+                );
+            }
+
+            const skuCell =
+                document.createElement(
+                    "td"
+                );
+
+            const skuInput =
+                document.createElement(
+                    "input"
+                );
+
+            skuInput.type =
+                "text";
+
+            skuInput.className =
+                "edit-sku";
+
+            skuInput.maxLength =
+                13;
+
+            skuInput.value =
+                item.sku
+                || "";
+
+            skuInput.dataset.oldSku =
+                item.sku
+                || "";
+
+            skuInput.addEventListener(
+                "change",
+                async function() {
+
+                    const oldSku =
+                        skuInput
+                            .dataset
+                            .oldSku;
+
+                    try {
+
+                        await refreshEditedSku(
+                            item,
+                            skuInput,
+                            oldSku
+                        );
+
+                        skuInput
+                            .dataset
+                            .oldSku =
+                                item.sku;
+
+                    } catch (error) {
+
+                        skuInput.value =
+                            oldSku;
+
+                        status.className =
+                            "status error";
+
+                        status.textContent =
+                            error.message;
+                    }
+                }
+            );
+
+            skuCell.appendChild(
+                skuInput
+            );
+
+
+            const titleCell =
+                document.createElement(
+                    "td"
+                );
+
+            titleCell.textContent =
+                item.book_title
+                || "";
+
+
+            const spiceCell =
+                document.createElement(
+                    "td"
+                );
+
+            spiceCell.textContent =
+                item.spice_type
+                || "";
+
+
+            const roleCell =
+                document.createElement(
+                    "td"
+                );
+
+            roleCell.textContent =
+                item.role
+                || "Regular";
+
+            if (
+                item.role
+                ===
+                "Resident"
+            ) {
+                roleCell.classList.add(
+                    "role-resident"
+                );
+            }
+
+
+            const stockCell =
+                document.createElement(
+                    "td"
+                );
+
+            stockCell.className =
+                "num";
+
+            if (
+                item.candidate_stock
+                === null
+                ||
+                item.candidate_stock
+                === undefined
+            ) {
+
+                stockCell.textContent =
+                    "—";
+
+            } else {
+
+                const remainingStock =
+                    remainingCandidateStock(
+                        item
+                    );
+
+                const reserve =
+                    Number(
+                        reserveQty.value
+                        || 0
+                    );
+
+                stockCell.textContent =
+                    remainingStock;
+
+                stockCell.classList.toggle(
+                    "stock-warning",
+                    remainingStock
+                    <
+                    reserve
+                );
+
+                stockCell.classList.toggle(
+                    "stock-safe",
+                    remainingStock
+                    >=
+                    reserve
+                );
+            }
+
+
+            const qtyCell =
+                document.createElement(
+                    "td"
+                );
+
+            qtyCell.className =
+                "num";
+
+            const qtyInput =
+                document.createElement(
+                    "input"
+                );
+
+            qtyInput.type =
+                "number";
+
+            qtyInput.min =
+                "1";
+
+            qtyInput.className =
+                "edit-qty";
+
+            const maxQty =
+                maxAllowedPlannedQty(
+                    item
+                );
+
+            qtyInput.max =
+                String(
+                    maxQty
+                );
+
+            qtyInput.value =
+                Number(
+                    item.planned_qty
+                    || 0
+                );
+
+            qtyInput.addEventListener(
+                "change",
+                function() {
+
+                    const rawValue =
+                        Number(
+                            qtyInput.value
+                            || 0
+                        );
+
+                    let value =
+                        Number.isFinite(
+                            rawValue
+                        )
+                        ? Math.max(
+                            0,
+                            Math.trunc(
+                                rawValue
+                            )
+                        )
+                        : 0;
+
+                    const allowed =
+                        maxAllowedPlannedQty(
+                            item
+                        );
+
+                    if (
+                        value
+                        >
+                        allowed
+                    ) {
+
+                        value =
+                            allowed;
+
+                        qtyInput.value =
+                            String(
+                                allowed
+                            );
+
+                        status.className =
+                            "status error";
+
+                        status.textContent =
+                            (
+                                `${currentStore} ${item.sku}: maximum Planned Qty is `
+                                +
+                                `${allowed}. Candidate Stock must keep at least `
+                                +
+                                `${Number(reserveQty.value || 0)}.`
+                            );
+
+                    } else {
+
+                        status.className =
+                            "status";
+
+                        status.textContent =
+                            "Manual changes are not confirmed.";
+                    }
+
+                    item.planned_qty =
+                        value;
+
+                    markManualChange();
+
+                    // Re-render so this SKU's remaining Candidate Stock
+                    // and the other store's max quantity are recalculated.
+                    renderCurrentTab();
+                }
+            );
+
+            qtyCell.appendChild(
+                qtyInput
+            );
+
+
+            const sharedCell =
+                document.createElement(
+                    "td"
+                );
+
+            sharedCell.textContent =
+                item.shared_across_store
+                ? "⚠ Shared"
+                : "";
+
+
+            const actionCell =
+                document.createElement(
+                    "td"
+                );
+
+            const deleteBtn =
+                document.createElement(
+                    "button"
+                );
+
+            deleteBtn.type =
+                "button";
+
+            deleteBtn.className =
+                "row-action-btn";
+
+            deleteBtn.textContent =
+                "Delete";
+
+            deleteBtn.addEventListener(
+                "click",
+                function() {
+
+                    const source =
+                        itemsByStore[
+                            currentStore
+                        ]
+                        || [];
+
+                    const index =
+                        source.indexOf(
+                            item
+                        );
+
+                    if (
+                        index >= 0
+                    ) {
+                        source.splice(
+                            index,
+                            1
+                        );
+                    }
+
+                    recalculateSharedFlags();
+                    markManualChange();
+                    renderStore();
+                }
+            );
+
+            actionCell.appendChild(
+                deleteBtn
+            );
+
+
+            row.appendChild(
+                skuCell
+            );
+
+            row.appendChild(
+                titleCell
+            );
+
+            row.appendChild(
+                spiceCell
+            );
+
+            row.appendChild(
+                roleCell
+            );
+
+            row.appendChild(
+                stockCell
+            );
+
+            row.appendChild(
+                qtyCell
+            );
+
+            row.appendChild(
+                sharedCell
+            );
+
+            row.appendChild(
+                actionCell
+            );
+
+            resultBody.appendChild(
+                row
+            );
+        });
+
+        updateSortIndicators();
+    }
+
+
+    function clearDisplayedSelection(
+        message = ""
+    ) {
+
+        itemsByStore = {
+            VB: [],
+            TU: []
+        };
+
+        loadedExistingWeek =
+            false;
+
+        hasGeneratedResult =
+            false;
+
+        confirmBtn.disabled =
+            true;
+
+        confirmBtn.classList.remove(
+            "confirmed"
+        );
+
+        confirmBtn.textContent =
+            "Confirm";
+
+        summaryPanel.style.display =
+            "none";
+
+        resultPanel.style.display =
+            "none";
+
+        warningBox.classList.remove(
+            "show"
+        );
+
+        if (message) {
+            status.className =
+                "status";
+
+            status.textContent =
+                message;
+        }
+    }
+
+
+    async function loadTargetWeekInventory() {
+
+        const weekId =
+            String(
+                targetWeek.value
+                || ""
+            ).trim();
+
+        const batchId =
+            Number(
+                batchSelect.value
+            );
+
+        if (
+            !weekId
+            ||
+            !batchId
+        ) {
+            clearDisplayedSelection();
+            return;
+        }
+
+        status.className =
+            "status";
+
+        status.textContent =
+            `Checking ${weekId}...`;
+
+        const params =
+            new URLSearchParams({
+                week_id:
+                    weekId,
+                batch_id:
+                    String(
+                        batchId
+                    )
+            });
+
+        const response =
+            await fetch(
+                `/api/book-selection/weekly-inventory?${params.toString()}`
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message
+                ||
+                "Failed to load Weekly Inventory."
+            );
+        }
+
+        if (!data.exists) {
+
+            clearDisplayedSelection(
+                `${weekId} has no confirmed Weekly Inventory. Generate a new selection.`
+            );
+
+            return;
+        }
+
+        itemsByStore = {
+            VB:
+                data.items_by_store?.VB
+                || [],
+            TU:
+                data.items_by_store?.TU
+                || []
+        };
+
+        loadedExistingWeek =
+            true;
+
+        hasGeneratedResult =
+            true;
+
+        currentStore =
+            "VB";
+
+        document
+            .querySelectorAll(
+                ".tab-btn"
+            )
+            .forEach(
+                button => {
+
+                    button.classList.toggle(
+                        "active",
+                        button.dataset.store
+                        ===
+                        currentStore
+                    );
+                }
+            );
+
+        renderWarnings([]);
+        renderLocalSummary();
+        renderCurrentTab();
+
+        summaryPanel.style.display =
+            "block";
+
+        resultPanel.style.display =
+            "block";
+
+        confirmBtn.disabled =
+            false;
+
+        confirmBtn.textContent =
+            "Confirm";
+
+        status.className =
+            "status success";
+
+        status.textContent =
+            `Loaded existing Weekly Inventory for ${weekId}: ${data.count} row(s).`;
+    }
+
+
+    function addBlankBook() {
+
+        if (
+            currentStore
+            ===
+            "Unused"
+        ) {
+            return;
+        }
+
+        itemsByStore[
+            currentStore
+        ].push({
+            store:
+                currentStore,
+            sku:
+                "",
+            book_title:
+                "",
+            spice_type:
+                "",
+            role:
+                "Regular",
+            candidate_stock:
+                null,
+            planned_qty:
+                1,
+            shared_across_store:
+                false,
+            fallback_duplicate:
+                false
+        });
+
+        markManualChange(
+            `New ${currentStore} row added. Enter a SKU and Planned Qty.`
+        );
+
+        renderStore();
+
+        setTimeout(
+            function() {
+
+                const inputs =
+                    resultBody.querySelectorAll(
+                        ".edit-sku"
+                    );
+
+                if (
+                    inputs.length
+                ) {
+                    inputs[
+                        inputs.length - 1
+                    ].focus();
+                }
+            },
+            0
+        );
+    }
+
+
+    function buildPayload() {
+
+        const batchId =
+            Number(
+                batchSelect.value
+            );
+
+        if (!batchId) {
+            throw new Error(
+                "Please select a Candidate Batch."
+            );
+        }
+
+        const weekId =
+            String(
+                targetWeek.value
+                || ""
+            ).trim();
+
+        if (!weekId) {
+            throw new Error(
+                "Please select a Target Week."
+            );
+        }
+
+        const vbSpiceValue =
+            getNumberValue(
+                vbSpice,
+                "VB Spice %"
+            );
+
+        const tuSpiceValue =
+            getNumberValue(
+                tuSpice,
+                "TU Spice %"
+            );
+
+        if (
+            vbSpiceValue > 100
+            ||
+            tuSpiceValue > 100
+        ) {
+            throw new Error(
+                "Spice % must be between 0 and 100."
+            );
+        }
+
+        return {
+            batch_id: batchId,
+
+            target_week_id:
+                weekId,
+
+            books_per_store: {
+                VB:
+                    getNumberValue(
+                        vbBooks,
+                        "VB Books"
+                    ),
+                TU:
+                    getNumberValue(
+                        tuBooks,
+                        "TU Books"
+                    )
+            },
+
+            per_store_week_qty: {
+                VB:
+                    getNumberValue(
+                        vbQty,
+                        "VB Planned Qty"
+                    ),
+                TU:
+                    getNumberValue(
+                        tuQty,
+                        "TU Planned Qty"
+                    )
+            },
+
+            spice_percent_by_store: {
+                VB:
+                    vbSpiceValue,
+                TU:
+                    tuSpiceValue
+            },
+
+            min_reserve_qty:
+                getNumberValue(
+                    reserveQty,
+                    "Min Reserve Qty"
+                )
+        };
+    }
+
+
+    async function generateSelection() {
+
+        status.className = "status";
+        status.textContent =
+            "Generating...";
+
+        generateBtn.disabled = true;
+        confirmBtn.disabled = true;
+        confirmBtn.classList.remove(
+            "confirmed"
+        );
+        confirmBtn.textContent =
+            "Confirm";
+        hasGeneratedResult = false;
+
+        try {
+
+            const payload =
+                buildPayload();
+
+            lastPayload =
+                payload;
+
+            const response =
+                await fetch(
+                    "/api/book-selection/generate",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+                        body:
+                            JSON.stringify(payload)
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok || !data.success) {
+                throw new Error(
+                    data.message
+                    ||
+                    "Book Selection generation failed."
+                );
+            }
+
+            itemsByStore = {
+                VB:
+                    data.items_by_store?.VB
+                    || [],
+                TU:
+                    data.items_by_store?.TU
+                    || []
+            };
+
+            loadedExistingWeek =
+                false;
+
+            renderWarnings(
+                data.warnings || []
+            );
+
+            renderLocalSummary();
+
+            currentStore = "VB";
+
+            document
+                .querySelectorAll(
+                    ".tab-btn"
+                )
+                .forEach(button => {
+                    button.classList.toggle(
+                        "active",
+                        button.dataset.store
+                        === currentStore
+                    );
+                });
+
+            renderCurrentTab();
+
+            resultPanel.style.display =
+                "block";
+
+            status.className =
+                "status success";
+
+            status.textContent =
+                `Generated from Candidate Batch #${data.batch.batch_id} for ${data.target_week_id}.`;
+
+            hasGeneratedResult =
+                true;
+
+            confirmBtn.disabled =
+                false;
+
+        } catch (error) {
+
+            status.className =
+                "status error";
+
+            status.textContent =
+                error.message;
+
+        } finally {
+
+            generateBtn.disabled = false;
+        }
+    }
+
+
+    async function confirmWeeklyInventory(
+        overwrite = false
+    ) {
+
+        if (!hasGeneratedResult) {
+            status.className =
+                "status error";
+
+            status.textContent =
+                "Generate Book Selection before confirming.";
+
+            return;
+        }
+
+        status.className =
+            "status";
+
+        status.textContent =
+            "Confirming...";
+
+        confirmBtn.disabled =
+            true;
+
+        try {
+
+            const payload =
+                buildPayload();
+
+            payload.overwrite =
+                (
+                    overwrite
+                    ||
+                    loadedExistingWeek
+                );
+
+            payload.items =
+                [
+                    ...(
+                        itemsByStore.VB
+                        || []
+                    ),
+                    ...(
+                        itemsByStore.TU
+                        || []
+                    )
+                ].map(
+                    item => ({
+                        store:
+                            item.store,
+                        sku:
+                            String(
+                                item.sku
+                                || ""
+                            ).trim(),
+                        planned_qty:
+                            Number(
+                                item.planned_qty
+                                || 0
+                            )
+                    })
+                );
+
+            const response =
+                await fetch(
+                    "/api/book-selection/save-weekly-inventory",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+                        body:
+                            JSON.stringify(
+                                payload
+                            )
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (
+                response.status === 409
+                &&
+                data.requires_confirmation
+            ) {
+
+                const approved =
+                    window.confirm(
+                        `${data.target_week_id} already exists in Weekly Inventory.\n\n`
+                        +
+                        `${data.existing_count} row(s) will be replaced.\n\n`
+                        +
+                        `Other weeks will not be changed.\n\n`
+                        +
+                        `Replace this week?`
+                    );
+
+                if (approved) {
+                    await confirmWeeklyInventory(
+                        true
+                    );
+                    return;
+                }
+
+                status.className =
+                    "status";
+
+                status.textContent =
+                    "Confirm cancelled.";
+
+                return;
+            }
+
+            if (
+                !response.ok
+                ||
+                !data.success
+            ) {
+                throw new Error(
+                    data.message
+                    ||
+                    "Failed to confirm Weekly Inventory."
+                );
+            }
+
+            status.className =
+                "status success";
+
+            status.textContent =
+                data.message;
+
+            renderWarnings(
+                data.warnings
+                || []
+            );
+
+            confirmBtn.textContent =
+                "Confirmed";
+
+            confirmBtn.classList.add(
+                "confirmed"
+            );
+
+            loadedExistingWeek =
+                true;
+
+        } catch (error) {
+
+            status.className =
+                "status error";
+
+            status.textContent =
+                error.message;
+
+        } finally {
+
+            confirmBtn.disabled =
+                false;
+        }
+    }
+
+
+    function invalidateGeneratedResult() {
+
+        if (!hasGeneratedResult) {
+            return;
+        }
+
+        hasGeneratedResult =
+            false;
+
+        confirmBtn.disabled =
+            true;
+
+        confirmBtn.classList.remove(
+            "confirmed"
+        );
+
+        confirmBtn.textContent =
+            "Confirm";
+
+        status.className =
+            "status";
+
+        status.textContent =
+            "Settings changed. Generate again before Confirm.";
+    }
+
+
+    document
+        .querySelectorAll(
+            ".tab-btn"
+        )
+        .forEach(button => {
+
+            button.addEventListener(
+                "click",
+                function() {
+
+                    currentStore =
+                        button.dataset.store;
+
+                    document
+                        .querySelectorAll(
+                            ".tab-btn"
+                        )
+                        .forEach(item => {
+                            item.classList.toggle(
+                                "active",
+                                item === button
+                            );
+                        });
+
+                    renderCurrentTab();
+                }
+            );
+        });
+
+
+    document
+        .querySelectorAll(
+            "th.sortable"
+        )
+        .forEach(th => {
+
+            th.addEventListener(
+                "click",
+                function() {
+
+                    const selection =
+                        window
+                            .getSelection()
+                            .toString()
+                            .trim();
+
+                    if (selection) {
+                        return;
+                    }
+
+                    const key =
+                        th.dataset.sortKey;
+
+                    if (sortKey === key) {
+
+                        sortDirection =
+                            sortDirection === "asc"
+                            ? "desc"
+                            : "asc";
+
+                    } else {
+
+                        sortKey = key;
+
+                        sortDirection =
+                            (
+                                key === "planned_qty"
+                                ||
+                                key === "candidate_stock"
+                            )
+                            ? "desc"
+                            : "asc";
+                    }
+
+                    renderStore();
+                }
+            );
+        });
+
+
+    addBookBtn.addEventListener(
+        "click",
+        addBlankBook
+    );
+
+    unusedSearch.addEventListener(
+        "input",
+        function() {
+            if (
+                currentStore
+                ===
+                "Unused"
+            ) {
+                renderUnused();
+            }
+        }
+    );
+
+    unusedSpiceFilter.addEventListener(
+        "change",
+        function() {
+            if (
+                currentStore
+                ===
+                "Unused"
+            ) {
+                renderUnused();
+            }
+        }
+    );
+
+    unusedSort.addEventListener(
+        "change",
+        function() {
+            if (
+                currentStore
+                ===
+                "Unused"
+            ) {
+                renderUnused();
+            }
+        }
+    );
+
+
+    generateBtn.addEventListener(
+        "click",
+        generateSelection
+    );
+
+    confirmBtn.addEventListener(
+        "click",
+        function() {
+            confirmWeeklyInventory(
+                false
+            );
+        }
+    );
+
+    batchSelect.addEventListener(
+        "change",
+        async function() {
+
+            const item =
+                batchMeta[
+                    String(
+                        batchSelect.value
+                    )
+                ];
+
+            populateTargetWeeks(
+                item
+                ? item.week_id
+                : ""
+            );
+
+            try {
+                await loadCandidatePool();
+                await loadTargetWeekInventory();
+            } catch (error) {
+
+                clearDisplayedSelection();
+
+                status.className =
+                    "status error";
+
+                status.textContent =
+                    error.message;
+            }
+        }
+    );
+
+
+    targetWeek.addEventListener(
+        "change",
+        async function() {
+
+            try {
+                await loadTargetWeekInventory();
+            } catch (error) {
+
+                clearDisplayedSelection();
+
+                status.className =
+                    "status error";
+
+                status.textContent =
+                    error.message;
+            }
+        }
+    );
+
+
+    [
+        reserveQty,
+        vbBooks,
+        vbQty,
+        vbSpice,
+        tuBooks,
+        tuQty,
+        tuSpice
+    ].forEach(
+        element => {
+
+            const handler =
+                function() {
+
+                    if (
+                        hasGeneratedResult
+                    ) {
+                        markManualChange(
+                            "Settings changed. Current list can still be edited/confirmed, or Generate can rebuild it."
+                        );
+                    }
+                };
+
+            element.addEventListener(
+                "change",
+                handler
+            );
+
+            if (
+                element.tagName
+                ===
+                "INPUT"
+            ) {
+                element.addEventListener(
+                    "input",
+                    handler
+                );
+            }
+        }
+    );
+
+
+    loadBatches()
+        .then(
+            loadCandidatePool
+        )
+        .then(
+            loadTargetWeekInventory
+        )
+        .catch(error => {
+
+            status.className =
+                "status error";
+
+            status.textContent =
+                error.message;
+        });
+
+})();
+
+</script>
+
+{% endblock %}

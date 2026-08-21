@@ -163,12 +163,11 @@ th.sortable:hover {
     color: #666;
 }
 
-th:nth-child(1) { width: 9%; }
-th:nth-child(2) { width: 15%; }
-th:nth-child(3) { width: 31%; }
-th:nth-child(4) { width: 14%; }
-th:nth-child(5) { width: 18%; }
-th:nth-child(6) { width: 13%; }
+th:nth-child(1) { width: 10%; }
+th:nth-child(2) { width: 17%; }
+th:nth-child(3) { width: 43%; }
+th:nth-child(4) { width: 15%; }
+th:nth-child(5) { width: 15%; }
 
 .stock {
     text-align: right;
@@ -186,12 +185,9 @@ tr.shared-row:hover td {
     background: #fff4d6;
 }
 
-tr.inactive-row td {
-    opacity: 0.58;
-}
-
 .badge {
     display: inline-block;
+    margin-left: 6px;
     padding: 4px 8px;
     border-radius: 999px;
     font-size: 12px;
@@ -199,18 +195,7 @@ tr.inactive-row td {
     white-space: nowrap;
 }
 
-.badge.active {
-    background: #e8f5ee;
-    color: #16794b;
-}
-
-.badge.inactive {
-    background: #eceef1;
-    color: #646a73;
-}
-
 .badge.shared {
-    margin-left: 5px;
     background: #fff0c2;
     color: #8a5a00;
 }
@@ -335,11 +320,6 @@ tr.inactive-row td {
                         <span class="sort-arrow"></span>
                     </th>
 
-                    <th class="sortable" data-sort-key="status">
-                        Status
-                        <span class="sort-arrow"></span>
-                    </th>
-
                     <th>Action</th>
                 </tr>
             </thead>
@@ -348,7 +328,7 @@ tr.inactive-row td {
 
                 <tr>
                     <td
-                        colspan="6"
+                        colspan="5"
                         class="empty"
                     >
                         Loading...
@@ -536,21 +516,14 @@ tr.inactive-row td {
             ? items
             : [];
 
-        const activeCount =
-            latestResidentItems.filter(
-                item => Number(item.active) === 1
-            ).length;
-
         const sharedCount =
             latestResidentItems.filter(
                 item =>
-                    Number(item.active) === 1
-                    &&
                     Number(item.is_shared) === 1
             ).length;
 
         summary.textContent =
-            `${activeCount} active resident book(s)`
+            `${latestResidentItems.length} resident book(s)`
             +
             (
                 sharedCount
@@ -563,7 +536,7 @@ tr.inactive-row td {
             residentBody.innerHTML = `
                 <tr>
                     <td
-                        colspan="6"
+                        colspan="5"
                         class="empty"
                     >
                         No resident books.
@@ -579,41 +552,11 @@ tr.inactive-row td {
                 .sort(
                     (a, b) => {
 
-                        let aValue;
-                        let bValue;
+                        let aValue =
+                            a[currentSortKey];
 
-                        if (
-                            currentSortKey
-                            ===
-                            "status"
-                        ) {
-
-                            aValue =
-                                Number(a.active) === 1
-                                ? (
-                                    Number(a.is_shared) === 1
-                                    ? "1-shared"
-                                    : "2-active"
-                                )
-                                : "3-inactive";
-
-                            bValue =
-                                Number(b.active) === 1
-                                ? (
-                                    Number(b.is_shared) === 1
-                                    ? "1-shared"
-                                    : "2-active"
-                                )
-                                : "3-inactive";
-
-                        } else {
-
-                            aValue =
-                                a[currentSortKey];
-
-                            bValue =
-                                b[currentSortKey];
-                        }
+                        let bValue =
+                            b[currentSortKey];
 
                         let result = 0;
 
@@ -674,12 +617,7 @@ tr.inactive-row td {
                         "tr"
                     );
 
-                const active =
-                    Number(item.active) === 1;
-
                 const shared =
-                    active
-                    &&
                     Number(
                         item.is_shared
                     ) === 1;
@@ -687,12 +625,6 @@ tr.inactive-row td {
                 if (shared) {
                     row.classList.add(
                         "shared-row"
-                    );
-                }
-
-                if (!active) {
-                    row.classList.add(
-                        "inactive-row"
                     );
                 }
 
@@ -708,27 +640,22 @@ tr.inactive-row td {
                 row.innerHTML = `
                     <td>${item.store_code ?? ""}</td>
                     <td>${item.sku ?? ""}</td>
-                    <td>${item.book_title ?? ""}</td>
-                    <td class="stock">${stock}</td>
                     <td>
-                        <span class="badge ${active ? "active" : "inactive"}">
-                            ${active ? "Active" : "Inactive"}
-                        </span>
-
+                        ${item.book_title ?? ""}
                         ${
                             shared
                             ? '<span class="badge shared">⚠ Shared Resident</span>'
                             : ''
                         }
                     </td>
+                    <td class="stock">${stock}</td>
                     <td>
                         <button
                             type="button"
-                            class="secondary toggle-btn"
+                            class="secondary remove-btn"
                             data-id="${item.resident_id}"
-                            data-active="${active ? "0" : "1"}"
                         >
-                            ${active ? "Disable" : "Restore"}
+                            Remove
                         </button>
                     </td>
                 `;
@@ -741,7 +668,7 @@ tr.inactive-row td {
 
         document
             .querySelectorAll(
-                ".toggle-btn"
+                ".remove-btn"
             )
             .forEach(
                 button => {
@@ -750,13 +677,10 @@ tr.inactive-row td {
                         "click",
                         async function () {
 
-                            await setActive(
+                            await removeResident(
                                 Number(
                                     button.dataset.id
-                                ),
-                                button.dataset.active
-                                ===
-                                "1"
+                                )
                             );
                         }
                     );
@@ -937,6 +861,8 @@ tr.inactive-row td {
             skuInput.value = "";
 
             setStatus(
+                data.message
+                ||
                 "Resident book saved.",
                 "success"
             );
@@ -957,9 +883,8 @@ tr.inactive-row td {
     }
 
 
-    async function setActive(
-        residentId,
-        active
+    async function removeResident(
+        residentId
     ) {
 
         setStatus("");
@@ -968,16 +893,9 @@ tr.inactive-row td {
 
             const response =
                 await fetch(
-                    `/api/resident-books/${residentId}/active`,
+                    `/api/resident-books/${residentId}/remove`,
                     {
-                        method: "POST",
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-                        body: JSON.stringify({
-                            active: active
-                        })
+                        method: "POST"
                     }
                 );
 
@@ -988,9 +906,16 @@ tr.inactive-row td {
                 throw new Error(
                     data.message
                     ||
-                    "Failed to update resident book."
+                    "Failed to remove resident book."
                 );
             }
+
+            setStatus(
+                data.message
+                ||
+                "Resident book removed.",
+                "success"
+            );
 
             await loadResidents();
 

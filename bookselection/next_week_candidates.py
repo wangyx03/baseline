@@ -45,6 +45,10 @@ def next_week_candidates_page():
             {
                 "label": "Resident Books",
                 "url": "/resident-books"
+            },
+            {
+                "label": "Book Selection",
+                "url": "/book-selection"
             }
         ]
     )

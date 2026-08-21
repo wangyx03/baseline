@@ -36,6 +36,10 @@ def resident_books_page():
             {
                 "label": "Candidate List",
                 "url": "/next-week-candidates"
+            },
+            {
+                "label": "Book Selection",
+                "url": "/book-selection"
             }
         ]
     )
@@ -149,8 +153,6 @@ def resident_books_list():
                     b.book_title,
                     ''
                 ) AS book_title,
-                r.active,
-
                 c.candidate_stock,
 
                 CASE
@@ -181,14 +183,12 @@ def resident_books_list():
                         DISTINCT store_id
                     ) AS store_count
                 FROM book_selection_resident
-                WHERE active = 1
                 GROUP BY sku
             ) shared
                 ON shared.sku =
                        r.sku
 
             ORDER BY
-                r.active DESC,
                 is_shared DESC,
                 s.short_name,
                 b.book_title,
@@ -298,20 +298,38 @@ def resident_books_add():
 
         cursor.execute(
             """
+            SELECT resident_id
+            FROM book_selection_resident
+            WHERE store_id = %s
+              AND sku = %s
+            LIMIT 1
+            """,
+            (
+                store_id,
+                sku
+            )
+        )
+
+        if cursor.fetchone():
+
+            return jsonify({
+                "success": False,
+                "message":
+                    "This book is already a resident book for this store."
+            }), 409
+
+        cursor.execute(
+            """
             INSERT INTO book_selection_resident
             (
                 store_id,
-                sku,
-                active
+                sku
             )
             VALUES
             (
                 %s,
-                %s,
-                1
+                %s
             )
-            ON DUPLICATE KEY UPDATE
-                active = 1
             """,
             (
                 store_id,
@@ -342,32 +360,13 @@ def resident_books_add():
 
 
 @resident_books_bp.route(
-    "/api/resident-books/<int:resident_id>/active",
+    "/api/resident-books/<int:resident_id>/remove",
     methods=["POST"]
 )
 @login_required
-def resident_books_set_active(
+def resident_books_remove(
     resident_id
 ):
-
-    payload = request.get_json(
-        silent=True
-    ) or {}
-
-    active = payload.get("active")
-
-    if active not in (
-        True,
-        False,
-        1,
-        0
-    ):
-
-        return jsonify({
-            "success": False,
-            "message":
-                "active must be true or false."
-        }), 400
 
     db = get_db()
     cursor = db.cursor()
@@ -376,14 +375,10 @@ def resident_books_set_active(
 
         cursor.execute(
             """
-            UPDATE book_selection_resident
-            SET active = %s
+            DELETE FROM book_selection_resident
             WHERE resident_id = %s
             """,
-            (
-                1 if active else 0,
-                resident_id
-            )
+            (resident_id,)
         )
 
         if cursor.rowcount == 0:
@@ -399,7 +394,9 @@ def resident_books_set_active(
         db.commit()
 
         return jsonify({
-            "success": True
+            "success": True,
+            "message":
+                "Resident book removed."
         })
 
     except Exception as e:

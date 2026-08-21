@@ -49,6 +49,10 @@ from bookselection.next_week_candidates import (
 
 from bookselection.resident_books import resident_books_bp
 
+from bookselection.book_selection_generate import (
+    book_selection_generate_bp
+)
+
 from db import get_db
 
 
@@ -130,6 +134,10 @@ app.register_blueprint(
 
 app.register_blueprint(
     resident_books_bp
+)
+
+app.register_blueprint(
+    book_selection_generate_bp
 )
 
 

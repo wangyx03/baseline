@@ -640,54 +640,55 @@ def record():
 
 
         # =====================================================
-        # Next Round / Seq
+        # Next Seq in the selected Round
         #
-        # Each round can contain at most 300 sequence positions.
-        # If the selected round is full, automatically continue
-        # to the next available round and restart Seq at 1.
+        # A Round may contain at most 300 items.
+        # Do NOT automatically move to the next Round.
+        # The operator must explicitly Start New Round / Set Round.
         # =====================================================
 
-        while True:
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(
+                    MAX(seq),
+                    0
+                ) AS max_seq
 
-            cursor.execute(
-                """
-                SELECT
-                    COALESCE(
-                        MAX(seq),
-                        0
-                    ) AS max_seq
+            FROM sku_recording
 
-                FROM sku_recording
-
-                WHERE week_id = %s
-                  AND store_id = %s
-                  AND live_id = %s
-                  AND round_no = %s
-                """,
-                (
-                    week_id,
-                    store_id,
-                    live_id,
-                    round_no
-                )
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+              AND round_no = %s
+            """,
+            (
+                week_id,
+                store_id,
+                live_id,
+                round_no
             )
+        )
 
-            seq_row = cursor.fetchone()
+        seq_row = cursor.fetchone() or {
+            "max_seq": 0
+        }
 
-            max_seq = int(
-                seq_row["max_seq"]
-                or 0
-            )
+        max_seq = int(
+            seq_row["max_seq"]
+            or 0
+        )
 
-            if max_seq < MAX_SEQ_PER_ROUND:
+        if max_seq >= MAX_SEQ_PER_ROUND:
 
-                next_seq = max_seq + 1
+            return jsonify({
+                "success": False,
+                "message":
+                    f"Round {round_no} is full (300 items). "
+                    "Please start a new round manually."
+            }), 409
 
-                break
-
-            # Current round is full.
-            # Continue checking the next round until one has space.
-            round_no += 1
+        next_seq = max_seq + 1
 
 
         cursor.execute(
@@ -723,16 +724,18 @@ def record():
             )
         )
 
+        # Save the sku_recording ID immediately.
+        # cursor.lastrowid can be changed by later INSERT/UPDATE statements.
+        recording_id = (
+            cursor.lastrowid
+        )
+
+
         ensure_live_session(
             cursor,
             week_id,
             store_id,
             live_id
-        )
-
-
-        recording_id = (
-            cursor.lastrowid
         )
 
 
@@ -1047,16 +1050,18 @@ def insert_recording_before():
             )
         )
 
+        # Save the sku_recording ID immediately.
+        # cursor.lastrowid can be changed by later INSERT/UPDATE statements.
+        recording_id = (
+            cursor.lastrowid
+        )
+
+
         ensure_live_session(
             cursor,
             week_id,
             store_id,
             live_id
-        )
-
-
-        recording_id = (
-            cursor.lastrowid
         )
 
         # =====================================================
@@ -1219,6 +1224,531 @@ def insert_recording_before():
 
         cursor.close()
         db.close()
+
+# =========================================================
+# Merge Current Round Into Previous Round
+# =========================================================
+
+@recording_bp.route(
+    "/api/recordings/merge-previous-round",
+    methods=["POST"]
+)
+@login_required
+def merge_previous_round():
+
+    data = request.get_json() or {}
+
+    week_id = str(
+        data.get("week_id", "")
+    ).strip()
+
+    store_id = data.get(
+        "store_id"
+    )
+
+    live_id = str(
+        data.get("live_id", "")
+    ).strip()
+
+    round_no = data.get(
+        "round_no"
+    )
+
+    if not week_id:
+        return jsonify({
+            "success": False,
+            "message": "Week ID is required"
+        }), 400
+
+    if store_id is None:
+        return jsonify({
+            "success": False,
+            "message": "Store ID is required"
+        }), 400
+
+    if not live_id:
+        return jsonify({
+            "success": False,
+            "message": "LIVE ID is required"
+        }), 400
+
+    try:
+        round_no = int(round_no)
+    except (TypeError, ValueError):
+        return jsonify({
+            "success": False,
+            "message": "Invalid Round"
+        }), 400
+
+    if round_no <= 1:
+        return jsonify({
+            "success": False,
+            "message": "Round 1 has no previous round."
+        }), 400
+
+    previous_round = round_no - 1
+
+    db = get_db()
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+    try:
+
+        # Lock previous round rows.
+        cursor.execute(
+            """
+            SELECT
+                recording_id,
+                seq,
+                sku
+
+            FROM sku_recording
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+              AND round_no = %s
+
+            ORDER BY
+                seq ASC,
+                recording_id ASC
+
+            FOR UPDATE
+            """,
+            (
+                week_id,
+                store_id,
+                live_id,
+                previous_round
+            )
+        )
+
+        previous_rows = cursor.fetchall()
+
+        # Lock current round rows.
+        cursor.execute(
+            """
+            SELECT
+                recording_id,
+                seq,
+                sku
+
+            FROM sku_recording
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+              AND round_no = %s
+
+            ORDER BY
+                seq ASC,
+                recording_id ASC
+
+            FOR UPDATE
+            """,
+            (
+                week_id,
+                store_id,
+                live_id,
+                round_no
+            )
+        )
+
+        current_rows = cursor.fetchall()
+
+        if not current_rows:
+            return jsonify({
+                "success": False,
+                "message":
+                    f"Round {round_no} has no items."
+            }), 404
+
+        previous_count = len(previous_rows)
+        current_count = len(current_rows)
+
+        if previous_count >= MAX_SEQ_PER_ROUND:
+            return jsonify({
+                "success": False,
+                "message":
+                    f"Round {previous_round} is already full "
+                    f"({MAX_SEQ_PER_ROUND} items)."
+            }), 409
+
+        available_slots = (
+            MAX_SEQ_PER_ROUND
+            - previous_count
+        )
+
+        move_count = min(
+            available_slots,
+            current_count
+        )
+
+        previous_max_seq = max(
+            (
+                int(row["seq"] or 0)
+                for row in previous_rows
+            ),
+            default=0
+        )
+
+        rows_to_move = current_rows[:move_count]
+        rows_to_keep = current_rows[move_count:]
+
+        # Move as many leading items as possible from current round
+        # into the end of the previous round.
+        for index, row in enumerate(
+            rows_to_move,
+            start=1
+        ):
+
+            cursor.execute(
+                """
+                UPDATE sku_recording
+
+                SET
+                    round_no = %s,
+                    seq = %s
+
+                WHERE recording_id = %s
+                  AND week_id = %s
+                  AND store_id = %s
+                  AND live_id = %s
+                """,
+                (
+                    previous_round,
+                    previous_max_seq + index,
+                    row["recording_id"],
+                    week_id,
+                    store_id,
+                    live_id
+                )
+            )
+
+        if rows_to_keep:
+
+            # Current round remains.
+            # Re-number its remaining rows from Seq 1.
+            for new_seq, row in enumerate(
+                rows_to_keep,
+                start=1
+            ):
+
+                cursor.execute(
+                    """
+                    UPDATE sku_recording
+
+                    SET seq = %s
+
+                    WHERE recording_id = %s
+                      AND week_id = %s
+                      AND store_id = %s
+                      AND live_id = %s
+                    """,
+                    (
+                        new_seq,
+                        row["recording_id"],
+                        week_id,
+                        store_id,
+                        live_id
+                    )
+                )
+
+            db.commit()
+
+            return jsonify({
+                "success": True,
+                "mode":
+                    "filled_previous",
+                "moved_items":
+                    move_count,
+                "result_round":
+                    round_no,
+                "previous_round":
+                    previous_round,
+                "previous_items":
+                    previous_count + move_count,
+                "remaining_items":
+                    len(rows_to_keep)
+            })
+
+        # The entire current round fit into the previous round.
+        # Close the round-number gap by shifting later rounds down.
+        cursor.execute(
+            """
+            UPDATE sku_recording
+
+            SET round_no = round_no - 1
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+              AND round_no > %s
+
+            ORDER BY
+                round_no ASC,
+                seq ASC,
+                recording_id ASC
+            """,
+            (
+                week_id,
+                store_id,
+                live_id,
+                round_no
+            )
+        )
+
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "mode":
+                "full_merge",
+            "merged_from_round":
+                round_no,
+            "result_round":
+                previous_round,
+            "previous_round":
+                previous_round,
+            "moved_items":
+                move_count,
+            "previous_items":
+                previous_count + move_count,
+            "remaining_items":
+                0
+        })
+
+    except Exception as e:
+
+        db.rollback()
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+
+# =========================================================
+# Split Round
+# =========================================================
+
+@recording_bp.route(
+    "/api/recordings/split-round",
+    methods=["POST"]
+)
+@login_required
+def split_round():
+
+    data = request.get_json() or {}
+
+    week_id = str(
+        data.get("week_id", "")
+    ).strip()
+
+    store_id = data.get(
+        "store_id"
+    )
+
+    live_id = str(
+        data.get("live_id", "")
+    ).strip()
+
+    round_no = data.get(
+        "round_no"
+    )
+
+    keep_count = data.get(
+        "keep_count"
+    )
+
+    if not week_id:
+        return jsonify({
+            "success": False,
+            "message": "Week ID is required"
+        }), 400
+
+    if store_id is None:
+        return jsonify({
+            "success": False,
+            "message": "Store ID is required"
+        }), 400
+
+    if not live_id:
+        return jsonify({
+            "success": False,
+            "message": "LIVE ID is required"
+        }), 400
+
+    try:
+        round_no = int(round_no)
+        keep_count = int(keep_count)
+    except (TypeError, ValueError):
+        return jsonify({
+            "success": False,
+            "message":
+                "Invalid Round or split position."
+        }), 400
+
+    if round_no < 1:
+        return jsonify({
+            "success": False,
+            "message": "Invalid Round"
+        }), 400
+
+    db = get_db()
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+    try:
+
+        cursor.execute(
+            """
+            SELECT
+                recording_id,
+                seq,
+                sku
+
+            FROM sku_recording
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+              AND round_no = %s
+
+            ORDER BY
+                seq ASC,
+                recording_id ASC
+
+            FOR UPDATE
+            """,
+            (
+                week_id,
+                store_id,
+                live_id,
+                round_no
+            )
+        )
+
+        rows = cursor.fetchall()
+
+        total_items = len(rows)
+
+        if total_items < 2:
+            return jsonify({
+                "success": False,
+                "message":
+                    f"Round {round_no} does not have enough "
+                    "items to split."
+            }), 409
+
+        if (
+            keep_count < 1
+            or keep_count >= total_items
+        ):
+            return jsonify({
+                "success": False,
+                "message":
+                    f"Enter how many items should remain in "
+                    f"Round {round_no}: 1 to "
+                    f"{total_items - 1}."
+            }), 400
+
+        new_round = round_no + 1
+        move_rows = rows[keep_count:]
+
+        # Make room for the new round.
+        # DESC order prevents collisions while shifting existing
+        # later rounds upward.
+        cursor.execute(
+            """
+            UPDATE sku_recording
+
+            SET round_no = round_no + 1
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+              AND round_no > %s
+
+            ORDER BY
+                round_no DESC,
+                seq DESC,
+                recording_id DESC
+            """,
+            (
+                week_id,
+                store_id,
+                live_id,
+                round_no
+            )
+        )
+
+        # Move the tail of the selected round into the new round
+        # and restart its Seq at 1.
+        for new_seq, row in enumerate(
+            move_rows,
+            start=1
+        ):
+
+            cursor.execute(
+                """
+                UPDATE sku_recording
+
+                SET
+                    round_no = %s,
+                    seq = %s
+
+                WHERE recording_id = %s
+                  AND week_id = %s
+                  AND store_id = %s
+                  AND live_id = %s
+                """,
+                (
+                    new_round,
+                    new_seq,
+                    row["recording_id"],
+                    week_id,
+                    store_id,
+                    live_id
+                )
+            )
+
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "original_round":
+                round_no,
+            "new_round":
+                new_round,
+            "kept_items":
+                keep_count,
+            "moved_items":
+                len(move_rows)
+        })
+
+    except Exception as e:
+
+        db.rollback()
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+
 # =========================================================
 # Change Recorded LIVE ID
 # =========================================================

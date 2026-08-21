@@ -325,6 +325,16 @@
             background: #eef3ff;
         }
 
+        /* Different creators use stable colors based on staff_id */
+        .assignment-button.creator.creator-color-0 { background: #eaf2ff; border-color: #b9cdf3; }
+        .assignment-button.creator.creator-color-1 { background: #eaf8ef; border-color: #b8ddc5; }
+        .assignment-button.creator.creator-color-2 { background: #fff7df; border-color: #ead69a; }
+        .assignment-button.creator.creator-color-3 { background: #f3ecff; border-color: #d4c0f3; }
+        .assignment-button.creator.creator-color-4 { background: #ffeef3; border-color: #e8bfd0; }
+        .assignment-button.creator.creator-color-5 { background: #eaf8f7; border-color: #b7dcda; }
+        .assignment-button.creator.creator-color-6 { background: #fff0e6; border-color: #e7c7ae; }
+        .assignment-button.creator.creator-color-7 { background: #f1f3f5; border-color: #cfd4da; }
+
         .operator-stack {
             display: grid;
 
@@ -1011,6 +1021,25 @@ const DISPLAY_STORES = [
 ];
 
 
+function creatorColorClass(staffId) {
+
+    const numericId =
+        Number(staffId);
+
+    if (!Number.isFinite(numericId)) {
+        return "creator-color-0";
+    }
+
+    const colorIndex =
+        Math.abs(numericId) % 8;
+
+    return (
+        "creator-color-"
+        + colorIndex
+    );
+}
+
+
 let weekStart =
     getMonday(
         new Date()
@@ -1656,7 +1685,12 @@ function buildCreatorButton(
         +
         (
             assignment
-                ? "assigned"
+                ? (
+                    "assigned "
+                    + creatorColorClass(
+                        assignment.staff_id
+                    )
+                )
                 : "empty"
         );
 
