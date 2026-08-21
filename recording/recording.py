@@ -167,6 +167,43 @@ def write_recording_log(
         )
     )
 
+def ensure_live_session(cursor, week_id, store_id, live_id):
+    """Keep live_sessions derived from sku_recording."""
+    cursor.execute(
+        """
+        INSERT INTO live_sessions (week_id, store_id, live_id, created_at)
+        SELECT week_id, store_id, live_id, MIN(recorded_at)
+        FROM sku_recording
+        WHERE week_id = %s
+          AND store_id = %s
+          AND live_id = %s
+        GROUP BY week_id, store_id, live_id
+        ON DUPLICATE KEY UPDATE
+            created_at = VALUES(created_at)
+        """,
+        (week_id, store_id, live_id)
+    )
+
+
+def delete_live_session_if_empty(cursor, week_id, store_id, live_id):
+    cursor.execute(
+        """
+        DELETE FROM live_sessions
+        WHERE week_id = %s
+          AND store_id = %s
+          AND live_id = %s
+          AND NOT EXISTS (
+              SELECT 1
+              FROM sku_recording
+              WHERE week_id = %s
+                AND store_id = %s
+                AND live_id = %s
+          )
+        """,
+        (week_id, store_id, live_id, week_id, store_id, live_id)
+    )
+
+
 @recording_bp.route("/recording/<store_code>")
 @login_required
 def recording(store_code):
@@ -686,6 +723,14 @@ def record():
             )
         )
 
+        ensure_live_session(
+            cursor,
+            week_id,
+            store_id,
+            live_id
+        )
+
+
         recording_id = (
             cursor.lastrowid
         )
@@ -1001,6 +1046,14 @@ def insert_recording_before():
                 live_id
             )
         )
+
+        ensure_live_session(
+            cursor,
+            week_id,
+            store_id,
+            live_id
+        )
+
 
         recording_id = (
             cursor.lastrowid
@@ -1411,6 +1464,20 @@ def change_recorded_live_id():
 
 
         changed_rows = cursor.rowcount
+
+        # Keep live_sessions synchronized with the renamed Recording session.
+        ensure_live_session(
+            cursor,
+            week_id,
+            store_id,
+            new_live_id
+        )
+        delete_live_session_if_empty(
+            cursor,
+            week_id,
+            store_id,
+            old_live_id
+        )
 
         # One session-level log entry is enough to signal all clients
         # that this Recording session changed.
@@ -2074,6 +2141,13 @@ def delete_all_recordings():
 
         deleted_rows = cursor.rowcount
 
+        delete_live_session_if_empty(
+            cursor,
+            week_id,
+            store_id,
+            live_id
+        )
+
         db.commit()
 
         return jsonify({
@@ -2258,6 +2332,13 @@ def delete_recording(recording_id):
             week_id=week_id,
             store_id=store_id,
             live_id=live_id
+        )
+
+        delete_live_session_if_empty(
+            cursor,
+            week_id,
+            store_id,
+            live_id
         )
 
 

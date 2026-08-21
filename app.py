@@ -24,7 +24,8 @@ from permissions.permissions import (
     MODULE_AVAILABILITY,
     MODULE_SCHEDULE_MANAGEMENT,
     MODULE_SCHEDULE,
-    MODULE_PERMISSION_MANAGEMENT
+    MODULE_PERMISSION_MANAGEMENT,
+    MODULE_BOOK_SELECTION
 )
 
 from recording.recording import recording_bp
@@ -41,6 +42,12 @@ from permissions.permission_management import (
 )
 
 from security.security import security_bp
+
+from bookselection.next_week_candidates import (
+    next_week_candidates_bp
+)
+
+from bookselection.resident_books import resident_books_bp
 
 from db import get_db
 
@@ -115,6 +122,14 @@ app.register_blueprint(
 
 app.register_blueprint(
     security_bp
+)
+
+app.register_blueprint(
+    next_week_candidates_bp
+)
+
+app.register_blueprint(
+    resident_books_bp
 )
 
 
@@ -305,7 +320,10 @@ def index():
             MODULE_SCHEDULE,
 
         MODULE_PERMISSION_MANAGEMENT=
-            MODULE_PERMISSION_MANAGEMENT
+            MODULE_PERMISSION_MANAGEMENT,
+
+        MODULE_BOOK_SELECTION=
+            MODULE_BOOK_SELECTION
     )
 
 

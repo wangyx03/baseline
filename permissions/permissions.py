@@ -26,6 +26,8 @@ MODULE_SCHEDULE = 5
 
 MODULE_PERMISSION_MANAGEMENT = 6
 
+MODULE_BOOK_SELECTION = 7
+
 
 # =========================
 # Load User Permissions

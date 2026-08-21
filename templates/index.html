@@ -569,6 +569,50 @@ Operations Dashboard
 
         {% endif %}
 
+
+        {% if current_user.has_access(
+            MODULE_BOOK_SELECTION
+        ) %}
+
+            <div class="section">
+
+                <div class="section-title">
+                    Book Selection
+                </div>
+
+                <div class="grid">
+
+                    <a
+                        class="card"
+                        href="{{
+                            url_for(
+                                'next_week_candidates.next_week_candidates_page'
+                            )
+                        }}"
+                    >
+
+                        <div class="card-icon">
+                            📚
+                        </div>
+
+                        <div class="card-title">
+                            Next Week Candidates
+                        </div>
+
+                        <div class="card-description">
+                            Build the candidate book pool
+                            for next week's selection.
+                        </div>
+
+                    </a>
+
+                </div>
+
+            </div>
+
+        {% endif %}
+
+
         {% if current_user.has_access(
             MODULE_PERMISSION_MANAGEMENT
         ) %}

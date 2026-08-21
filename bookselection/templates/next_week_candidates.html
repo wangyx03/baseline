@@ -1,0 +1,2240 @@
+{% extends "base.html" %}
+
+{% block title %}
+Next Week Candidate List
+{% endblock %}
+
+{% block styles %}
+
+.page-container {
+    max-width: 1500px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.page-header h1 {
+    margin: 0;
+}
+
+#downloadBtn {
+    display: none;
+}
+
+#downloadBtn.show {
+    display: inline-block;
+}
+* {
+            box-sizing: border-box;
+        }
+
+        
+
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 20px;
+            font-size: 28px;
+        }
+
+        .panel {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 18px;
+        }
+
+        .row {
+            display: flex;
+            gap: 16px;
+            align-items: end;
+            flex-wrap: wrap;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        select {
+            width: 180px;
+            padding: 9px 10px;
+            border: 1px solid #bbb;
+            border-radius: 5px;
+            font-size: 15px;
+        }
+
+        .calendar-range-field {
+            position: relative;
+            min-width: 310px;
+        }
+
+        .date-range-button {
+            width: 310px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 9px 12px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            background: white;
+            color: #111;
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .date-range-button:hover {
+            background: #f7f7f7;
+        }
+
+        .calendar-popover {
+            display: none;
+            position: absolute;
+            z-index: 1200;
+            top: calc(100% + 8px);
+            left: 0;
+            width: 360px;
+            padding: 16px;
+            border: 1px solid #d9dce1;
+            border-radius: 12px;
+            background: white;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+        }
+
+        .calendar-popover.show {
+            display: block;
+        }
+
+        .calendar-header {
+            display: grid;
+            grid-template-columns: 42px 1fr 42px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .calendar-month-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .calendar-nav {
+            padding: 7px 0;
+            border: 0;
+            background: transparent;
+            color: #111;
+            font-size: 28px;
+            line-height: 1;
+        }
+
+        .calendar-nav:hover {
+            background: #f3f4f6;
+        }
+
+        .calendar-weekdays,
+        .calendar-days {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+        }
+
+        .calendar-weekdays {
+            margin-bottom: 6px;
+            color: #5f6670;
+            font-size: 12px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .calendar-weekdays span {
+            padding: 5px 0;
+        }
+
+        .calendar-day {
+            position: relative;
+            height: 42px;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            color: #111;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 0;
+        }
+
+        .calendar-day:hover {
+            background: #f2f4f7;
+        }
+
+        .calendar-day.outside-month {
+            color: #b6bbc3;
+        }
+
+        .calendar-day.in-range {
+            background: #eaf2ff;
+        }
+
+        .calendar-day.range-start,
+        .calendar-day.range-end {
+            background: #eaf2ff;
+        }
+
+        .calendar-day.range-start::after,
+        .calendar-day.range-end::after {
+            content: "";
+            position: absolute;
+            inset: 5px;
+            border-radius: 50%;
+            background: #111;
+            z-index: 0;
+        }
+
+        .calendar-day.range-start span,
+        .calendar-day.range-end span {
+            position: relative;
+            z-index: 1;
+            color: white;
+        }
+
+        .calendar-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid #eceef1;
+        }
+
+        .calendar-text-button {
+            padding: 5px 7px;
+            background: transparent;
+            color: #1f5fbf;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .calendar-text-button:hover {
+            background: #f3f6fb;
+        }
+
+        @media (max-width: 700px) {
+            .calendar-range-field,
+            .date-range-button {
+                width: 100%;
+                min-width: 0;
+            }
+
+            .calendar-popover {
+                width: min(360px, calc(100vw - 48px));
+            }
+        }
+
+        .checkbox-field {
+            justify-content: flex-end;
+            padding-bottom: 8px;
+        }
+
+        .remaining-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 38px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .remaining-option input {
+            width: 17px;
+            height: 17px;
+        }
+
+        button {
+            padding: 10px 18px;
+            border: 0;
+            border-radius: 6px;
+            background: #111;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .live-list {
+            margin-top: 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 10px;
+        }
+
+        .live-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+
+        .live-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .live-main {
+            font-weight: 700;
+        }
+
+        .live-sub {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .status {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .error {
+            color: #b00020;
+        }
+
+        .summary {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        th,
+        td {
+            padding: 9px 10px;
+            border-bottom: 1px solid #e5e5e5;
+            text-align: left;
+            font-size: 14px;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+        }
+
+        th {
+            background: #f0f0f0;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        th.sortable {
+            cursor: pointer;
+            user-select: text;
+        }
+
+        th.sortable:hover {
+            background: #e7e7e7;
+        }
+
+        .sort-arrow {
+            margin-left: 5px;
+            font-size: 11px;
+            color: #666;
+        }
+
+        th:nth-child(1) { width: 11%; }
+        th:nth-child(2) { width: 28%; }
+        th:nth-child(3) { width: 10%; }
+        th:nth-child(4) { width: 12%; }
+        th:nth-child(5) { width: 13%; }
+        th:nth-child(6) { width: 13%; }
+        th:nth-child(7) { width: 13%; }
+
+        td.num,
+        th.num {
+            text-align: right;
+        }
+
+        tbody tr:hover {
+            background: #fafafa;
+        }
+
+        .empty {
+            padding: 28px;
+            text-align: center;
+            color: #666;
+        }
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+    <div class="page-header">
+
+        <h1>
+            Next Week Candidate List
+        </h1>
+
+        <button
+            id="downloadBtn"
+            type="button"
+        >
+            Download List
+        </button>
+
+    </div>
+
+    <div class="panel">
+
+        <div class="row">
+
+            <div class="field">
+                <label for="candidateBatch">
+                    Candidate Batch
+                </label>
+
+                <select id="candidateBatch">
+                    <option value="new">
+                        New Candidate List
+                    </option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="currentWeek">
+                    Current Week
+                </label>
+
+                <select
+                    id="currentWeek"
+                >
+                    <option value="">
+                        Select week
+                    </option>
+                </select>
+            </div>
+
+            <div class="field calendar-range-field">
+
+                <label>
+                    LIVE Date Range
+                </label>
+
+                <button
+                    id="dateRangeButton"
+                    type="button"
+                    class="date-range-button"
+                >
+                    <span id="dateRangeText">
+                        Select dates
+                    </span>
+
+                    <span class="calendar-icon">
+                        📅
+                    </span>
+                </button>
+
+                <div
+                    id="calendarPopover"
+                    class="calendar-popover"
+                >
+
+                    <div class="calendar-header">
+
+                        <button
+                            id="prevMonthBtn"
+                            type="button"
+                            class="calendar-nav"
+                        >
+                            ‹
+                        </button>
+
+                        <div
+                            id="calendarMonthTitle"
+                            class="calendar-month-title"
+                        ></div>
+
+                        <button
+                            id="nextMonthBtn"
+                            type="button"
+                            class="calendar-nav"
+                        >
+                            ›
+                        </button>
+
+                    </div>
+
+                    <div class="calendar-weekdays">
+                        <span>Sun</span>
+                        <span>Mon</span>
+                        <span>Tue</span>
+                        <span>Wed</span>
+                        <span>Thu</span>
+                        <span>Fri</span>
+                        <span>Sat</span>
+                    </div>
+
+                    <div
+                        id="calendarDays"
+                        class="calendar-days"
+                    ></div>
+
+                    <div class="calendar-footer">
+
+                        <button
+                            id="clearDateRangeBtn"
+                            type="button"
+                            class="calendar-text-button"
+                        >
+                            Clear
+                        </button>
+
+                        <button
+                            id="todayDateRangeBtn"
+                            type="button"
+                            class="calendar-text-button"
+                        >
+                            Today
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="field checkbox-field">
+                <label class="remaining-option">
+                    <input
+                        id="includeWeeklyRemaining"
+                        type="checkbox"
+                        checked
+                    >
+                    Include Weekly Remaining
+                </label>
+            </div>
+
+            <button
+                id="loadLivesBtn"
+                type="button"
+            >
+                Load LIVE IDs
+            </button>
+
+            <button
+                id="generateBtn"
+                type="button"
+                disabled
+            >
+                Generate Candidate List
+            </button>
+
+        </div>
+
+        <div
+            id="liveStatus"
+            class="status"
+        ></div>
+
+        <div
+            id="liveList"
+            class="live-list"
+        ></div>
+
+    </div>
+
+    <div class="panel">
+        <div class="summary">
+            <div>
+                Selected LIVE IDs:
+                <span id="selectedCount">0</span>
+            </div>
+
+            <div>
+                Candidate Books:
+                <span id="candidateCount">0</span>
+            </div>
+        </div>
+
+        <div
+            id="generateStatus"
+            class="status"
+        ></div>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th class="sortable" data-sort-key="sku">
+                    SKU
+                    <span class="sort-arrow"></span>
+                </th>
+
+                <th class="sortable" data-sort-key="book_title">
+                    Book Title
+                    <span class="sort-arrow"></span>
+                </th>
+
+                <th class="sortable" data-sort-key="spice_type">
+                    Spice Type
+                    <span class="sort-arrow"></span>
+                </th>
+
+                <th class="num sortable" data-sort-key="available_stock" data-sort-type="number">
+                    Available Stock
+                    <span class="sort-arrow"></span>
+                </th>
+
+                <th class="num sortable" data-sort-key="selected_live_sales" data-sort-type="number">
+                    Selected LIVE Sales
+                    <span class="sort-arrow"></span>
+                </th>
+
+                <th class="num sortable" data-sort-key="weekly_remaining" data-sort-type="number">
+                    Weekly Remaining
+                    <span class="sort-arrow"></span>
+                </th>
+
+                <th class="num sortable" data-sort-key="candidate_stock" data-sort-type="number">
+                    Candidate Stock
+                    <span class="sort-arrow"></span>
+                </th>
+            </tr>
+            </thead>
+
+            <tbody id="candidateBody">
+            <tr>
+                <td
+                    colspan="7"
+                    class="empty"
+                >
+                    No candidate list generated yet.
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const candidateBatchSelect =
+        document.getElementById("candidateBatch");
+
+    const currentWeekInput =
+        document.getElementById("currentWeek");
+
+    const dateRangeButton =
+        document.getElementById("dateRangeButton");
+
+    const dateRangeText =
+        document.getElementById("dateRangeText");
+
+    const calendarPopover =
+        document.getElementById("calendarPopover");
+
+    const calendarMonthTitle =
+        document.getElementById("calendarMonthTitle");
+
+    const calendarDays =
+        document.getElementById("calendarDays");
+
+    const prevMonthBtn =
+        document.getElementById("prevMonthBtn");
+
+    const nextMonthBtn =
+        document.getElementById("nextMonthBtn");
+
+    const clearDateRangeBtn =
+        document.getElementById("clearDateRangeBtn");
+
+    const todayDateRangeBtn =
+        document.getElementById("todayDateRangeBtn");
+
+    let liveStartDateValue = "";
+    let liveEndDateValue = "";
+    let calendarViewDate = new Date();
+
+    const includeWeeklyRemaining =
+        document.getElementById(
+            "includeWeeklyRemaining"
+        );
+
+    const loadLivesBtn =
+        document.getElementById("loadLivesBtn");
+
+    const generateBtn =
+        document.getElementById("generateBtn");
+
+    const liveList =
+        document.getElementById("liveList");
+
+    const liveStatus =
+        document.getElementById("liveStatus");
+
+    const generateStatus =
+        document.getElementById("generateStatus");
+
+    const candidateBody =
+        document.getElementById("candidateBody");
+
+    const selectedCount =
+        document.getElementById("selectedCount");
+
+    const candidateCount =
+        document.getElementById("candidateCount");
+
+    const downloadBtn =
+        document.getElementById("downloadBtn");
+
+    let latestCandidateItems = [];
+
+    let currentSortKey =
+        "candidate_stock";
+
+    let currentSortDirection =
+        "desc";
+
+
+    function toISODate(date) {
+
+        const year = date.getFullYear();
+
+        const month =
+            String(
+                date.getMonth() + 1
+            ).padStart(2, "0");
+
+        const day =
+            String(
+                date.getDate()
+            ).padStart(2, "0");
+
+        return `${year}-${month}-${day}`;
+    }
+
+
+    function fromISODate(value) {
+
+        if (!value) {
+            return null;
+        }
+
+        const parts =
+            value
+                .split("-")
+                .map(Number);
+
+        return new Date(
+            parts[0],
+            parts[1] - 1,
+            parts[2],
+            12
+        );
+    }
+
+
+    function displayDate(date) {
+
+        return date.toLocaleDateString(
+            "en-US",
+            {
+                month: "short",
+                day: "numeric",
+                year: "numeric"
+            }
+        );
+    }
+
+
+    function sameDate(a, b) {
+
+        return (
+            a
+            &&
+            b
+            &&
+            a.getFullYear() === b.getFullYear()
+            &&
+            a.getMonth() === b.getMonth()
+            &&
+            a.getDate() === b.getDate()
+        );
+    }
+
+
+    function updateDateRangeText() {
+
+        const start =
+            fromISODate(
+                liveStartDateValue
+            );
+
+        const end =
+            fromISODate(
+                liveEndDateValue
+            );
+
+        if (start && end) {
+
+            dateRangeText.textContent =
+                `${displayDate(start)} → ${displayDate(end)}`;
+
+        } else if (start) {
+
+            dateRangeText.textContent =
+                `${displayDate(start)} → Select end`;
+
+        } else {
+
+            dateRangeText.textContent =
+                "Select dates";
+        }
+    }
+
+
+    function renderCalendar() {
+
+        calendarDays.innerHTML = "";
+
+        const year =
+            calendarViewDate.getFullYear();
+
+        const month =
+            calendarViewDate.getMonth();
+
+        calendarMonthTitle.textContent =
+            calendarViewDate.toLocaleDateString(
+                "en-US",
+                {
+                    month: "long",
+                    year: "numeric"
+                }
+            );
+
+        const firstOfMonth =
+            new Date(
+                year,
+                month,
+                1,
+                12
+            );
+
+        const gridStart =
+            new Date(
+                year,
+                month,
+                1 - firstOfMonth.getDay(),
+                12
+            );
+
+        const selectedStart =
+            fromISODate(
+                liveStartDateValue
+            );
+
+        const selectedEnd =
+            fromISODate(
+                liveEndDateValue
+            );
+
+        for (let i = 0; i < 42; i++) {
+
+            const date =
+                new Date(gridStart);
+
+            date.setDate(
+                gridStart.getDate() + i
+            );
+
+            const button =
+                document.createElement("button");
+
+            button.type = "button";
+            button.className =
+                "calendar-day";
+
+            if (
+                date.getMonth()
+                !==
+                month
+            ) {
+                button.classList.add(
+                    "outside-month"
+                );
+            }
+
+            if (
+                selectedStart
+                &&
+                selectedEnd
+                &&
+                date > selectedStart
+                &&
+                date < selectedEnd
+            ) {
+                button.classList.add(
+                    "in-range"
+                );
+            }
+
+            if (
+                sameDate(
+                    date,
+                    selectedStart
+                )
+            ) {
+                button.classList.add(
+                    "range-start"
+                );
+            }
+
+            if (
+                sameDate(
+                    date,
+                    selectedEnd
+                )
+            ) {
+                button.classList.add(
+                    "range-end"
+                );
+            }
+
+            const span =
+                document.createElement("span");
+
+            span.textContent =
+                date.getDate();
+
+            button.appendChild(span);
+
+            button.addEventListener(
+                "click",
+                function(event) {
+
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const clicked =
+                        toISODate(date);
+
+                    // First click:
+                    // start a brand-new range and KEEP
+                    // the calendar open for the second click.
+                    if (
+                        !liveStartDateValue
+                        ||
+                        liveEndDateValue
+                    ) {
+                        liveStartDateValue =
+                            clicked;
+
+                        liveEndDateValue =
+                            "";
+
+                        updateDateRangeText();
+                        renderCalendar();
+
+                        return;
+                    }
+
+                    // Second click:
+                    // finish the range.
+                    const start =
+                        fromISODate(
+                            liveStartDateValue
+                        );
+
+                    if (date < start) {
+
+                        liveEndDateValue =
+                            liveStartDateValue;
+
+                        liveStartDateValue =
+                            clicked;
+
+                    } else {
+
+                        liveEndDateValue =
+                            clicked;
+                    }
+
+                    updateDateRangeText();
+                    renderCalendar();
+
+                    // Only close AFTER both dates
+                    // have been selected.
+                    calendarPopover
+                        .classList
+                        .remove("show");
+                }
+            );
+
+            calendarDays.appendChild(
+                button
+            );
+        }
+    }
+
+
+    function setEditorReadOnly(readOnly) {
+
+        currentWeekInput.disabled = readOnly;
+        dateRangeButton.disabled = readOnly;
+        includeWeeklyRemaining.disabled = readOnly;
+        loadLivesBtn.disabled = readOnly;
+
+        document
+            .querySelectorAll(".live-checkbox")
+            .forEach(
+                checkbox => {
+                    checkbox.disabled = readOnly;
+                }
+            );
+
+        if (readOnly) {
+            generateBtn.disabled = true;
+        }
+    }
+
+
+    function renderSavedLives(items) {
+
+        liveList.innerHTML = "";
+
+        if (!items.length) {
+            liveList.innerHTML = `
+                <div class="empty">
+                    No LIVE IDs were saved for this batch.
+                </div>
+            `;
+            selectedCount.textContent = "0";
+            return;
+        }
+
+        items.forEach(item => {
+
+            const wrapper =
+                document.createElement("label");
+
+            wrapper.className =
+                "live-item";
+
+            const checkbox =
+                document.createElement("input");
+
+            checkbox.type = "checkbox";
+            checkbox.className =
+                "live-checkbox";
+            checkbox.checked = true;
+            checkbox.disabled = true;
+
+            const meta =
+                document.createElement("div");
+
+            meta.className =
+                "live-meta";
+
+            const main =
+                document.createElement("div");
+
+            main.className =
+                "live-main";
+
+            main.textContent =
+                `${item.store_code} | LIVE ${item.live_id}`;
+
+            const sub =
+                document.createElement("div");
+
+            sub.className =
+                "live-sub";
+
+            sub.textContent =
+                `${item.week_id} | Saved Batch`;
+
+            meta.appendChild(main);
+            meta.appendChild(sub);
+
+            wrapper.appendChild(checkbox);
+            wrapper.appendChild(meta);
+
+            liveList.appendChild(wrapper);
+        });
+
+        selectedCount.textContent =
+            String(items.length);
+    }
+
+
+    async function loadCandidateBatches(
+        selectBatchId = null
+    ) {
+
+        const response =
+            await fetch(
+                "/api/next-week-candidates/batches"
+            );
+
+        const data =
+            await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(
+                data.message
+                ||
+                "Failed to load Candidate Batches."
+            );
+        }
+
+        candidateBatchSelect.innerHTML = "";
+
+        const newOption =
+            document.createElement("option");
+
+        newOption.value = "new";
+        newOption.textContent =
+            "New Candidate List";
+
+        candidateBatchSelect.appendChild(
+            newOption
+        );
+
+        (data.items || []).forEach(item => {
+
+            const option =
+                document.createElement("option");
+
+            option.value =
+                String(item.batch_id);
+
+            const remaining =
+                Number(
+                    item.include_weekly_remaining
+                )
+                ? "Remaining ON"
+                : "Remaining OFF";
+
+            option.textContent =
+                `#${item.batch_id} | ${item.week_id} | ${item.generated_at} | ${remaining}`;
+
+            candidateBatchSelect.appendChild(
+                option
+            );
+        });
+
+        if (selectBatchId) {
+            candidateBatchSelect.value =
+                String(selectBatchId);
+        } else if (
+            data.items &&
+            data.items.length > 0
+        ) {
+
+            const latestBatchId =
+                data.items[0].batch_id;
+
+            candidateBatchSelect.value =
+                String(latestBatchId);
+
+            await loadSavedBatch(
+                latestBatchId
+            );
+
+        } else {
+
+            candidateBatchSelect.value =
+                "new";
+        }
+    }
+
+
+    async function loadSavedBatch(batchId) {
+
+        generateStatus.className =
+            "status";
+
+        generateStatus.textContent =
+            "Loading saved Candidate List...";
+
+        const response =
+            await fetch(
+                `/api/next-week-candidates/batches/${batchId}`
+            );
+
+        const data =
+            await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(
+                data.message
+                ||
+                "Failed to load saved Candidate List."
+            );
+        }
+
+        const batch =
+            data.batch || {};
+
+        currentWeekInput.value =
+            batch.week_id || "";
+
+        includeWeeklyRemaining.checked =
+            Boolean(
+                Number(
+                    batch.include_weekly_remaining
+                )
+            );
+
+        renderSavedLives(
+            data.selected_lives || []
+        );
+
+        renderCandidates(
+            data.items || []
+        );
+
+        setEditorReadOnly(true);
+
+        generateStatus.textContent =
+            `Saved Batch #${batch.batch_id} · ${batch.generated_at} · ${data.candidate_count ?? 0} book(s).`;
+    }
+
+
+    function resetNewCandidateMode() {
+
+        setEditorReadOnly(false);
+
+        liveList.innerHTML = "";
+
+        liveStatus.textContent = "";
+
+        selectedCount.textContent = "0";
+
+        latestCandidateItems = [];
+
+        candidateCount.textContent = "0";
+
+        downloadBtn.classList.remove(
+            "show"
+        );
+
+        candidateBody.innerHTML = `
+            <tr>
+                <td
+                    colspan="7"
+                    class="empty"
+                >
+                    No candidate list generated yet.
+                </td>
+            </tr>
+        `;
+
+        generateStatus.textContent = "";
+
+        generateBtn.disabled = true;
+    }
+
+
+    function setDefaultDateRange() {
+
+        const end =
+            new Date();
+
+        end.setHours(
+            12,
+            0,
+            0,
+            0
+        );
+
+        const start =
+            new Date(end);
+
+        start.setDate(
+            end.getDate() - 7
+        );
+
+        liveStartDateValue =
+            toISODate(start);
+
+        liveEndDateValue =
+            toISODate(end);
+
+        calendarViewDate =
+            new Date(
+                end.getFullYear(),
+                end.getMonth(),
+                1,
+                12
+            );
+
+        updateDateRangeText();
+        renderCalendar();
+    }
+
+
+    function getSelectedLives() {
+
+        return Array
+            .from(
+                document.querySelectorAll(
+                    ".live-checkbox:checked"
+                )
+            )
+            .map(
+                checkbox => ({
+                    week_id:
+                        checkbox.dataset.weekId,
+
+                    store_id:
+                        Number(
+                            checkbox.dataset.storeId
+                        ),
+
+                    live_id:
+                        checkbox.dataset.liveId
+                })
+            );
+    }
+
+
+    function updateSelectedCount() {
+
+        const selected =
+            getSelectedLives();
+
+        selectedCount.textContent =
+            selected.length;
+    }
+
+
+    function renderLives(items) {
+
+        liveList.innerHTML = "";
+
+        if (!items.length) {
+
+            liveList.innerHTML = `
+                <div class="empty">
+                    No LIVE IDs found.
+                </div>
+            `;
+
+            generateBtn.disabled = true;
+
+            return;
+        }
+
+        items.forEach(item => {
+
+            const wrapper =
+                document.createElement("label");
+
+            wrapper.className =
+                "live-item";
+
+            const checkbox =
+                document.createElement("input");
+
+            checkbox.type =
+                "checkbox";
+
+            checkbox.className =
+                "live-checkbox";
+
+            checkbox.dataset.weekId =
+                item.week_id;
+
+            checkbox.dataset.storeId =
+                item.store_id;
+
+            checkbox.dataset.liveId =
+                item.live_id;
+
+            checkbox.addEventListener(
+                "change",
+                updateSelectedCount
+            );
+
+            const meta =
+                document.createElement("div");
+
+            meta.className =
+                "live-meta";
+
+            const main =
+                document.createElement("div");
+
+            main.className =
+                "live-main";
+
+            main.textContent =
+                `${item.store_code} | LIVE ${item.live_id}`;
+
+            const sub =
+                document.createElement("div");
+
+            sub.className =
+                "live-sub";
+
+            sub.textContent =
+                `${item.created_at} | ${item.week_id} | ${item.source}`;
+
+            meta.appendChild(main);
+            meta.appendChild(sub);
+
+            wrapper.appendChild(checkbox);
+            wrapper.appendChild(meta);
+
+            liveList.appendChild(wrapper);
+        });
+
+        generateBtn.disabled = false;
+
+        updateSelectedCount();
+    }
+
+    async function loadWeekOptions() {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/weekly-weeks?store_id=1"
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error
+                    ||
+                    "Failed to load weeks."
+                );
+            }
+
+            const rawWeeks =
+                Array.isArray(data)
+                ? data
+                : (
+                    data.items
+                    ||
+                    data.weeks
+                    ||
+                    []
+                );
+
+            const weeks =
+                rawWeeks
+                    .map(
+                        item => {
+
+                            if (
+                                typeof item
+                                ===
+                                "string"
+                            ) {
+                                return item;
+                            }
+
+                            return (
+                                item.week_id
+                                ||
+                                item.week
+                                ||
+                                ""
+                            );
+                        }
+                    )
+                    .filter(Boolean);
+
+            currentWeekInput.innerHTML =
+                "";
+
+            if (!weeks.length) {
+
+                const option =
+                    document.createElement(
+                        "option"
+                    );
+
+                option.value = "";
+                option.textContent =
+                    "No weeks available";
+
+                currentWeekInput.appendChild(
+                    option
+                );
+
+                return;
+            }
+
+            weeks.forEach(
+                weekId => {
+
+                    const option =
+                        document.createElement(
+                            "option"
+                        );
+
+                    option.value =
+                        weekId;
+
+                    option.textContent =
+                        weekId;
+
+                    currentWeekInput.appendChild(
+                        option
+                    );
+                }
+            );
+
+            // The API is expected to return newest first.
+            // Select the first/latest available week.
+            currentWeekInput.value =
+                weeks[0];
+
+        } catch (error) {
+
+            console.error(
+                "Failed to load week options:",
+                error
+            );
+
+            currentWeekInput.innerHTML =
+                "";
+
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+            option.value = "";
+            option.textContent =
+                "Failed to load weeks";
+
+            currentWeekInput.appendChild(
+                option
+            );
+        }
+    }
+
+
+    async function loadLives() {
+
+        const weekId =
+            currentWeekInput.value.trim();
+
+        liveStatus.className =
+            "status";
+
+        liveStatus.textContent =
+            "Loading LIVE IDs...";
+
+        generateBtn.disabled = true;
+
+        try {
+
+            const params =
+                new URLSearchParams();
+
+            if (weekId) {
+                params.set(
+                    "week_id",
+                    weekId
+                );
+            }
+
+            if (liveStartDateValue) {
+                params.set(
+                    "start_date",
+                    liveStartDateValue
+                );
+            }
+
+            if (liveEndDateValue) {
+                params.set(
+                    "end_date",
+                    liveEndDateValue
+                );
+            }
+
+            let url =
+                "/api/next-week-candidates/lives";
+
+            const queryString =
+                params.toString();
+
+            if (queryString) {
+                url +=
+                    "?"
+                    +
+                    queryString;
+            }
+
+            const response =
+                await fetch(url);
+
+            const data =
+                await response.json();
+
+            if (!response.ok || !data.success) {
+
+                throw new Error(
+                    data.message
+                    || "Failed to load LIVE IDs"
+                );
+            }
+
+            renderLives(
+                data.items || []
+            );
+
+            liveStatus.textContent =
+                `${(data.items || []).length} LIVE ID(s) loaded.`;
+
+        } catch (error) {
+
+            liveList.innerHTML = "";
+
+            liveStatus.className =
+                "status error";
+
+            liveStatus.textContent =
+                error.message;
+
+            generateBtn.disabled = true;
+        }
+    }
+
+
+    function renderCandidates(items) {
+
+        candidateBody.innerHTML = "";
+
+        latestCandidateItems =
+            Array.isArray(items)
+            ? items
+            : [];
+
+        candidateCount.textContent =
+            latestCandidateItems.length;
+
+        downloadBtn.classList.toggle(
+            "show",
+            latestCandidateItems.length > 0
+        );
+
+        if (!latestCandidateItems.length) {
+
+            candidateBody.innerHTML = `
+                <tr>
+                    <td
+                        colspan="7"
+                        class="empty"
+                    >
+                        No candidate books found.
+                    </td>
+                </tr>
+            `;
+
+            return;
+        }
+
+        const sortedItems =
+            [...latestCandidateItems]
+                .sort(
+                    (a, b) => {
+
+                        const aValue =
+                            a[currentSortKey];
+
+                        const bValue =
+                            b[currentSortKey];
+
+                        let result = 0;
+
+                        if (
+                            currentSortKey
+                            === "available_stock"
+                            ||
+                            currentSortKey
+                            === "selected_live_sales"
+                            ||
+                            currentSortKey
+                            === "weekly_remaining"
+                            ||
+                            currentSortKey
+                            === "candidate_stock"
+                        ) {
+
+                            result =
+                                Number(aValue || 0)
+                                -
+                                Number(bValue || 0);
+
+                        } else {
+
+                            result =
+                                String(aValue ?? "")
+                                    .localeCompare(
+                                        String(bValue ?? ""),
+                                        undefined,
+                                        {
+                                            numeric: true,
+                                            sensitivity: "base"
+                                        }
+                                    );
+                        }
+
+                        return (
+                            currentSortDirection
+                            === "asc"
+                        )
+                        ? result
+                        : -result;
+                    }
+                );
+
+        sortedItems.forEach(item => {
+
+            const row =
+                document.createElement("tr");
+
+            row.innerHTML = `
+                <td>${item.sku ?? ""}</td>
+                <td>${item.book_title ?? ""}</td>
+                <td>${item.spice_type ?? ""}</td>
+                <td class="num">${item.available_stock ?? 0}</td>
+                <td class="num">${item.selected_live_sales ?? 0}</td>
+                <td class="num">${item.weekly_remaining ?? 0}</td>
+                <td class="num"><strong>${item.candidate_stock ?? 0}</strong></td>
+            `;
+
+            candidateBody.appendChild(row);
+        });
+    }
+
+    async function generateCandidates() {
+
+        const currentWeekId =
+            currentWeekInput.value.trim();
+
+        if (!currentWeekId) {
+
+            generateStatus.className =
+                "status error";
+
+            generateStatus.textContent =
+                "Current Week is required.";
+
+            return;
+        }
+
+        const selectedLives =
+            getSelectedLives();
+
+        generateBtn.disabled = true;
+
+        generateStatus.className =
+            "status";
+
+        generateStatus.textContent =
+            "Generating candidate list...";
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/next-week-candidates/generate",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+                            current_week_id:
+                                currentWeekId,
+
+                            selected_lives:
+                                selectedLives,
+
+                            include_weekly_remaining:
+                                includeWeeklyRemaining.checked
+                        })
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok || !data.success) {
+
+                throw new Error(
+                    data.message
+                    || "Failed to generate candidate list"
+                );
+            }
+
+            renderCandidates(
+                data.items || []
+            );
+
+            await loadCandidateBatches(
+                data.batch_id
+            );
+
+            setEditorReadOnly(true);
+
+            const remainingMode =
+                data.include_weekly_remaining
+                ? "Weekly Remaining included."
+                : "Weekly Remaining excluded.";
+
+            generateStatus.textContent =
+                `Candidate list generated once. ${data.candidate_count ?? 0} book(s). ${remainingMode}`;
+
+        } catch (error) {
+
+            generateStatus.className =
+                "status error";
+
+            generateStatus.textContent =
+                error.message;
+
+        } finally {
+
+            generateBtn.disabled = false;
+        }
+    }
+
+
+    function updateSortIndicators() {
+
+        document
+            .querySelectorAll(
+                "th.sortable"
+            )
+            .forEach(
+                th => {
+
+                    const arrow =
+                        th.querySelector(
+                            ".sort-arrow"
+                        );
+
+                    if (!arrow) {
+                        return;
+                    }
+
+                    if (
+                        th.dataset.sortKey
+                        ===
+                        currentSortKey
+                    ) {
+                        arrow.textContent =
+                            currentSortDirection
+                            ===
+                            "asc"
+                            ? "▲"
+                            : "▼";
+                    } else {
+                        arrow.textContent =
+                            "";
+                    }
+                }
+            );
+    }
+
+
+    function sortByColumn(key) {
+
+        if (
+            currentSortKey
+            ===
+            key
+        ) {
+
+            currentSortDirection =
+                currentSortDirection
+                ===
+                "asc"
+                ? "desc"
+                : "asc";
+
+        } else {
+
+            currentSortKey =
+                key;
+
+            currentSortDirection =
+                (
+                    key === "available_stock"
+                    ||
+                    key === "selected_live_sales"
+                    ||
+                    key === "weekly_remaining"
+                    ||
+                    key === "candidate_stock"
+                )
+                ? "desc"
+                : "asc";
+        }
+
+        updateSortIndicators();
+
+        renderCandidates(
+            latestCandidateItems
+        );
+    }
+
+
+    function csvEscape(value) {
+
+        const text =
+            value === null
+            || value === undefined
+            ? ""
+            : String(value);
+
+        return `"${text.replaceAll('"', '""')}"`;
+    }
+
+
+    function downloadCandidateList() {
+
+        if (!latestCandidateItems.length) {
+            return;
+        }
+
+        const headers = [
+            "SKU",
+            "Book Title",
+            "Spice Type",
+            "Available Stock",
+            "Selected LIVE Sales",
+            "Weekly Remaining",
+            "Candidate Stock"
+        ];
+
+        const rows = [
+            headers,
+
+            ...latestCandidateItems.map(
+                item => [
+                    item.sku ?? "",
+                    item.book_title ?? "",
+                    item.spice_type ?? "",
+                    item.available_stock ?? 0,
+                    item.selected_live_sales ?? 0,
+                    item.weekly_remaining ?? 0,
+                    item.candidate_stock ?? 0
+                ]
+            )
+        ];
+
+        const csv =
+            "\uFEFF"
+            +
+            rows
+                .map(
+                    row =>
+                        row
+                            .map(csvEscape)
+                            .join(",")
+                )
+                .join("\r\n");
+
+        const blob =
+            new Blob(
+                [csv],
+                {
+                    type:
+                        "text/csv;charset=utf-8;"
+                }
+            );
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const link =
+            document.createElement("a");
+
+        const weekId =
+            currentWeekInput.value
+                .trim()
+                .replaceAll(
+                    /[^A-Za-z0-9_-]/g,
+                    "_"
+                )
+            || "week";
+
+        link.href = url;
+
+        link.download =
+            `next_week_candidates_${weekId}.csv`;
+
+        document.body.appendChild(link);
+
+        link.click();
+
+        link.remove();
+
+        URL.revokeObjectURL(url);
+    }
+
+
+    document
+        .querySelectorAll(
+            "th.sortable"
+        )
+        .forEach(
+            th => {
+
+                th.addEventListener(
+                    "click",
+                    function() {
+
+                        const selection =
+                            window
+                                .getSelection()
+                                .toString()
+                                .trim();
+
+                        if (selection) {
+                            return;
+                        }
+
+                        sortByColumn(
+                            th.dataset.sortKey
+                        );
+                    }
+                );
+            }
+        );
+
+    updateSortIndicators();
+
+
+    downloadBtn.addEventListener(
+        "click",
+        downloadCandidateList
+    );
+
+
+    dateRangeButton.addEventListener(
+        "click",
+        function(event) {
+
+            event.stopPropagation();
+
+            calendarPopover
+                .classList
+                .toggle("show");
+
+            renderCalendar();
+        }
+    );
+
+
+    prevMonthBtn.addEventListener(
+        "click",
+        function() {
+
+            calendarViewDate =
+                new Date(
+                    calendarViewDate.getFullYear(),
+                    calendarViewDate.getMonth() - 1,
+                    1,
+                    12
+                );
+
+            renderCalendar();
+        }
+    );
+
+
+    nextMonthBtn.addEventListener(
+        "click",
+        function() {
+
+            calendarViewDate =
+                new Date(
+                    calendarViewDate.getFullYear(),
+                    calendarViewDate.getMonth() + 1,
+                    1,
+                    12
+                );
+
+            renderCalendar();
+        }
+    );
+
+
+    clearDateRangeBtn.addEventListener(
+        "click",
+        function() {
+
+            liveStartDateValue = "";
+            liveEndDateValue = "";
+
+            updateDateRangeText();
+            renderCalendar();
+        }
+    );
+
+
+    todayDateRangeBtn.addEventListener(
+        "click",
+        function() {
+
+            const today =
+                new Date();
+
+            today.setHours(
+                12,
+                0,
+                0,
+                0
+            );
+
+            liveStartDateValue =
+                toISODate(today);
+
+            liveEndDateValue =
+                toISODate(today);
+
+            calendarViewDate =
+                new Date(
+                    today.getFullYear(),
+                    today.getMonth(),
+                    1,
+                    12
+                );
+
+            updateDateRangeText();
+            renderCalendar();
+
+            calendarPopover
+                .classList
+                .remove("show");
+        }
+    );
+
+
+    document.addEventListener(
+        "click",
+        function(event) {
+
+            if (
+                !event.target.closest(
+                    ".calendar-range-field"
+                )
+            ) {
+                calendarPopover
+                    .classList
+                    .remove("show");
+            }
+        }
+    );
+
+
+    candidateBatchSelect.addEventListener(
+        "change",
+        async function() {
+
+            try {
+
+                if (
+                    candidateBatchSelect.value
+                    ===
+                    "new"
+                ) {
+                    resetNewCandidateMode();
+                    return;
+                }
+
+                await loadSavedBatch(
+                    candidateBatchSelect.value
+                );
+
+            } catch (error) {
+
+                generateStatus.className =
+                    "status error";
+
+                generateStatus.textContent =
+                    error.message;
+            }
+        }
+    );
+
+
+    setDefaultDateRange();
+
+    loadWeekOptions();
+
+    loadCandidateBatches()
+        .catch(
+            error => {
+                generateStatus.className =
+                    "status error";
+                generateStatus.textContent =
+                    error.message;
+            }
+        );
+
+
+    loadLivesBtn.addEventListener(
+        "click",
+        loadLives
+    );
+
+    generateBtn.addEventListener(
+        "click",
+        generateCandidates
+    );
+</script>
+{% endblock %}
