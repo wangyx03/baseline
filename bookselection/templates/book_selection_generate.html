@@ -624,6 +624,7 @@ th.sortable:hover {
                         </th>
 
                         <th
+                            id="qtyHeader"
                             class="sortable num"
                             data-sort-key="planned_qty"
                             data-sort-type="number"
@@ -730,6 +731,9 @@ th.sortable:hover {
 
     const addBookBtn =
         document.getElementById("addBookBtn");
+
+    const qtyHeader =
+        document.getElementById("qtyHeader");
 
 
     const unusedControls =
@@ -2122,6 +2126,12 @@ th.sortable:hover {
         addBookBtn.style.display =
             "none";
 
+        qtyHeader.innerHTML =
+            'Available Qty <span class="sort-arrow"></span>';
+
+        qtyHeader.dataset.sortKey =
+            "available_qty";
+
         resultBody.innerHTML = "";
 
         const rows =
@@ -2266,6 +2276,12 @@ th.sortable:hover {
 
         addBookBtn.style.display =
             "inline-block";
+
+        qtyHeader.innerHTML =
+            'Planned Qty <span class="sort-arrow"></span>';
+
+        qtyHeader.dataset.sortKey =
+            "planned_qty";
 
         renderStore();
     }
