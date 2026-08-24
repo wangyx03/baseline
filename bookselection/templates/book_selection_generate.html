@@ -175,8 +175,14 @@ button:disabled {
 
 table {
     width: 100%;
+    min-width: 1200px;
     border-collapse: collapse;
     table-layout: fixed;
+}
+
+th:nth-child(7),
+td:nth-child(7) {
+    white-space: nowrap;
 }
 
 th,
@@ -259,13 +265,16 @@ th.sortable:hover {
     font-size: 13px;
 }
 
-.edit-qty {
-    width: 90px;
+input.edit-qty {
+    width: 100%;
+    max-width: 105px;
+    min-width: 80px;
     padding: 6px 7px;
     border: 1px solid #bbb;
     border-radius: 4px;
     font-size: 13px;
     text-align: right;
+    box-sizing: border-box;
 }
 
 
@@ -1379,7 +1388,7 @@ th.sortable:hover {
                 : "Remaining OFF";
 
             option.textContent =
-                `#${item.batch_id} | ${item.week_id} | ${item.generated_at} | ${remaining}`;
+                `${item.week_id} | ${item.generated_at}`;
 
             batchSelect.appendChild(option);
         });

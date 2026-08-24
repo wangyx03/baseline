@@ -751,7 +751,7 @@ def api_candidate_batches():
             ORDER BY
                 b.batch_id DESC
 
-            LIMIT 100
+            LIMIT 5
             """
         )
 

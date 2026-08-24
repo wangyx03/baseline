@@ -4,7 +4,7 @@ import re
 from datetime import date
 
 from flask import Blueprint, jsonify, render_template, request
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from db import get_db
 
@@ -18,6 +18,10 @@ from bookselection.book_allocation import (
     build_stock_check,
     build_summary,
     load_books_from_candidates,
+)
+
+from bookselection.weekly_inventory_log import (
+    write_weekly_inventory_log,
 )
 
 
@@ -1539,16 +1543,30 @@ def api_save_weekly_inventory():
                     ),
             }), 409
 
-        # Replace ONLY the selected target week.
-        # Other weeks remain untouched.
+        # -----------------------------------------------------
+        # Capture the current Weekly Inventory before replacing it.
+        # This snapshot is used only to build the audit log.
+        # -----------------------------------------------------
         cursor.execute(
             """
-            DELETE FROM weekly_inventory
+            SELECT
+                store_id,
+                sku,
+                planned_qty
+            FROM weekly_inventory
             WHERE week_id = %s
+            ORDER BY
+                store_id,
+                sku
             """,
             (
                 target_week_id,
             )
+        )
+
+        old_weekly_rows = (
+            cursor.fetchall()
+            or []
         )
 
         rows_to_insert = [
@@ -1567,6 +1585,35 @@ def api_save_weekly_inventory():
             )
             for row in detail_rows
         ]
+
+        new_weekly_rows = [
+            {
+                "store_id":
+                    store_id,
+                "sku":
+                    sku,
+                "planned_qty":
+                    planned_qty,
+            }
+            for (
+                _week_id,
+                store_id,
+                sku,
+                planned_qty,
+            ) in rows_to_insert
+        ]
+
+        # Replace ONLY the selected target week.
+        # Other weeks remain untouched.
+        cursor.execute(
+            """
+            DELETE FROM weekly_inventory
+            WHERE week_id = %s
+            """,
+            (
+                target_week_id,
+            )
+        )
 
         if rows_to_insert:
             cursor.executemany(
@@ -1588,6 +1635,36 @@ def api_save_weekly_inventory():
                 """,
                 rows_to_insert,
             )
+
+        # -----------------------------------------------------
+        # Weekly Inventory audit log
+        #
+        # The log write uses the SAME cursor/transaction as the
+        # Weekly Inventory replacement. If either operation fails,
+        # the exception handler below rolls both back together.
+        # -----------------------------------------------------
+        raw_user_id = current_user.get_id()
+
+        operator_user_id = (
+            int(raw_user_id)
+            if raw_user_id is not None
+            else None
+        )
+
+        log_action = (
+            "REPLACE"
+            if old_weekly_rows
+            else "CONFIRM"
+        )
+
+        write_weekly_inventory_log(
+            cursor,
+            week_id=target_week_id,
+            operator_user_id=operator_user_id,
+            old_rows=old_weekly_rows,
+            new_rows=new_weekly_rows,
+            action=log_action,
+        )
 
         db.commit()
 

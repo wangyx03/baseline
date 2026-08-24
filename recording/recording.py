@@ -22,6 +22,7 @@ from .inventory_service import (
     get_weekly_item_status,
     get_weekly_item_statuses
 )
+from .recording_log import write_recording_log
 from utils import format_et
 
 recording_bp = Blueprint(
@@ -113,59 +114,6 @@ def get_recording_sort_direction(cursor):
         return DEFAULT_RECORDING_SORT_DIRECTION
 
     return direction
-
-def write_recording_log(
-    cursor,
-    recording_id,
-    action_type,
-    old_sku,
-    new_sku,
-    week_id,
-    store_id,
-    live_id
-):
-
-    cursor.execute(
-        """
-        INSERT INTO sku_recording_log (
-            recording_id,
-            action_type,
-            old_sku,
-            new_sku,
-            week_id,
-            store_id,
-            live_id,
-            user_id,
-            username,
-            request_ip
-        )
-
-        VALUES (
-            %s,
-            %s,
-            %s,
-            %s,
-            %s,
-            %s,
-            %s,
-            %s,
-            %s,
-            %s
-        )
-        """,
-        (
-            recording_id,
-            action_type,
-            old_sku,
-            new_sku,
-            week_id,
-            store_id,
-            live_id,
-            current_user.id,
-            current_user.username,
-            request.remote_addr
-        )
-    )
 
 def ensure_live_session(cursor, week_id, store_id, live_id):
     """Keep live_sessions derived from sku_recording."""
@@ -643,9 +591,40 @@ def record():
         # Next Seq in the selected Round
         #
         # A Round may contain at most 300 items.
-        # Do NOT automatically move to the next Round.
-        # The operator must explicitly Start New Round / Set Round.
+        # Auto-advance ONLY when the selected Round is the latest
+        # existing Round for this Week / Store / LIVE.
+        #
+        # Example with Rounds 1-4 already existing:
+        # - Round 1/2/3 full -> do NOT auto-advance.
+        # - Round 4 full     -> next scan becomes Round 5 / Seq 1.
         # =====================================================
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(MAX(round_no), 0) AS max_round
+
+            FROM sku_recording
+
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+            """,
+            (
+                week_id,
+                store_id,
+                live_id
+            )
+        )
+
+        round_row = cursor.fetchone() or {
+            "max_round": 0
+        }
+
+        max_round = int(
+            round_row["max_round"]
+            or 0
+        )
 
         cursor.execute(
             """
@@ -681,14 +660,21 @@ def record():
 
         if max_seq >= MAX_SEQ_PER_ROUND:
 
-            return jsonify({
-                "success": False,
-                "message":
-                    f"Round {round_no} is full (300 items). "
-                    "Please start a new round manually."
-            }), 409
+            if round_no == max_round:
+                round_no += 1
+                next_seq = 1
 
-        next_seq = max_seq + 1
+            else:
+                return jsonify({
+                    "success": False,
+                    "message":
+                        f"Round {round_no} is full (300 items). "
+                        f"Latest round is Round {max_round}. "
+                        "Auto-advance is only allowed from the latest round."
+                }), 409
+
+        else:
+            next_seq = max_seq + 1
 
 
         cursor.execute(
@@ -741,13 +727,21 @@ def record():
 
         write_recording_log(
             cursor=cursor,
-            recording_id=recording_id,
-            action_type="CREATE",
-            old_sku=None,
-            new_sku=sku,
             week_id=week_id,
             store_id=store_id,
-            live_id=live_id
+            live_id=live_id,
+            action_type="CREATE",
+            operator_user_id=current_user.id,
+            changes=[
+                {
+                    "recording_id": recording_id,
+                    "change_type": "CREATE",
+                    "old_sku": None,
+                    "new_sku": sku,
+                    "round_no": round_no,
+                    "seq": next_seq,
+                }
+            ],
         )
 
 
@@ -1153,13 +1147,21 @@ def insert_recording_before():
 
         write_recording_log(
             cursor=cursor,
-            recording_id=recording_id,
-            action_type="CREATE",
-            old_sku=None,
-            new_sku=sku,
             week_id=week_id,
             store_id=store_id,
-            live_id=live_id
+            live_id=live_id,
+            action_type="CREATE",
+            operator_user_id=current_user.id,
+            changes=[
+                {
+                    "recording_id": recording_id,
+                    "change_type": "CREATE",
+                    "old_sku": None,
+                    "new_sku": sku,
+                    "round_no": round_no,
+                    "seq": before_seq,
+                }
+            ],
         )
 
 
@@ -2013,13 +2015,19 @@ def change_recorded_live_id():
         # that this Recording session changed.
         write_recording_log(
             cursor=cursor,
-            recording_id=None,
-            action_type="RENAME_LIVE",
-            old_sku=None,
-            new_sku=None,
             week_id=week_id,
             store_id=store_id,
-            live_id=new_live_id
+            live_id=new_live_id,
+            action_type="RENAME_LIVE",
+            operator_user_id=current_user.id,
+            changes=[
+                {
+                    "change_type": "RENAME_LIVE",
+                    "old_live_id": old_live_id,
+                    "new_live_id": new_live_id,
+                    "changed_rows": changed_rows,
+                }
+            ],
         )
 
 
@@ -2461,7 +2469,9 @@ def update_recording(recording_id):
         cursor.execute(
             """
             SELECT
-                sku
+                sku,
+                round_no,
+                seq
 
             FROM sku_recording
 
@@ -2541,13 +2551,21 @@ def update_recording(recording_id):
 
         write_recording_log(
             cursor=cursor,
-            recording_id=recording_id,
-            action_type="UPDATE",
-            old_sku=old_sku,
-            new_sku=sku,
             week_id=week_id,
             store_id=store_id,
-            live_id=live_id
+            live_id=live_id,
+            action_type="UPDATE",
+            operator_user_id=current_user.id,
+            changes=[
+                {
+                    "recording_id": recording_id,
+                    "change_type": "UPDATE",
+                    "old_sku": old_sku,
+                    "new_sku": sku,
+                    "round_no": old_row.get("round_no"),
+                    "seq": old_row.get("seq"),
+                }
+            ],
         )
 
 
@@ -2619,7 +2637,9 @@ def delete_all_recordings():
             """
             SELECT
                 recording_id,
-                sku
+                sku,
+                round_no,
+                seq
 
             FROM sku_recording
 
@@ -2642,17 +2662,25 @@ def delete_all_recordings():
                 "deleted_rows": 0
             })
 
-        for row in rows:
-            write_recording_log(
-                cursor=cursor,
-                recording_id=row["recording_id"],
-                action_type="DELETE",
-                old_sku=row["sku"],
-                new_sku=None,
+        write_recording_log(
+            cursor=cursor,
             week_id=week_id,
-                store_id=store_id,
-                live_id=live_id
-            )
+            store_id=store_id,
+            live_id=live_id,
+            action_type="DELETE",
+            operator_user_id=current_user.id,
+            changes=[
+                {
+                    "recording_id": row["recording_id"],
+                    "change_type": "DELETE",
+                    "old_sku": row["sku"],
+                    "new_sku": None,
+                    "round_no": row.get("round_no"),
+                    "seq": row.get("seq"),
+                }
+                for row in rows
+            ],
+        )
 
         cursor.execute(
             """
@@ -2855,13 +2883,21 @@ def delete_recording(recording_id):
 
         write_recording_log(
             cursor=cursor,
-            recording_id=recording_id,
-            action_type="DELETE",
-            old_sku=old_sku,
-            new_sku=None,
             week_id=week_id,
             store_id=store_id,
-            live_id=live_id
+            live_id=live_id,
+            action_type="DELETE",
+            operator_user_id=current_user.id,
+            changes=[
+                {
+                    "recording_id": recording_id,
+                    "change_type": "DELETE",
+                    "old_sku": old_sku,
+                    "new_sku": None,
+                    "round_no": old_round,
+                    "seq": old_seq,
+                }
+            ],
         )
 
         delete_live_session_if_empty(

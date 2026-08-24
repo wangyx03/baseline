@@ -1153,7 +1153,7 @@ const candidateBatchSelect =
                 : "Remaining OFF";
 
             option.textContent =
-                `#${item.batch_id} | ${item.week_id} | ${item.generated_at} | ${remaining}`;
+                `${item.week_id} | ${item.generated_at} | ${remaining}`;
 
             candidateBatchSelect.appendChild(
                 option
