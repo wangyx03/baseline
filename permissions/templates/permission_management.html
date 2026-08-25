@@ -301,6 +301,23 @@
         }
 
 
+        .permission-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .feature-permission-item {
+            min-height: 50px;
+            margin-left: 34px;
+            background: #f9fafb;
+        }
+
+        .feature-permission-item.feature-disabled {
+            opacity: 0.55;
+        }
+
+
         .permission-name {
 
             font-size: 15px;
@@ -560,31 +577,69 @@
 
             {% for module in modules %}
 
-                <label
-                    class="permission-item"
-                >
+                <div class="permission-group">
 
-                    <input
-                        type="checkbox"
-                        class="module-checkbox"
-                        value="{{ module.module_id }}"
-                        disabled
+                    <label
+                        class="permission-item"
                     >
 
+                        <input
+                            type="checkbox"
+                            class="module-checkbox"
+                            value="{{ module.module_id }}"
+                            disabled
+                        >
 
-                    <div>
 
-                        <div class="permission-name">
-                            {{ module.module_name }}
+                        <div>
+
+                            <div class="permission-name">
+                                {{ module.module_name }}
+                            </div>
+
+                            <div class="permission-id">
+                                Module {{ module.module_id }}
+                            </div>
+
                         </div>
 
-                        <div class="permission-id">
-                            Module {{ module.module_id }}
-                        </div>
+                    </label>
 
-                    </div>
 
-                </label>
+                    {% if module.module_id == 2 %}
+
+                        <label
+                            id="weeklyActualStockItem"
+                            class="
+                                permission-item
+                                feature-permission-item
+                                feature-disabled
+                            "
+                        >
+
+                            <input
+                                type="checkbox"
+                                id="weeklyActualStockPermission"
+                                disabled
+                            >
+
+                            <div>
+
+                                <div class="permission-name">
+                                    View Actual Stock
+                                </div>
+
+                                <div class="permission-id">
+                                    Weekly Inventory detail permission
+                                </div>
+
+                            </div>
+
+                        </label>
+
+                    {% endif %}
+
+                </div>
 
             {% endfor %}
 
@@ -667,6 +722,28 @@
         );
 
 
+    const weeklyModuleCheckbox =
+        document.querySelector(
+            '.module-checkbox[value="2"]'
+        );
+
+
+    const weeklyActualStockPermission =
+        document.getElementById(
+            "weeklyActualStockPermission"
+        );
+
+
+    const weeklyActualStockItem =
+        document.getElementById(
+            "weeklyActualStockItem"
+        );
+
+
+    const WEEKLY_ACTUAL_STOCK_KEY =
+        "weekly_inventory.view_actual_stock";
+
+
     let selectedUserId = null;
 
 
@@ -694,12 +771,77 @@
         );
 
 
+        if (weeklyActualStockPermission) {
+
+            weeklyActualStockPermission.checked =
+                false;
+
+            weeklyActualStockPermission.disabled =
+                true;
+        }
+
+        if (weeklyActualStockItem) {
+
+            weeklyActualStockItem.classList.add(
+                "feature-disabled"
+            );
+        }
+
+
         saveButton.disabled = true;
 
         message.textContent = "";
 
         message.className =
             "message";
+    }
+
+
+
+    // =========================
+    // Weekly Inventory Feature
+    // =========================
+
+    function updateWeeklyFeatureState() {
+
+        if (
+            !weeklyModuleCheckbox
+            ||
+            !weeklyActualStockPermission
+        ) {
+            return;
+        }
+
+        const enabled =
+            weeklyModuleCheckbox.checked
+            &&
+            !weeklyModuleCheckbox.disabled;
+
+        if (!weeklyModuleCheckbox.checked) {
+
+            weeklyActualStockPermission.checked =
+                false;
+        }
+
+        weeklyActualStockPermission.disabled =
+            !enabled;
+
+        if (weeklyActualStockItem) {
+
+            weeklyActualStockItem.classList.toggle(
+                "feature-disabled",
+                !enabled
+            );
+        }
+    }
+
+
+    if (weeklyModuleCheckbox) {
+
+        weeklyModuleCheckbox.addEventListener(
+            "change",
+            updateWeeklyFeatureState
+        );
     }
 
 
@@ -827,6 +969,23 @@
             );
 
 
+            if (weeklyActualStockPermission) {
+
+                weeklyActualStockPermission.checked =
+                    (
+                        data.feature_permissions
+                        &&
+                        data.feature_permissions[
+                            WEEKLY_ACTUAL_STOCK_KEY
+                        ]
+                        === true
+                    );
+            }
+
+
+            updateWeeklyFeatureState();
+
+
             saveButton.disabled =
                 false;
 
@@ -945,7 +1104,16 @@
 
                             body: JSON.stringify({
                                 module_ids:
-                                    moduleIds
+                                    moduleIds,
+
+                                feature_permissions: {
+                                    [WEEKLY_ACTUAL_STOCK_KEY]:
+                                        (
+                                            weeklyActualStockPermission
+                                            &&
+                                            weeklyActualStockPermission.checked
+                                        )
+                                }
                             })
                         }
                     );

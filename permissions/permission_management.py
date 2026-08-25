@@ -14,7 +14,9 @@ from db import get_db
 
 from permissions.permissions import (
     module_required,
-    MODULE_PERMISSION_MANAGEMENT
+    MODULE_PERMISSION_MANAGEMENT,
+    MODULE_WEEKLY_INVENTORY,
+    PERMISSION_WEEKLY_ACTUAL_STOCK
 )
 
 
@@ -107,7 +109,13 @@ def permission_management_page():
         return render_template(
             "permission_management.html",
             users=users,
-            modules=modules
+            modules=modules,
+            weekly_inventory_module_id=(
+                MODULE_WEEKLY_INVENTORY
+            ),
+            weekly_actual_stock_permission=(
+                PERMISSION_WEEKLY_ACTUAL_STOCK
+            )
         )
 
     finally:
@@ -168,7 +176,7 @@ def get_user_permissions(user_id):
 
 
         # =========================
-        # User Permissions
+        # Module Permissions
         # =========================
 
         cursor.execute(
@@ -201,6 +209,37 @@ def get_user_permissions(user_id):
         }
 
 
+        # =========================
+        # Feature Permissions
+        # =========================
+
+        cursor.execute(
+            """
+            SELECT
+                permission_key,
+                access
+
+            FROM permission_features
+
+            WHERE user_id = %s
+            """,
+            (
+                user_id,
+            )
+        )
+
+        feature_rows = cursor.fetchall()
+
+
+        feature_permissions = {
+            row["permission_key"]:
+                bool(
+                    row["access"]
+                )
+            for row in feature_rows
+        }
+
+
         return jsonify({
             "success": True,
 
@@ -210,13 +249,22 @@ def get_user_permissions(user_id):
             "permissions":
                 permissions,
 
+            "feature_permissions":
+                feature_permissions,
+
             "current_user_id":
                 int(
                     current_user.id
                 ),
 
             "permission_management_module_id":
-                MODULE_PERMISSION_MANAGEMENT
+                MODULE_PERMISSION_MANAGEMENT,
+
+            "weekly_inventory_module_id":
+                MODULE_WEEKLY_INVENTORY,
+
+            "weekly_actual_stock_permission":
+                PERMISSION_WEEKLY_ACTUAL_STOCK
         })
 
     finally:
@@ -247,6 +295,12 @@ def save_user_permissions(user_id):
     )
 
 
+    feature_permissions = data.get(
+        "feature_permissions",
+        {}
+    )
+
+
     # =========================
     # Validate module_ids
     # =========================
@@ -260,6 +314,45 @@ def save_user_permissions(user_id):
             "success": False,
             "message":
                 "module_ids must be a list"
+        }), 400
+
+
+    # =========================
+    # Validate feature_permissions
+    # =========================
+
+    if not isinstance(
+        feature_permissions,
+        dict
+    ):
+
+        return jsonify({
+            "success": False,
+            "message":
+                "feature_permissions must be an object"
+        }), 400
+
+
+    allowed_feature_permissions = {
+        PERMISSION_WEEKLY_ACTUAL_STOCK
+    }
+
+
+    unknown_feature_permissions = (
+        set(
+            feature_permissions.keys()
+        )
+        -
+        allowed_feature_permissions
+    )
+
+
+    if unknown_feature_permissions:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "One or more feature permissions are invalid"
         }), 400
 
 
@@ -296,6 +389,30 @@ def save_user_permissions(user_id):
                 module_id
             )
 
+
+    # =========================
+    # Normalize Feature Access
+    # =========================
+
+    actual_stock_access = (
+        feature_permissions.get(
+            PERMISSION_WEEKLY_ACTUAL_STOCK,
+            False
+        )
+        is True
+    )
+
+
+    # Feature permission cannot exist without Module 2.
+    if (
+        MODULE_WEEKLY_INVENTORY
+        not in
+        cleaned_module_ids
+    ):
+
+        actual_stock_access = False
+
+
     db = get_db()
 
     cursor = db.cursor(
@@ -330,6 +447,7 @@ def save_user_permissions(user_id):
                     "User not found"
             }), 404
 
+
         # =========================
         # Protect Existing
         # Permission Administrator
@@ -343,8 +461,8 @@ def save_user_permissions(user_id):
             FROM module_permissions
 
             WHERE user_id = %s
-            AND module_id = %s
-            AND access = TRUE
+              AND module_id = %s
+              AND access = TRUE
             """,
             (
                 user_id,
@@ -431,7 +549,7 @@ def save_user_permissions(user_id):
 
 
         # =========================
-        # Replace Permissions
+        # Replace Module Permissions
         # =========================
 
         cursor.execute(
@@ -471,6 +589,40 @@ def save_user_permissions(user_id):
             )
 
 
+        # =========================
+        # Save Weekly Inventory
+        # Feature Permission
+        # =========================
+
+        cursor.execute(
+            """
+            INSERT INTO permission_features
+            (
+                user_id,
+                permission_key,
+                access
+            )
+
+            VALUES
+            (
+                %s,
+                %s,
+                %s
+            )
+
+            ON DUPLICATE KEY UPDATE
+                access = VALUES(access)
+            """,
+            (
+                user_id,
+                PERMISSION_WEEKLY_ACTUAL_STOCK,
+                1
+                if actual_stock_access
+                else 0
+            )
+        )
+
+
         db.commit()
 
 
@@ -484,7 +636,12 @@ def save_user_permissions(user_id):
                 user_id,
 
             "module_ids":
-                cleaned_module_ids
+                cleaned_module_ids,
+
+            "feature_permissions": {
+                PERMISSION_WEEKLY_ACTUAL_STOCK:
+                    actual_stock_access
+            }
         })
 
 

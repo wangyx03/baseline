@@ -269,6 +269,11 @@
         }
 
 
+        .stock-warning td {
+            background: #fff3cd;
+        }
+
+
         .empty-row {
             padding: 28px;
             color: #777;
@@ -582,6 +587,21 @@
                         Title
                     </th>
 
+                    {% if can_view_actual_stock %}
+
+                    <th
+                        class="number sortable"
+                        onclick="sortInventory('actual_stock')"
+                    >
+                        Actual Stock
+                        <span
+                            id="sort-actual_stock"
+                            class="sort-indicator"
+                        ></span>
+                    </th>
+
+                    {% endif %}
+
                     <th
                         class="number sortable"
                         onclick="sortInventory('planned')"
@@ -625,7 +645,7 @@
                 <tr>
 
                     <td
-                        colspan="5"
+                        colspan="{{ 6 if can_view_actual_stock else 5 }}"
                         class="empty-row"
                     >
                         Loading inventory...
@@ -644,6 +664,16 @@
 
 
 <script>
+
+
+const CAN_VIEW_ACTUAL_STOCK =
+    {{ can_view_actual_stock | tojson }};
+
+
+const INVENTORY_COLUMN_COUNT =
+    CAN_VIEW_ACTUAL_STOCK
+    ? 6
+    : 5;
 
 
 // =========================================================
@@ -1349,6 +1379,7 @@ function sortInventory(
 function updateSortIndicators() {
 
     const columns = [
+        "actual_stock",
         "planned",
         "used",
         "remaining"
@@ -1544,7 +1575,7 @@ function renderInventory() {
             <tr>
 
                 <td
-                    colspan="5"
+                    colspan="${INVENTORY_COLUMN_COUNT}"
                     class="empty-row"
                 >
 
@@ -1582,6 +1613,26 @@ function renderInventory() {
             );
 
 
+        const actualStock =
+            Number(
+                item.actual_stock
+                ||
+                0
+            );
+
+
+        if (
+            CAN_VIEW_ACTUAL_STOCK
+            &&
+            actualStock - remaining <= 5
+        ) {
+
+            tr.classList.add(
+                "stock-warning"
+            );
+        }
+
+
         tr.innerHTML = `
 
             <td>
@@ -1591,6 +1642,16 @@ function renderInventory() {
             <td>
                 ${escapeHtml(item.title || "")}
             </td>
+
+            ${
+                CAN_VIEW_ACTUAL_STOCK
+                ? `
+                    <td class="number">
+                        ${Number(item.actual_stock || 0)}
+                    </td>
+                `
+                : ""
+            }
 
             <td class="number">
                 ${Number(item.planned || 0)}

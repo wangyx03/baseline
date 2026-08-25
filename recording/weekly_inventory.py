@@ -10,8 +10,10 @@ from flask_login import login_required
 from permissions.permissions import(
     module_required,
     has_module,
+    has_permission,
     MODULE_WEEKLY_INVENTORY,
-    MODULE_RECORDING
+    MODULE_RECORDING,
+    PERMISSION_WEEKLY_ACTUAL_STOCK
 )
 
 from db import get_db
@@ -54,9 +56,14 @@ def weekly_inventory_page():
             }
         ])
 
+    can_view_actual_stock = has_permission(
+        PERMISSION_WEEKLY_ACTUAL_STOCK
+    )
+
     return render_template(
         "weekly_inventory.html",
-        extra_nav_links=extra_nav_links
+        extra_nav_links=extra_nav_links,
+        can_view_actual_stock=can_view_actual_stock
     )
 
 @weekly_bp.route(
@@ -264,6 +271,10 @@ def get_weekly_inventory():
         }), 400
 
 
+    can_view_actual_stock = has_permission(
+        PERMISSION_WEEKLY_ACTUAL_STOCK
+    )
+
     db = get_db()
 
     cursor = db.cursor(
@@ -312,6 +323,11 @@ def get_weekly_inventory():
                     ''
                 ) AS title,
 
+                COALESCE(
+                    stock_data.actual_stock,
+                    0
+                ) AS actual_stock,
+
                 wi.planned_qty
                     AS planned,
 
@@ -345,6 +361,23 @@ def get_weekly_inventory():
 
             LEFT JOIN book_sku bs
                 ON bs.isbn = wi.sku
+
+            LEFT JOIN (
+                SELECT
+                    sku,
+                    SUM(available_stock)
+                        AS actual_stock
+
+                FROM inventory_snapshot
+
+                WHERE stock_type = 'Good'
+
+                GROUP BY
+                    sku
+
+            ) stock_data
+                ON stock_data.sku =
+                    wi.sku
 
             LEFT JOIN (
                 SELECT
@@ -428,6 +461,15 @@ def get_weekly_inventory():
 
         rows = cursor.fetchall()
 
+        if not can_view_actual_stock:
+
+            for row in rows:
+
+                row.pop(
+                    "actual_stock",
+                    None
+                )
+
 
         return jsonify({
             "success": True,
@@ -437,6 +479,8 @@ def get_weekly_inventory():
                 store_id,
             "version":
                 current_version,
+            "can_view_actual_stock":
+                can_view_actual_stock,
             "items":
                 rows
         })

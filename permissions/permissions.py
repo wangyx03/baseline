@@ -30,6 +30,15 @@ MODULE_BOOK_SELECTION = 7
 
 
 # =========================
+# Feature Permission Keys
+# =========================
+
+PERMISSION_WEEKLY_ACTUAL_STOCK = (
+    "weekly_inventory.view_actual_stock"
+)
+
+
+# =========================
 # Load User Permissions
 # =========================
 
@@ -88,6 +97,56 @@ def has_module(module_id):
     return current_user.has_access(
         module_id
     )
+
+
+# =========================
+# Has Feature Permission
+# =========================
+
+def has_permission(
+    permission_key
+):
+
+    if not current_user.is_authenticated:
+        return False
+
+    db = get_db()
+
+    cursor = db.cursor(
+        dictionary=True
+    )
+
+    try:
+
+        cursor.execute(
+            """
+            SELECT
+                access
+
+            FROM permission_features
+
+            WHERE user_id = %s
+              AND permission_key = %s
+              AND access = TRUE
+
+            LIMIT 1
+            """,
+            (
+                int(current_user.id),
+                permission_key
+            )
+        )
+
+        row = cursor.fetchone()
+
+        return (
+            row is not None
+        )
+
+    finally:
+
+        cursor.close()
+        db.close()
 
 
 # =========================
