@@ -273,6 +273,10 @@
             background: #fff3cd;
         }
 
+        .stock-danger td {
+            background: #f8d7da;
+        }
+
 
         .empty-row {
             padding: 28px;
@@ -1621,10 +1625,23 @@ function renderInventory() {
             );
 
 
+        const stockDifference =
+            actualStock - remaining;
+
         if (
             CAN_VIEW_ACTUAL_STOCK
             &&
-            actualStock - remaining <= 5
+            stockDifference <= 0
+        ) {
+
+            tr.classList.add(
+                "stock-danger"
+            );
+
+        } else if (
+            CAN_VIEW_ACTUAL_STOCK
+            &&
+            stockDifference < 5
         ) {
 
             tr.classList.add(
