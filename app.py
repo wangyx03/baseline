@@ -36,6 +36,9 @@ from staffschedule.availability import availability_bp
 from staffschedule.availability_management import (
     availability_management_bp
 )
+from staffschedule.availability_guest import (
+    availability_guest_bp
+)
 from staffschedule.schedule import schedule_bp
 
 from permissions.permission_management import (
@@ -119,6 +122,10 @@ app.register_blueprint(
 
 app.register_blueprint(
     availability_management_bp
+)
+
+app.register_blueprint(
+    availability_guest_bp
 )
 
 app.register_blueprint(
