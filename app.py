@@ -30,6 +30,7 @@ from permissions.permissions import (
 
 from recording.recording import recording_bp
 from recording.weekly_inventory import weekly_bp
+from recording.recording_download import recording_download_bp
 
 from staffschedule.availability import availability_bp
 from staffschedule.availability_management import (
@@ -106,6 +107,10 @@ app.register_blueprint(
 
 app.register_blueprint(
     weekly_bp
+)
+
+app.register_blueprint(
+    recording_download_bp
 )
 
 app.register_blueprint(

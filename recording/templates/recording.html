@@ -802,14 +802,6 @@
                     Delete All
                 </button>
 
-                <button
-                    id="downloadButton"
-                    onclick="downloadCSV()"
-                    disabled
-                >
-                    Download CSV
-                </button>
-
             </div>
 
 
@@ -1191,12 +1183,6 @@ const splitRoundButton =
     );
 
 
-const downloadButton =
-    document.getElementById(
-        "downloadButton"
-    );
-
-
 const roundSeqSortButton =
     document.getElementById(
         "roundSeqSortButton"
@@ -1537,10 +1523,6 @@ async function startLive() {
 
         skuInput.placeholder =
             "Select Week and enter LIVE ID first";
-
-
-        downloadButton.disabled =
-            true;
 
 
         deleteAllButton.disabled =
@@ -1982,10 +1964,6 @@ function activateRecordingSession() {
         + currentWeekId
         + " | LIVE ID: "
         + currentLiveId;
-
-
-    downloadButton.disabled =
-        false;
 
 
     deleteAllButton.disabled =
@@ -3991,46 +3969,6 @@ async function toggleRoundSeqSort() {
     finally {
         roundSeqSortButton.disabled = false;
     }
-}
-
-
-// =========================================================
-// Download
-// =========================================================
-
-function downloadCSV() {
-
-
-    if (
-        !currentWeekId
-        ||
-        !currentLiveId
-    ) {
-
-        return;
-
-    }
-
-
-    window.location.href =
-
-        "/api/recordings/download"
-
-        + "?week_id="
-        + encodeURIComponent(
-            currentWeekId
-        )
-
-        + "&store_id="
-        + encodeURIComponent(
-            STORE_ID
-        )
-
-        + "&live_id="
-        + encodeURIComponent(
-            currentLiveId
-        );
-
 }
 
 

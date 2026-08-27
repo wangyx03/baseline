@@ -374,6 +374,7 @@ Operations Dashboard
 
                         </a>
 
+
                     {% endif %}
 
 
@@ -401,6 +402,30 @@ Operations Dashboard
                             <div class="card-description">
                                 View planned, used and
                                 remaining weekly inventory.
+                            </div>
+
+                        </a>
+
+                        <a
+                            class="card"
+                            href="{{
+                                url_for(
+                                    'recording_download.recording_download_page'
+                                )
+                            }}"
+                        >
+
+                            <div class="card-icon">
+                                ⬇️
+                            </div>
+
+                            <div class="card-title">
+                                Recording Download
+                            </div>
+
+                            <div class="card-description">
+                                Find and download historical
+                                LIVE recording data.
                             </div>
 
                         </a>
