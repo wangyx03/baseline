@@ -345,7 +345,14 @@
         }
 
 
-        .action-buttons {
+        .save-success {
+    background: #28a745 !important;
+    color: white !important;
+    border-color: #28a745 !important;
+}
+
+
+.action-buttons {
             display: flex;
             gap: 6px;
             flex-wrap: wrap;
@@ -3399,6 +3406,7 @@ function renderRecordings(
 
                     <button
                         type="button"
+                        id="save-btn-${row.recording_id}"
                         onclick="saveRecording(
                             ${row.recording_id}
                         )"
@@ -3818,6 +3826,25 @@ async function saveRecording(
         "✓ Recording updated",
         "success"
     );
+
+
+    const saveButton =
+        document.getElementById(
+            "save-btn-" + recordingId
+        );
+
+
+    if (saveButton) {
+
+        saveButton.classList.add(
+            "save-success"
+        );
+
+        await new Promise(
+            resolve => setTimeout(resolve, 2000)
+        );
+
+    }
 
 
     await loadRecordings(
