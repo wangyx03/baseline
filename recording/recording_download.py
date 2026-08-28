@@ -631,6 +631,7 @@ def download_recording_csv():
                 sr.round_no,
                 sr.seq,
                 sr.sku,
+                bs.book_title,
                 sr.quantity,
                 sr.recorded_at
 
@@ -639,6 +640,9 @@ def download_recording_csv():
             LEFT JOIN stores s
                 ON s.store_id =
                     sr.store_id
+
+            LEFT JOIN book_sku bs
+                ON bs.isbn = sr.sku
 
             WHERE {where_sql}
 
@@ -678,6 +682,7 @@ def download_recording_csv():
             "Round",
             "Seq",
             "SKU",
+            "Title",
             "Quantity",
             "Recorded At ET",
         ])
@@ -715,6 +720,11 @@ def download_recording_csv():
 
                 row.get(
                     "sku"
+                )
+                or "",
+
+                row.get(
+                    "book_title"
                 )
                 or "",
 
