@@ -2257,6 +2257,7 @@ def get_recordings():
                 sr.week_id,
                 sr.sku,
                 sr.quantity,
+                sr.remark,
                 bs.book_title,
                 sr.recorded_at
 
@@ -2418,6 +2419,14 @@ def update_recording(recording_id):
         "store_id"
     )
 
+    remark = str(
+        data.get(
+            "remark",
+            ""
+        )
+        or ""
+    ).strip()
+
 
     if not week_id:
 
@@ -2455,6 +2464,15 @@ def update_recording(recording_id):
         }), 400
 
 
+    if len(remark) > 500:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Remark cannot exceed 500 characters"
+        }), 400
+
+
     db = get_db()
 
     cursor = db.cursor(
@@ -2467,6 +2485,7 @@ def update_recording(recording_id):
             """
             SELECT
                 sku,
+                remark,
                 round_no,
                 seq
 
@@ -2501,8 +2520,16 @@ def update_recording(recording_id):
             old_row["sku"]
         )
 
+        old_remark = str(
+            old_row.get("remark")
+            or ""
+        ).strip()
 
-        if old_sku == sku:
+
+        if (
+            old_sku == sku
+            and old_remark == remark
+        ):
 
             return jsonify({
                 "success": True,
@@ -2529,7 +2556,9 @@ def update_recording(recording_id):
             """
             UPDATE sku_recording
 
-            SET sku = %s
+            SET
+                sku = %s,
+                remark = %s
 
             WHERE recording_id = %s
               AND week_id = %s
@@ -2538,6 +2567,7 @@ def update_recording(recording_id):
             """,
             (
                 sku,
+                remark or None,
                 recording_id,
                 week_id,
                 store_id,
@@ -2559,6 +2589,8 @@ def update_recording(recording_id):
                     "change_type": "UPDATE",
                     "old_sku": old_sku,
                     "new_sku": sku,
+                    "old_remark": old_remark,
+                    "new_remark": remark,
                     "round_no": old_row.get("round_no"),
                     "seq": old_row.get("seq"),
                 }

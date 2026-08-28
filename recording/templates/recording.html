@@ -241,7 +241,25 @@
 
         .right-panel {
             padding: 40px;
+            overflow: hidden;
+        }
+
+
+        .recording-table-wrapper {
+            width: 100%;
+            max-height: calc(100vh - 300px);
             overflow-x: auto;
+            overflow-y: auto;
+            scrollbar-gutter: stable;
+            border-bottom: 1px solid #ddd;
+        }
+
+
+        .recording-table-wrapper thead th {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: #eee;
         }
 
 
@@ -290,6 +308,40 @@
         .sku-edit {
             width: 180px;
             padding: 7px;
+        }
+
+
+        .remark-wrapper {
+            position: relative;
+            width: 220px;
+            max-width: 100%;
+        }
+
+
+        .remark-edit {
+            width: 100%;
+            min-height: 38px;
+            max-height: 180px;
+            padding: 7px 48px 7px 7px;
+            font: inherit;
+            line-height: 1.35;
+            resize: none;
+            overflow-y: hidden;
+            box-sizing: border-box;
+            vertical-align: top;
+        }
+
+
+        .remark-count {
+            position: absolute;
+            right: 8px;
+            bottom: 7px;
+            padding-left: 4px;
+            background: white;
+            color: #777;
+            font-size: 12px;
+            line-height: 1;
+            pointer-events: none;
         }
 
 
@@ -434,6 +486,11 @@
                 box-sizing: border-box;
             }
 
+            .remark-edit {
+                min-height: 30px;
+                padding: 5px 7px;
+            }
+
             .action-buttons {
                 gap: 4px;
                 flex-wrap: nowrap;
@@ -462,6 +519,11 @@
             .sku-edit {
                 height: 28px;
                 padding: 2px 6px;
+            }
+
+            .remark-edit {
+                min-height: 28px;
+                padding: 4px 6px;
             }
 
             .action-buttons button {
@@ -808,6 +870,8 @@
         </div>
 
 
+        <div class="recording-table-wrapper">
+
         <table>
 
 
@@ -841,6 +905,10 @@
                     </th>
 
                     <th>
+                        Remark
+                    </th>
+
+                    <th>
                         Action
                     </th>
 
@@ -853,7 +921,7 @@
 
                 <tr>
 
-                    <td colspan="5">
+                    <td colspan="6">
                         Select Week and enter LIVE ID
                     </td>
 
@@ -863,6 +931,8 @@
 
 
         </table>
+
+        </div>
 
 
         <div class="pagination">
@@ -1537,7 +1607,7 @@ async function startLive() {
 
             <tr>
 
-                <td colspan="5">
+                <td colspan="6">
 
                     Select Week and enter LIVE ID
 
@@ -3221,7 +3291,7 @@ function renderRecordings(
 
             <tr>
 
-                <td colspan="5">
+                <td colspan="6">
 
                     No recordings
 
@@ -3297,6 +3367,32 @@ function renderRecordings(
 
             <td>
 
+                <div class="remark-wrapper">
+
+                    <textarea
+                        class="remark-edit"
+                        id="remark-${row.recording_id}"
+                        maxlength="50"
+                        rows="1"
+                        placeholder="Remark"
+                        oninput="
+                            autoResizeRemark(this);
+                            updateRemarkCount(${row.recording_id});
+                        "
+                    >${escapeHtml(row.remark || "")}</textarea>
+
+                    <span
+                        class="remark-count"
+                        id="remark-count-${row.recording_id}"
+                    >${(row.remark || "").length}/50</span>
+
+                </div>
+
+            </td>
+
+
+            <td>
+
 
                 <div class="action-buttons">
 
@@ -3345,7 +3441,98 @@ function renderRecordings(
             tr
         );
 
+
+        const remarkBox =
+            document.getElementById(
+                "remark-"
+                + row.recording_id
+            );
+
+
+        if (remarkBox) {
+            autoResizeRemark(
+                remarkBox
+            );
+
+            updateRemarkCount(
+                row.recording_id
+            );
+        }
+
     }
+
+}
+
+
+// =========================================================
+// Remark Character Count
+// =========================================================
+
+function updateRemarkCount(
+    recordingId
+) {
+
+    const input =
+        document.getElementById(
+            "remark-"
+            + recordingId
+        );
+
+    const counter =
+        document.getElementById(
+            "remark-count-"
+            + recordingId
+        );
+
+    if (
+        !input
+        ||
+        !counter
+    ) {
+        return;
+    }
+
+    counter.textContent =
+        input.value.length
+        + "/50";
+
+}
+
+
+// =========================================================
+// Auto Resize Remark
+// =========================================================
+
+function autoResizeRemark(
+    element
+) {
+
+    if (!element) {
+        return;
+    }
+
+
+    const maxHeight = 180;
+
+    element.style.height =
+        "auto";
+
+
+    const nextHeight =
+        Math.min(
+            element.scrollHeight,
+            maxHeight
+        );
+
+
+    element.style.height =
+        nextHeight + "px";
+
+
+    element.style.overflowY =
+        element.scrollHeight > maxHeight
+        ? "auto"
+        : "hidden";
 
 }
 
@@ -3520,7 +3707,7 @@ function nextPage() {
 
 
 // =========================================================
-// Save SKU edit
+// Save SKU / Remark edit
 // =========================================================
 
 async function saveRecording(
@@ -3532,6 +3719,16 @@ async function saveRecording(
         document
             .getElementById(
                 "sku-"
+                + recordingId
+            )
+            .value
+            .trim();
+
+
+    const remark =
+        document
+            .getElementById(
+                "remark-"
                 + recordingId
             )
             .value
@@ -3582,7 +3779,10 @@ async function saveRecording(
                             currentLiveId,
 
                         sku:
-                            sku
+                            sku,
+
+                        remark:
+                            remark
 
                     })
 

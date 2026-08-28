@@ -632,6 +632,7 @@ def download_recording_csv():
                 sr.seq,
                 sr.sku,
                 bs.book_title,
+                sr.remark,
                 sr.quantity,
                 sr.recorded_at
 
@@ -683,6 +684,7 @@ def download_recording_csv():
             "Seq",
             "SKU",
             "Title",
+            "Remark",
             "Quantity",
             "Recorded At ET",
         ])
@@ -725,6 +727,11 @@ def download_recording_csv():
 
                 row.get(
                     "book_title"
+                )
+                or "",
+
+                row.get(
+                    "remark"
                 )
                 or "",
 
