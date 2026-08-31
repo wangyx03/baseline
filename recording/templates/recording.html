@@ -643,6 +643,13 @@
             <strong id="currentLiveText">
             </strong>
 
+            <div style="margin-top:10px;">
+                <label style="display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-weight:600;">
+                    <input type="checkbox" id="countAsUsedCheckbox" checked onchange="updateCountAsUsed()">
+                    Reduce Inventory
+                </label>
+            </div>
+
         </div>
 
 
@@ -1229,6 +1236,11 @@ const currentLiveText =
         "currentLiveText"
     );
 
+const countAsUsedCheckbox =
+    document.getElementById(
+        "countAsUsedCheckbox"
+    );
+
 
 const roundControls =
     document.getElementById(
@@ -1761,6 +1773,9 @@ async function startLive() {
                 ||
                 1;
 
+            countAsUsedCheckbox.checked =
+                info.count_as_used !== false;
+
 
         } else {
 
@@ -1799,6 +1814,51 @@ async function startLive() {
 
     skuInput.focus();
 
+}
+
+// =========================================================
+// Count current LIVE as Used
+// =========================================================
+async function updateCountAsUsed() {
+    if (!currentWeekId || !currentLiveId) return;
+
+    const desired = countAsUsedCheckbox.checked;
+    countAsUsedCheckbox.disabled = true;
+
+    try {
+        const response = await fetch(
+            "/api/recordings/count-as-used",
+            {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    week_id: currentWeekId,
+                    store_id: STORE_ID,
+                    live_id: currentLiveId,
+                    count_as_used: desired
+                })
+            }
+        );
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            countAsUsedCheckbox.checked = !desired;
+            showMessage(data.message || "Could not update Reduce Inventory.", "error");
+            return;
+        }
+        countAsUsedCheckbox.checked = data.count_as_used;
+        showMessage(
+            data.count_as_used
+                ? "✓ This LIVE will count as Used."
+                : "✓ This LIVE will NOT count as Used.",
+            "success"
+        );
+    } catch (error) {
+        console.error(error);
+        countAsUsedCheckbox.checked = !desired;
+        showMessage("Connection error while updating Reduce Inventory.", "error");
+    } finally {
+        countAsUsedCheckbox.disabled = false;
+    }
 }
 
 // =========================================================

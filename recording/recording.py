@@ -404,6 +404,24 @@ def recording_session_info():
             or 0
         )
 
+        cursor.execute(
+            """
+            SELECT count_as_used
+            FROM live_sessions
+            WHERE week_id = %s
+              AND store_id = %s
+              AND live_id = %s
+            LIMIT 1
+            """,
+            (week_id, store_id, live_id)
+        )
+        session_row = cursor.fetchone()
+        count_as_used = (
+            bool(session_row["count_as_used"])
+            if session_row is not None
+            else True
+        )
+
         return jsonify({
             "success": True,
 
@@ -417,7 +435,10 @@ def recording_session_info():
                 max_round,
 
             "next_seq":
-                max_seq + 1
+                max_seq + 1,
+
+            "count_as_used":
+                count_as_used
         })
 
     except Exception as e:
@@ -432,6 +453,67 @@ def recording_session_info():
 
         cursor.close()
         db.close()
+
+# =========================================================
+# LIVE session: Count as Used
+# =========================================================
+@recording_bp.route(
+    "/api/recordings/count-as-used",
+    methods=["POST"]
+)
+@login_required
+def set_recording_count_as_used():
+    data = request.get_json() or {}
+    week_id = str(data.get("week_id", "")).strip()
+    store_id = data.get("store_id")
+    live_id = str(data.get("live_id", "")).strip()
+    count_as_used = 1 if bool(data.get("count_as_used", True)) else 0
+
+    if not week_id or store_id is None or not live_id:
+        return jsonify({
+            "success": False,
+            "message": "Week ID, Store ID and LIVE ID are required"
+        }), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            INSERT INTO live_sessions (
+                week_id, store_id, live_id, count_as_used, created_at
+            )
+            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE
+                count_as_used = VALUES(count_as_used)
+            """,
+            (week_id, store_id, live_id, count_as_used)
+        )
+
+        write_recording_log(
+            cursor=cursor,
+            week_id=week_id,
+            store_id=store_id,
+            live_id=live_id,
+            action_type="COUNT_AS_USED",
+            operator_user_id=current_user.id,
+            changes=[{
+                "change_type": "COUNT_AS_USED",
+                "count_as_used": bool(count_as_used),
+            }],
+        )
+        db.commit()
+        return jsonify({
+            "success": True,
+            "count_as_used": bool(count_as_used)
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        db.close()
+
 
 @recording_bp.route(
     "/api/record",
@@ -1969,6 +2051,22 @@ def change_recorded_live_id():
             }), 409
 
 
+        # Preserve the LIVE-level Used setting across rename.
+        cursor.execute(
+            """
+            SELECT count_as_used
+            FROM live_sessions
+            WHERE week_id = %s AND store_id = %s AND live_id = %s
+            LIMIT 1
+            """,
+            (week_id, store_id, old_live_id)
+        )
+        old_session = cursor.fetchone()
+        old_count_as_used = (
+            int(old_session["count_as_used"])
+            if old_session is not None else 1
+        )
+
         # =================================================
         # 5. Change LIVE ID
         # =================================================
@@ -2000,6 +2098,14 @@ def change_recorded_live_id():
             week_id,
             store_id,
             new_live_id
+        )
+        cursor.execute(
+            """
+            UPDATE live_sessions
+            SET count_as_used = %s
+            WHERE week_id = %s AND store_id = %s AND live_id = %s
+            """,
+            (old_count_as_used, week_id, store_id, new_live_id)
         )
         delete_live_session_if_empty(
             cursor,

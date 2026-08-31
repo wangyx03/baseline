@@ -763,8 +763,8 @@ input.edit-qty {
         TU: []
     };
 
-    let sortKey = "planned_qty";
-    let sortDirection = "desc";
+    let sortKey = null;
+    let sortDirection = null;
     let batchMeta = {};
     let lastPayload = null;
     let hasGeneratedResult = false;
@@ -1527,6 +1527,10 @@ input.edit-qty {
     function sortedItems(
         items
     ) {
+
+        if (!sortKey) {
+            return [...items];
+        }
 
         return [...items].sort(
             (a, b) => {
