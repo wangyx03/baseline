@@ -581,6 +581,38 @@ def record():
         }), 400
 
 
+    # Recording uses ISBN-13. Never persist a truncated scanner value.
+    # Hyphens/spaces are harmless and are removed before validation.
+    sku = sku.replace("-", "").replace(" ", "")
+
+    if not sku.isdigit() or len(sku) != 13:
+
+        return jsonify({
+            "success": False,
+            "message": (
+                f"Incomplete or invalid scan: received {len(sku)} "
+                "characters; ISBN must contain exactly 13 digits. "
+                "Please scan again."
+            )
+        }), 400
+
+    checksum_total = sum(
+        int(digit) * (1 if index % 2 == 0 else 3)
+        for index, digit in enumerate(sku[:12])
+    )
+    expected_check_digit = (10 - checksum_total % 10) % 10
+
+    if int(sku[-1]) != expected_check_digit:
+
+        return jsonify({
+            "success": False,
+            "message": (
+                "Invalid ISBN-13 checksum. Nothing was saved; "
+                "please scan the book again."
+            )
+        }), 400
+
+
     if store_id is None:
 
         return jsonify({

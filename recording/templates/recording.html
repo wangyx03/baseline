@@ -2739,6 +2739,66 @@ function setRound() {
 // Scan
 // =========================================================
 
+let scanSubmitTimer = null;
+let scanSubmitRunning = false;
+
+
+function normalizeScannedSku(value) {
+
+    return String(value || "")
+        .replace(/[\s-]+/g, "")
+        .trim();
+
+}
+
+
+async function submitSettledScan() {
+
+    if (scanSubmitRunning) {
+        return;
+    }
+
+    // On iPad, a fast HID barcode scanner can send Enter before Safari has
+    // committed the final input events. Read the value only after it settles.
+    const firstValue = normalizeScannedSku(skuInput.value);
+
+    await new Promise(resolve => setTimeout(resolve, 80));
+
+    const sku = normalizeScannedSku(skuInput.value);
+
+    if (sku !== firstValue) {
+        scanSubmitTimer = setTimeout(submitSettledScan, 80);
+        return;
+    }
+
+    if (!sku) {
+        return;
+    }
+
+    if (!/^\d{13}$/.test(sku)) {
+        showMessage(
+            "Incomplete scan: received " + sku.length
+            + " digits (ISBN must be 13). Please scan again.",
+            "error"
+        );
+        skuInput.select();
+        return;
+    }
+
+    scanSubmitRunning = true;
+
+    try {
+        if (insertBeforeSeq !== null) {
+            await insertSku(sku, insertBeforeRound, insertBeforeSeq);
+        } else {
+            await recordSku(sku);
+        }
+    } finally {
+        scanSubmitRunning = false;
+    }
+
+}
+
 skuInput.addEventListener(
 
     "keydown",
@@ -2756,15 +2816,6 @@ skuInput.addEventListener(
 
 
         event.preventDefault();
-
-
-        const sku =
-            skuInput.value.trim();
-
-
-        if (!sku) {
-            return;
-        }
 
 
         if (
@@ -2785,32 +2836,8 @@ skuInput.addEventListener(
         }
 
 
-        if (
-            insertBeforeSeq
-            !==
-            null
-        ) {
-
-
-            await insertSku(
-
-                sku,
-
-                insertBeforeRound,
-
-                insertBeforeSeq
-
-            );
-
-
-        } else {
-
-
-            await recordSku(
-                sku
-            );
-
-        }
+        clearTimeout(scanSubmitTimer);
+        scanSubmitTimer = setTimeout(submitSettledScan, 120);
 
     }
 
