@@ -561,7 +561,7 @@
         <input
             type="text"
             id="searchInput"
-            placeholder="Search SKU or title"
+            placeholder="Search SKU, title or author"
         >
 
     </div>
@@ -592,6 +592,10 @@
 
                     <th>
                         Title
+                    </th>
+
+                    <th>
+                        Author
                     </th>
 
                     {% if can_view_actual_stock %}
@@ -652,7 +656,7 @@
                 <tr>
 
                     <td
-                        colspan="{{ 6 if can_view_actual_stock else 5 }}"
+                        colspan="{{ 7 if can_view_actual_stock else 6 }}"
                         class="empty-row"
                     >
                         Loading inventory...
@@ -679,8 +683,8 @@ const CAN_VIEW_ACTUAL_STOCK =
 
 const INVENTORY_COLUMN_COUNT =
     CAN_VIEW_ACTUAL_STOCK
-    ? 6
-    : 5;
+    ? 7
+    : 6;
 
 
 // =========================================================
@@ -1461,6 +1465,15 @@ function renderInventory() {
                     .toLowerCase();
 
 
+                const author =
+                    String(
+                        item.author
+                        ||
+                        ""
+                    )
+                    .toLowerCase();
+
+
                 const used =
                     Number(
                         item.used
@@ -1487,6 +1500,10 @@ function renderInventory() {
                     )
                     &&
                     !title.includes(
+                        search
+                    )
+                    &&
+                    !author.includes(
                         search
                     )
                 ) {
@@ -1661,6 +1678,10 @@ function renderInventory() {
 
             <td>
                 ${escapeHtml(item.title || "")}
+            </td>
+
+            <td>
+                ${escapeHtml(item.author || "")}
             </td>
 
             ${

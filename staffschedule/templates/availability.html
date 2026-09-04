@@ -420,6 +420,36 @@
 
 
         /* =========================
+           Preference
+        ========================= */
+
+        .preference-area {
+            margin-top: 22px;
+        }
+
+        .preference-area textarea {
+            width: 100%;
+            min-height: 90px;
+            resize: vertical;
+            padding: 11px 13px;
+            border: 1px solid #d9dce1;
+            border-radius: 7px;
+            font: inherit;
+            line-height: 1.45;
+        }
+
+        .preference-area textarea:disabled {
+            background: #f7f8fa;
+            color: #646a73;
+        }
+
+        .preference-help {
+            margin-top: 6px;
+            color: #8f959e;
+            font-size: 12px;
+        }
+
+        /* =========================
            Bottom
         ========================= */
 
@@ -777,6 +807,18 @@
 
         </div>
 
+
+
+        <div class="preference-area">
+            <label for="preferenceInput">Preference</label>
+            <textarea
+                id="preferenceInput"
+                class="edit-control"
+                maxlength="500"
+                placeholder="Optional: tell us your scheduling preferences for this week."
+            ></textarea>
+            <div class="preference-help">Optional · maximum 500 characters</div>
+        </div>
 
 
         <!-- Status -->
@@ -1976,6 +2018,13 @@ async function loadAvailability() {
 
 
 
+        document.getElementById(
+            "preferenceInput"
+        ).value =
+            data.preference
+            || "";
+
+
         data.availability.forEach(
 
             item => {
@@ -2171,6 +2220,16 @@ async function saveAvailability() {
 
                             staff_id:
                                 STAFF_ID,
+
+                            week_start:
+                                dateToString(
+                                    weekStart
+                                ),
+
+                            preference:
+                                document.getElementById(
+                                    "preferenceInput"
+                                ).value,
 
                             availability:
                                 entries

@@ -252,7 +252,8 @@ def get_candidate_books(
     cursor,
     current_week_id: str,
     selected_lives: Iterable[dict],
-    include_weekly_remaining: bool = True
+    include_weekly_remaining: bool = True,
+    allow_stock_under_5: bool = False
 ) -> List[dict]:
     """
     Build the next-week candidate book list.
@@ -288,7 +289,9 @@ def get_candidate_books(
         Because the physical inventory pool is shared, remaining is summed
         across all stores for current_week_id.
 
-    Output only contains rows with candidate_stock > 0.
+    Candidate stock threshold:
+        - allow_stock_under_5 = False: candidate_stock >= 5
+        - allow_stock_under_5 = True:  candidate_stock > 0
     """
 
     current_week_id = str(current_week_id or "").strip()
@@ -604,7 +607,10 @@ def get_candidate_books(
                     )
                     ELSE 0
                 END
-            ) > 0
+            ) > CASE
+                    WHEN %s THEN 0
+                    ELSE 4
+                END
 
         ORDER BY
             candidate_stock DESC,
@@ -620,6 +626,7 @@ def get_candidate_books(
             bool(include_weekly_remaining),
             bool(include_weekly_remaining),
             bool(include_weekly_remaining),
+            bool(allow_stock_under_5),
         ]
     )
 
@@ -731,6 +738,7 @@ def api_candidate_batches():
                 b.batch_id,
                 b.week_id,
                 b.include_weekly_remaining,
+                b.allow_stock_under_5,
                 b.generated_at,
                 COUNT(DISTINCT bl.batch_live_id) AS live_count,
                 COUNT(DISTINCT c.candidate_id) AS candidate_count
@@ -746,6 +754,7 @@ def api_candidate_batches():
                 b.batch_id,
                 b.week_id,
                 b.include_weekly_remaining,
+                b.allow_stock_under_5,
                 b.generated_at
 
             ORDER BY
@@ -797,6 +806,7 @@ def api_candidate_batch_detail(batch_id):
                 batch_id,
                 week_id,
                 include_weekly_remaining,
+                allow_stock_under_5,
                 generated_at
             FROM book_selection_batches
             WHERE batch_id = %s
@@ -919,6 +929,13 @@ def api_generate_next_week_candidates():
         )
     )
 
+    allow_stock_under_5 = bool(
+        data.get(
+            "allow_stock_under_5",
+            False
+        )
+    )
+
 
     if not current_week_id:
 
@@ -960,7 +977,9 @@ def api_generate_next_week_candidates():
             selected_lives=
                 normalized_lives,
             include_weekly_remaining=
-                include_weekly_remaining
+                include_weekly_remaining,
+            allow_stock_under_5=
+                allow_stock_under_5
         )
 
         # =====================================================
@@ -972,10 +991,12 @@ def api_generate_next_week_candidates():
             INSERT INTO book_selection_batches
             (
                 week_id,
-                include_weekly_remaining
+                include_weekly_remaining,
+                allow_stock_under_5
             )
             VALUES
             (
+                %s,
                 %s,
                 %s
             )
@@ -984,6 +1005,9 @@ def api_generate_next_week_candidates():
                 current_week_id,
                 bool(
                     include_weekly_remaining
+                ),
+                bool(
+                    allow_stock_under_5
                 )
             )
         )
@@ -1099,6 +1123,8 @@ def api_generate_next_week_candidates():
                 len(normalized_lives),
             "include_weekly_remaining":
                 include_weekly_remaining,
+            "allow_stock_under_5":
+                allow_stock_under_5,
             "candidate_count":
                 len(items),
             "items":

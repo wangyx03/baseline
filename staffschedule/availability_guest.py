@@ -535,6 +535,24 @@ def get_guest_availability(
             cursor.fetchall()
         )
 
+        cursor.execute(
+            """
+            SELECT preference
+            FROM staff_availability_preference
+            WHERE staff_id = %s
+              AND week_start = %s
+            LIMIT 1
+            """,
+            (staff_id, week_start)
+        )
+
+        preference_row = cursor.fetchone()
+        preference = (
+            str(preference_row.get("preference") or "")
+            if preference_row
+            else ""
+        )
+
         availability = []
 
         for row in rows:
@@ -602,6 +620,9 @@ def get_guest_availability(
 
             "availability":
                 availability,
+
+            "preference":
+                preference,
         })
 
     except Exception as e:
@@ -669,6 +690,22 @@ def save_guest_availability(
         "availability",
         [],
     )
+
+    preference = str(
+        data.get(
+            "preference",
+            ""
+        )
+        or ""
+    ).strip()
+
+    if len(preference) > 500:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Preference cannot exceed 500 characters",
+        }), 400
 
     if not isinstance(
         availability,
@@ -878,6 +915,25 @@ def save_guest_availability(
                     ],
                 )
             )
+
+        cursor.execute(
+            """
+            INSERT INTO staff_availability_preference
+            (
+                staff_id,
+                week_start,
+                preference
+            )
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                preference = VALUES(preference)
+            """,
+            (
+                staff_id,
+                week_start,
+                preference
+            )
+        )
 
         db.commit()
 

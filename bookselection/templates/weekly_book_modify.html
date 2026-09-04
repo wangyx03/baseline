@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+{% block title %}Weekly Book Modify{% endblock %}
+
+{% block styles %}
+.page-container{max-width:1550px;margin:0 auto;padding:24px}.page-header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}.page-header h1{margin:0;font-size:30px}.header-actions{display:flex;gap:10px}.btn{border:0;border-radius:7px;padding:10px 18px;font-weight:700;cursor:pointer}.btn-dark{background:#111;color:#fff}.btn-light{background:#fff;border:1px solid #bbb;color:#111}.btn:disabled{opacity:.45;cursor:not-allowed}.panel{background:#fff;border:1px solid #ddd;border-radius:10px;padding:18px;margin-bottom:18px}.controls{display:flex;align-items:end;gap:18px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px}.field label{font-weight:700}.field select,.field input{height:42px;border:1px solid #bbb;border-radius:7px;padding:0 12px;font-size:15px;background:#fff}.field select{min-width:210px}.field input[type=number]{width:150px}.last-refresh{color:#666;font-size:13px;margin-left:auto}.summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.summary-card{border:1px solid #ddd;border-radius:10px;padding:18px}.summary-card h2{margin:0 0 14px}.summary-row{display:flex;justify-content:space-between;padding:4px 0;font-size:16px}.summary-row strong{font-weight:800}.tabs{display:flex;gap:8px;margin-bottom:14px}.tab-btn{border:1px solid #bbb;background:#fff;border-radius:7px;padding:9px 20px;font-weight:700;cursor:pointer}.tab-btn.active{background:#111;color:#fff;border-color:#111}.toolbar{display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.search{min-width:330px;height:40px;border:1px solid #bbb;border-radius:7px;padding:0 12px}.table-wrap{overflow:auto;border:1px solid #ddd;border-radius:8px}table{width:100%;border-collapse:collapse;min-width:1250px}th,td{padding:10px 12px;border-bottom:1px solid #eee;text-align:left;vertical-align:middle}th{background:#f6f7f8;position:sticky;top:0;z-index:1}.qty-input{width:90px;padding:7px;border:1px solid #bbb;border-radius:5px}.action-btn{border:1px solid #bbb;background:#111;color:#fff;border-radius:5px;padding:6px 10px;cursor:pointer;margin:2px 5px 2px 0;font-weight:700}.action-btn:disabled{background:#999;border-color:#999;cursor:not-allowed;opacity:.75}.danger{background:#fff;color:#a40000}.pending-row{background:#fff9df}.removed-row{text-decoration:line-through;opacity:.5}.stock-over-row{background:#ffe5e5!important;color:#a40000}.stock-shortage-row{background:#ffe5e5;color:#a40000}.stock-shortage-row td{background:#ffe5e5}.status{margin-top:10px;font-weight:600}.status.error{color:#a40000}.status.success{color:#137333}.hint{color:#666;font-size:13px}.empty{text-align:center;color:#777;padding:28px}.badge{display:inline-block;border:1px solid #ccc;border-radius:999px;padding:2px 8px;font-size:12px}.shared-badge{display:inline-block;background:#111;color:#fff;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700}.pending-list{margin:0;padding-left:22px}.pending-list li{margin:7px 0}.num-strong{font-weight:800}@media(max-width:850px){.summary-grid{grid-template-columns:1fr}.last-refresh{width:100%;margin-left:0}}
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <h1>Weekly Book Modify</h1>
+    <div class="header-actions">
+      <button id="refreshBtn" class="btn btn-light">Refresh</button>
+      <button id="confirmBtn" class="btn btn-dark" disabled>Confirm</button>
+    </div>
+  </div>
+
+  <div class="panel controls">
+    <div class="field"><label>Week</label><select id="weekSelect"></select></div>
+    <div class="field"><label>Min Stock Filter</label><input id="minStock" type="number" min="0" value="0"></div>
+    <div class="hint">Min Stock Filter applies to Snapshot eligibility and is also the minimum stock that must remain after Planned changes. Current-week VB/TU SKUs are always kept.</div>
+    <div id="lastRefresh" class="last-refresh">Last Refresh: —</div>
+  </div>
+
+  <div class="summary-grid panel">
+    <div class="summary-card"><h2>VB</h2><div id="vbSummary"></div></div>
+    <div class="summary-card"><h2>TU</h2><div id="tuSummary"></div></div>
+    <div class="summary-card"><h2>Whole Inventory</h2><div id="wholeSummary"></div></div>
+  </div>
+
+  <div class="panel">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="VB">VB</button>
+      <button class="tab-btn" data-tab="TU">TU</button>
+      <button class="tab-btn" data-tab="Whole Inventory">Whole Inventory</button>
+    </div>
+    <div class="toolbar">
+      <input id="searchBox" class="search" placeholder="Search SKU / Title / Author">
+      <span id="tabHint" class="hint"></span>
+    </div>
+    <div class="table-wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Pending Changes</h2>
+    <div id="pending"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $=id=>document.getElementById(id);
+let currentTab='VB', snapshot={VB:[],TU:[]}, wholeInventory=[], edits=new Map(), removals=new Set(), additions=new Map();
+const key=(store,sku)=>store+'|'+sku;
+const n=v=>Number(v||0);
+function minStockValue(){
+  return Math.max(0,parseInt($('minStock').value||0,10));
+}
+
+function setStatus(msg,type=''){ $('status').className='status '+type; $('status').textContent=msg||''; }
+function spiceYes(v){ return String(v||'').trim().toLowerCase() && !['0','no','none','non-spice','non spice','false'].includes(String(v).trim().toLowerCase()); }
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function js(v){return String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function css(v){return String(v).replace(/[^a-zA-Z0-9_-]/g,'_');}
+
+function effectiveRows(store){
+  let rows=snapshot[store]
+    .map(r=>({...r, planned:edits.has(key(store,r.sku))?edits.get(key(store,r.sku)):n(r.planned)}))
+    .filter(r=>!removals.has(key(store,r.sku)));
+  additions.forEach(a=>{
+    if(a.store===store){
+      rows.push({...a,used:0,remaining:n(a.planned),is_resident:0});
+    }
+  });
+  return rows;
+}
+
+function rowFor(store,sku){
+  return effectiveRows(store).find(r=>String(r.sku)===String(sku))||null;
+}
+function storesForSku(sku){
+  const out=[];
+  if(rowFor('VB',sku))out.push('VB');
+  if(rowFor('TU',sku))out.push('TU');
+  return out;
+}
+function remainingFor(store,sku){
+  const r=rowFor(store,sku);
+  return r ? n(r.planned)-n(r.used) : 0;
+}
+function totalRemaining(sku){
+  return remainingFor('VB',sku)+remainingFor('TU',sku);
+}
+function isShared(sku){return storesForSku(sku).length===2;}
+function sharedLabel(sku){return isShared(sku)?'<span class="shared-badge">Shared</span>':'—';}
+function actualForSku(sku,fallback=0){
+  const u=wholeInventory.find(r=>String(r.sku)===String(sku));
+  if(u)return n(u.actual_stock);
+  for(const store of ['VB','TU']){
+    const r=rowFor(store,sku);
+    if(r)return n(r.actual_stock);
+  }
+  return n(fallback);
+}
+function availableQty(sku,actual){
+  return actualForSku(sku,actual)-totalRemaining(sku);
+}
+
+function summary(store){
+  const rows=effectiveRows(store), books=rows.length, planned=rows.reduce((s,r)=>s+n(r.planned),0), used=rows.reduce((s,r)=>s+n(r.used),0), remaining=planned-used;
+  const resident=rows.filter(r=>n(r.is_resident)>0).length, regular=books-resident, spice=rows.filter(r=>spiceYes(r.spice_type)).length, non=books-spice;
+  const shared=rows.filter(r=>isShared(r.sku)).length;
+  $(store.toLowerCase()+'Summary').innerHTML=`
+    <div class="summary-row"><span>Books</span><strong>${books}</strong></div>
+    <div class="summary-row"><span>Planned Qty</span><strong>${planned}</strong></div>
+    <div class="summary-row"><span>Used</span><strong>${used}</strong></div>
+    <div class="summary-row"><span>Remaining</span><strong>${remaining}</strong></div>
+    <div class="summary-row"><span>Resident</span><strong>${resident}</strong></div>
+    <div class="summary-row"><span>Regular</span><strong>${regular}</strong></div>
+    <div class="summary-row"><span>Spice</span><strong>${spice}</strong></div>
+    <div class="summary-row"><span>Non-Spice</span><strong>${non}</strong></div>
+    <div class="summary-row"><span>Shared SKU</span><strong>${shared}</strong></div>`;
+}
+function wholeSummary(){
+  const items=new Map(wholeInventory.map(r=>[String(r.sku),r]));
+  snapshot.VB.forEach(r=>{if(!items.has(String(r.sku)))items.set(String(r.sku),r);});
+  snapshot.TU.forEach(r=>{if(!items.has(String(r.sku)))items.set(String(r.sku),r);});
+  additions.forEach(a=>{if(!items.has(String(a.sku)))items.set(String(a.sku),a);});
+
+  const rows=Array.from(items.values());
+  const vbSku=rows.filter(r=>!!rowFor('VB',r.sku)).length;
+  const tuSku=rows.filter(r=>!!rowFor('TU',r.sku)).length;
+  const shared=rows.filter(r=>isShared(r.sku)).length;
+  const vbOnly=rows.filter(r=>!!rowFor('VB',r.sku) && !rowFor('TU',r.sku)).length;
+  const tuOnly=rows.filter(r=>!!rowFor('TU',r.sku) && !rowFor('VB',r.sku)).length;
+  const notUsed=rows.filter(r=>!rowFor('VB',r.sku) && !rowFor('TU',r.sku)).length;
+  const actual=rows.reduce((sum,r)=>sum+actualForSku(r.sku,r.actual_stock),0);
+  const available=rows.reduce((sum,r)=>sum+availableQty(r.sku,r.actual_stock),0);
+
+  $('wholeSummary').innerHTML=`
+    <div class="summary-row"><span>Books</span><strong>${rows.length}</strong></div>
+    <div class="summary-row"><span>Actual Stock</span><strong>${actual}</strong></div>
+    <div class="summary-row"><span>VB SKU</span><strong>${vbSku}</strong></div>
+    <div class="summary-row"><span>TU SKU</span><strong>${tuSku}</strong></div>
+    <div class="summary-row"><span>Shared SKU</span><strong>${shared}</strong></div>
+    <div class="summary-row"><span>VB Only</span><strong>${vbOnly}</strong></div>
+    <div class="summary-row"><span>TU Only</span><strong>${tuOnly}</strong></div>
+    <div class="summary-row"><span>Not Used</span><strong>${notUsed}</strong></div>
+    <div class="summary-row"><span>Available Qty</span><strong>${available}</strong></div>`;
+}
+function renderSummary(){summary('VB');summary('TU');wholeSummary();}
+function matches(r,q){q=q.toLowerCase();return !q||String(r.sku).toLowerCase().includes(q)||String(r.title||'').toLowerCase().includes(q)||String(r.author||'').toLowerCase().includes(q);}
+
+function render(){
+  renderSummary();
+  const q=$('searchBox').value.trim();
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
+
+  if(currentTab==='Whole Inventory'){
+    $('tabHint').textContent="Whole Inventory = Snapshot SKUs above Min Stock Filter + every SKU already in this week's VB/TU Weekly Inventory. Actual Stock always comes from Snapshot.";
+    $('thead').innerHTML='<tr><th>SKU</th><th>Book Title</th><th>Author</th><th>Spice Type</th><th>Actual Stock</th><th>Available Qty</th><th>VB Planned</th><th>TU Planned</th><th>Remaining Total</th><th>Action</th></tr>';
+    const merged=new Map(wholeInventory.map(r=>[String(r.sku),r]));
+    additions.forEach(a=>{if(!merged.has(String(a.sku)))merged.set(String(a.sku),a);});
+    const rows=Array.from(merged.values()).filter(r=>matches(r,q));
+    $('tbody').innerHTML=rows.length?rows.map(r=>{
+      const vbRow=rowFor('VB',r.sku), tuRow=rowFor('TU',r.sku);
+      const inVB=!!vbRow, inTU=!!tuRow, remTotal=totalRemaining(r.sku), available=availableQty(r.sku,r.actual_stock), shortage=(n(r.actual_stock)-remTotal)<minStockValue();
+      const vbPlanned=inVB
+        ? `<span class="num-strong">${n(vbRow.planned)}</span>`
+        : `<input class="qty-input" id="addqty-VB-${css(r.sku)}" type="number" min="0" placeholder="Qty">`;
+      const tuPlanned=inTU
+        ? `<span class="num-strong">${n(tuRow.planned)}</span>`
+        : `<input class="qty-input" id="addqty-TU-${css(r.sku)}" type="number" min="0" placeholder="Qty">`;
+      return `<tr class="${shortage?'stock-shortage-row':''}">
+        <td>${esc(r.sku)}</td>
+        <td>${esc(r.title)}</td>
+        <td>${esc(r.author)}</td>
+        <td>${esc(r.spice_type)}</td>
+        <td>${n(r.actual_stock)}</td>
+        <td class="num-strong">${available}</td>
+        <td>${vbPlanned}</td>
+        <td>${tuPlanned}</td>
+        <td class="num-strong">${remTotal}</td>
+        <td>
+          <button class="action-btn" ${inVB?'disabled':''} onclick="addBook('VB','${js(r.sku)}')">${inVB?'In VB':'Add VB'}</button>
+          <button class="action-btn" ${inTU?'disabled':''} onclick="addBook('TU','${js(r.sku)}')">${inTU?'In TU':'Add TU'}</button>
+        </td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="10" class="empty">No books match this filter.</td></tr>';
+  } else {
+    $('tabHint').textContent='Actual / Used are fixed at the last Refresh. Planned increases must keep Actual Stock - Remaining Total >= Min Stock Filter.';
+    $('thead').innerHTML='<tr><th>SKU</th><th>Title</th><th>Author</th><th>Actual Stock</th><th>Planned</th><th>Used</th><th>Remaining</th><th>Remaining Total</th><th>Shared</th><th>Type</th><th>Action</th></tr>';
+    const base=[...snapshot[currentTab], ...Array.from(additions.values()).filter(a=>a.store===currentTab)];
+    const rows=base.filter(r=>matches(r,q));
+    $('tbody').innerHTML=rows.length?rows.map(r=>{
+      const k=key(currentTab,r.sku), removed=removals.has(k), planned=edits.has(k)?edits.get(k):n(r.planned), used=n(r.used), rem=planned-used, added=additions.has(k), shared=isShared(r.sku), totalRem=totalRemaining(r.sku), remTotal=shared?totalRem:'—', stockOver=actualForSku(r.sku,r.actual_stock)-totalRem<minStockValue();
+      return `<tr class="${removed?'removed-row':(stockOver?'stock-over-row':(edits.has(k)||added?'pending-row':''))}">
+        <td>${esc(r.sku)}</td><td>${esc(r.title)}</td><td>${esc(r.author)}</td><td>${n(r.actual_stock)}</td>
+        <td><input class="qty-input" type="number" min="${used}" value="${planned}" ${removed?'disabled':''} onchange="changePlanned('${currentTab}','${js(r.sku)}',this.value)"></td>
+        <td>${used}</td><td>${rem}</td><td class="num-strong">${remTotal}</td><td>${sharedLabel(r.sku)}</td>
+        <td>${n(r.is_resident)?'<span class="badge">Resident</span>':'Regular'}</td>
+        <td>${removed?`<button class="action-btn" onclick="undoRemove('${currentTab}','${js(r.sku)}')">Undo</button>`:`<button class="action-btn danger" onclick="removeBook('${currentTab}','${js(r.sku)}')">Remove</button>`}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="11" class="empty">No books.</td></tr>';
+  }
+  renderPending();
+}
+
+function changePlanned(store,sku,val){
+  const current=rowFor(store,sku);
+  const k=key(store,sku);
+  const raw=String(val??'').trim();
+  if(raw===''){render();return;}
+
+  const value=parseInt(raw,10);
+  const used=n(current?.used);
+  const oldPlanned=n(current?.planned);
+
+  if(!Number.isFinite(value) || value<used){
+    setStatus(`Planned Qty for ${sku} cannot be below Used (${used}).`,'error');
+    render();
+    return;
+  }
+
+  // Increases consume more reserved stock. Decreases are allowed as long as Planned >= Used.
+  if(value>oldPlanned){
+    const otherStore=store==='VB'?'TU':'VB';
+    const otherRemaining=remainingFor(otherStore,sku);
+    const projectedTotal=(value-used)+otherRemaining;
+    const actual=actualForSku(sku,current?.actual_stock);
+    const minStock=minStockValue();
+    const buffer=actual-projectedTotal;
+
+    if(buffer<minStock){
+      const maxPlanned=used + actual - minStock - otherRemaining;
+      setStatus(
+        `${sku}: Planned is too high. Actual Stock - Remaining Total must be >= ${minStock}. Maximum ${store} Planned is ${Math.max(used,maxPlanned)}.`,
+        'error'
+      );
+      render();
+      return;
+    }
+  }
+
+  const row=snapshot[store].find(r=>String(r.sku)===String(sku));
+  if(additions.has(k)){
+    additions.get(k).planned=value;
+  }else if(row&&value===n(row.planned)){
+    edits.delete(k);
+  }else{
+    edits.set(k,value);
+  }
+  setStatus(`${sku}: Planned staged. Database is unchanged until Confirm.`,'success');
+  render();
+}
+function removeBook(store,sku){
+  const k=key(store,sku);
+  if(additions.has(k)){additions.delete(k);render();return;}
+  const row=snapshot[store].find(r=>String(r.sku)===String(sku));
+  if(n(row?.used)>0){setStatus(`Cannot remove ${sku}: Used is ${n(row.used)}. Set Planned to Used instead.`,'error');return;}
+  removals.add(k);edits.delete(k);render();
+}
+function undoRemove(store,sku){removals.delete(key(store,sku));render();}
+function addBook(store,sku){
+  if(rowFor(store,sku)){
+    setStatus(`${sku} already exists in ${store}.`,'error');
+    return;
+  }
+  const row=wholeInventory.find(r=>String(r.sku)===String(sku));
+  if(!row)return;
+
+  const qtyInput=$('addqty-'+store+'-'+css(sku));
+  const rawQty=String(qtyInput?.value||'').trim();
+  if(rawQty===''){
+    setStatus(`Enter Planned Qty before adding ${sku} to ${store}.`,'error');
+    qtyInput?.focus();
+    return;
+  }
+
+  const qty=parseInt(rawQty,10);
+  if(!Number.isFinite(qty) || qty<0){
+    setStatus(`Planned Qty for ${sku} must be 0 or greater.`,'error');
+    qtyInput?.focus();
+    return;
+  }
+
+  const otherStore=store==='VB'?'TU':'VB';
+  const otherRemaining=remainingFor(otherStore,sku);
+  const projectedTotal=qty+otherRemaining;
+  const actual=actualForSku(sku,row.actual_stock);
+  const minStock=minStockValue();
+  const buffer=actual-projectedTotal;
+
+  if(buffer<minStock){
+    const maxQty=actual-minStock-otherRemaining;
+    setStatus(
+      `${sku}: Cannot add Planned ${qty} to ${store}. Actual Stock - Remaining Total must be >= ${minStock}. Maximum addable Planned is ${Math.max(0,maxQty)}.`,
+      'error'
+    );
+    qtyInput?.focus();
+    return;
+  }
+
+  const k=key(store,sku);
+  additions.set(k,{...row,store,planned:qty,used:0,remaining:qty});
+  setStatus(`${sku} staged for ${store}. Database is unchanged until Confirm.`,'success');
+  render();
+}
+function buildChanges(){
+  const out=[];
+  edits.forEach((planned,k)=>{const [store,sku]=k.split('|');out.push({action:'MODIFY',store,sku,planned_qty:planned});});
+  removals.forEach(k=>{const [store,sku]=k.split('|');out.push({action:'REMOVE',store,sku});});
+  additions.forEach(a=>out.push({action:'ADD',store:a.store,sku:a.sku,planned_qty:n(a.planned)}));
+  return out;
+}
+function renderPending(){
+  const changes=buildChanges();
+  $('confirmBtn').disabled=!changes.length;
+  $('pending').innerHTML=changes.length?`<ul class="pending-list">${changes.map(c=>`<li><strong>${c.action}</strong> ${esc(c.store)} · ${esc(c.sku)}${c.planned_qty!==undefined?' · Planned '+c.planned_qty:''}</li>`).join('')}</ul>`:'<div class="hint">No pending changes. Database has not been modified.</div>';
+}
+
+async function loadWeeks(){
+  const r=await fetch('/api/weekly-book-modify/weeks');const d=await r.json();
+  if(!d.success)throw new Error(d.message);
+  $('weekSelect').innerHTML=d.weeks.map(w=>`<option value="${esc(w)}">${esc(w)}</option>`).join('');
+}
+async function loadWholeInventory(){
+  const week=$('weekSelect').value;if(!week)return;
+  const min=Math.max(0,parseInt($('minStock').value||0,10));
+  const r=await fetch(`/api/weekly-book-modify/unused?week_id=${encodeURIComponent(week)}&min_stock=${min}`);
+  const d=await r.json();if(!d.success)throw new Error(d.message);
+  wholeInventory=d.items||[];
+  renderSummary();
+  if(currentTab==='Whole Inventory')render();
+}
+async function refreshAll(){
+  const week=$('weekSelect').value;if(!week)return;
+  setStatus('Refreshing...');$('refreshBtn').disabled=true;
+  try{
+    const r=await fetch(`/api/weekly-book-modify/load?week_id=${encodeURIComponent(week)}`),d=await r.json();
+    if(!d.success)throw new Error(d.message);
+    snapshot=d.items_by_store||{VB:[],TU:[]};
+    await loadWholeInventory();
+    $('lastRefresh').textContent='Last Refresh: '+new Date().toLocaleTimeString();
+    setStatus('Refreshed. Actual Stock and Used will stay fixed until the next Refresh.','success');
+    render();
+  }catch(e){setStatus(e.message,'error')}finally{$('refreshBtn').disabled=false;}
+}
+async function confirmChanges(){
+  const changes=buildChanges();if(!changes.length)return;
+  $('confirmBtn').disabled=true;$('confirmBtn').textContent='Confirming...';
+  try{
+    const r=await fetch('/api/weekly-book-modify/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({week_id:$('weekSelect').value,min_stock_filter:minStockValue(),changes})}),d=await r.json();
+    if(!d.success)throw new Error(d.message);
+    edits.clear();removals.clear();additions.clear();
+    setStatus(d.message,'success');
+    await refreshAll();
+    $('confirmBtn').textContent='✓ Confirmed';
+    setTimeout(()=>{$('confirmBtn').textContent='Confirm';renderPending();},1200);
+  }catch(e){setStatus(e.message,'error');$('confirmBtn').textContent='Confirm';renderPending();}
+}
+
+document.querySelectorAll('.tab-btn').forEach(b=>b.onclick=async()=>{currentTab=b.dataset.tab;if(currentTab==='Whole Inventory')await loadWholeInventory();render();});
+$('searchBox').addEventListener('input',render);
+$('minStock').addEventListener('change',async()=>{
+  try{
+    await loadWholeInventory();
+    render();
+  }catch(e){setStatus(e.message,'error');}
+});
+$('refreshBtn').onclick=refreshAll;
+$('confirmBtn').onclick=confirmChanges;
+$('weekSelect').addEventListener('change',()=>{edits.clear();removals.clear();additions.clear();refreshAll();});
+(async()=>{try{await loadWeeks();await refreshAll();}catch(e){setStatus(e.message,'error')}})();
+</script>
+{% endblock %}

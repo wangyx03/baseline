@@ -57,6 +57,8 @@ from bookselection.book_selection_generate import (
     book_selection_generate_bp
 )
 
+from bookselection.weekly_book_modify import weekly_book_modify_bp
+
 from db import get_db
 
 
@@ -150,6 +152,10 @@ app.register_blueprint(
 
 app.register_blueprint(
     book_selection_generate_bp
+)
+
+app.register_blueprint(
+    weekly_book_modify_bp
 )
 
 

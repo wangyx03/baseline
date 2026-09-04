@@ -324,6 +324,11 @@ def get_weekly_inventory():
                 ) AS title,
 
                 COALESCE(
+                    bs.book_author,
+                    ''
+                ) AS author,
+
+                COALESCE(
                     stock_data.actual_stock,
                     0
                 ) AS actual_stock,

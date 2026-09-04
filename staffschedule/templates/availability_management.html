@@ -423,6 +423,52 @@
 
 
         /* =========================
+           Staff Preference (read only)
+        ========================= */
+
+        .preference-section {
+            margin-top: 20px;
+        }
+
+        .preference-label {
+            display: block;
+            margin-bottom: 7px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #646a73;
+        }
+
+        .preference-box {
+            width: 100%;
+            min-height: 90px;
+            padding: 11px 14px;
+            border: 1px solid #d9dce1;
+            border-radius: 7px;
+            background: #f7f8fa;
+            color: #1f2329;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            outline: none;
+            box-shadow: none;
+        }
+
+        .preference-box:focus,
+        .preference-box:focus-visible {
+            outline: none;
+            border-color: #d9dce1;
+            box-shadow: none;
+        }
+
+        .preference-note {
+            margin-top: 6px;
+            color: #8f959e;
+            font-size: 12px;
+        }
+
+
+        /* =========================
            Editing Status
         ========================= */
 
@@ -925,6 +971,31 @@
             </table>
 
 
+        </div>
+
+
+        <!-- =========================
+             Staff Preference
+        ========================= -->
+
+        <div class="preference-section">
+            <label
+                class="preference-label"
+                for="preferenceDisplay"
+            >
+                Preference
+            </label>
+
+            <textarea
+                id="preferenceDisplay"
+                class="preference-box"
+                readonly
+                placeholder="No preference submitted for this week."
+            ></textarea>
+
+            <div class="preference-note">
+                Submitted by the staff member for this week. Managers can view but cannot edit it here.
+            </div>
         </div>
 
 
@@ -2017,6 +2088,13 @@ async function loadAvailability() {
     if (
         !staffId
     ) {
+
+        document
+            .getElementById(
+                "preferenceDisplay"
+            )
+            .value = "";
+
         return;
     }
 
@@ -2064,6 +2142,17 @@ async function loadAvailability() {
 
             return;
         }
+
+
+        document
+            .getElementById(
+                "preferenceDisplay"
+            )
+            .value =
+                String(
+                    data.preference
+                    || ""
+                );
 
 
         data.availability.forEach(
@@ -2160,6 +2249,13 @@ async function loadAvailability() {
 
 
 function clearTableVisual() {
+
+    document
+        .getElementById(
+            "preferenceDisplay"
+        )
+        .value = "";
+
 
     document
         .querySelectorAll(

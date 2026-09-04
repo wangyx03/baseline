@@ -315,6 +315,32 @@
             color: #646a73;
         }
 
+        .preference-area {
+            margin-top: 22px;
+        }
+
+        .preference-area textarea {
+            width: 100%;
+            min-height: 90px;
+            resize: vertical;
+            padding: 11px 13px;
+            border: 1px solid #d9dce1;
+            border-radius: 7px;
+            font: inherit;
+            line-height: 1.45;
+        }
+
+        .preference-area textarea:disabled {
+            background: #f7f8fa;
+            color: #646a73;
+        }
+
+        .preference-help {
+            margin-top: 6px;
+            color: #8f959e;
+            font-size: 12px;
+        }
+
         .bottom-area {
             display: flex;
 
@@ -614,6 +640,19 @@
 
                 </table>
 
+            </div>
+
+
+            <div class="preference-area">
+                <label for="preferenceInput">Preference</label>
+                <textarea
+                    id="preferenceInput"
+                    class="edit-control"
+                    maxlength="500"
+                    placeholder="Optional: tell us your scheduling preferences for this week."
+                    disabled
+                ></textarea>
+                <div class="preference-help">Optional · maximum 500 characters</div>
             </div>
 
 
@@ -1450,6 +1489,11 @@
             saveButton.disabled =
                 true;
 
+            document.getElementById(
+                "preferenceInput"
+            ).value =
+                "";
+
             setEditingState(
                 false
             );
@@ -1481,6 +1525,12 @@
                     "Unable to load availability."
                 );
             }
+
+            document.getElementById(
+                "preferenceInput"
+            ).value =
+                data.preference
+                || "";
 
             data.availability.forEach(
                 item => {
@@ -1575,6 +1625,11 @@
         isSubmitted =
             !editing;
 
+        document.getElementById(
+            "preferenceInput"
+        ).disabled =
+            !editing;
+
         document
             .querySelectorAll(
                 ".edit-control"
@@ -1667,6 +1722,11 @@
                                     Number(
                                         staffId
                                     ),
+
+                                preference:
+                                    document.getElementById(
+                                        "preferenceInput"
+                                    ).value,
 
                                 availability:
                                     entries

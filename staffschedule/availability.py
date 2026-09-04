@@ -233,6 +233,24 @@ def get_staff_availability():
 
         rows = cursor.fetchall()
 
+        cursor.execute(
+            """
+            SELECT preference
+            FROM staff_availability_preference
+            WHERE staff_id = %s
+              AND week_start = %s
+            LIMIT 1
+            """,
+            (staff_id, week_start)
+        )
+
+        preference_row = cursor.fetchone()
+        preference = (
+            str(preference_row.get("preference") or "")
+            if preference_row
+            else ""
+        )
+
 
         results = []
 
@@ -280,7 +298,8 @@ def get_staff_availability():
 
         return jsonify({
             "success": True,
-            "availability": results
+            "availability": results,
+            "preference": preference
         })
 
 
@@ -323,6 +342,22 @@ def save_staff_availability():
         []
     )
 
+    week_start = str(
+        data.get(
+            "week_start",
+            ""
+        )
+        or ""
+    ).strip()
+
+    preference = str(
+        data.get(
+            "preference",
+            ""
+        )
+        or ""
+    ).strip()
+
 
     if not staff_id:
 
@@ -348,6 +383,40 @@ def save_staff_availability():
             "success": False,
             "message":
                 "Invalid staff_id"
+        }), 400
+
+
+    if not week_start:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "week_start is required"
+        }), 400
+
+
+    try:
+
+        datetime.strptime(
+            week_start,
+            "%Y-%m-%d"
+        )
+
+    except ValueError:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Invalid week_start"
+        }), 400
+
+
+    if len(preference) > 500:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Preference cannot exceed 500 characters"
         }), 400
 
 
@@ -421,6 +490,26 @@ def save_staff_availability():
                     is_available
                 )
             )
+
+
+        cursor.execute(
+            """
+            INSERT INTO staff_availability_preference
+            (
+                staff_id,
+                week_start,
+                preference
+            )
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                preference = VALUES(preference)
+            """,
+            (
+                staff_id,
+                week_start,
+                preference
+            )
+        )
 
 
         db.commit()
