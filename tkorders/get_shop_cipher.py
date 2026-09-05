@@ -18,7 +18,7 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent / ".env", override=True)  # always read .env next to this script, regardless of CWD, and override any pre-existing env vars (e.g. leftover from a shell session)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)  # always read .env next to this script, regardless of CWD, and override any pre-existing env vars (e.g. leftover from a shell session)
 
 APP_KEY = os.environ.get("TTS_APP_KEY", "YOUR_APP_KEY")
 APP_SECRET = os.environ.get("TTS_APP_SECRET", "YOUR_APP_SECRET")

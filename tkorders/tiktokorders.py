@@ -57,10 +57,23 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-import db
+# ---------------------------------------------------------
+# Project paths
+# ---------------------------------------------------------
+SCRIPT_DIR = Path(__file__).resolve().parent
+BASE_DIR = SCRIPT_DIR.parent
+ENV_PATH = BASE_DIR / ".env"
 
-ENV_PATH = Path(__file__).parent.parent / ".env"
-load_dotenv(ENV_PATH, override=True)  # .env lives one level up, in the repo root (shared with inventory_snapshot.py etc), not inside tkorders/ itself
+# Load baseline/.env BEFORE importing tkorders_db because
+# tkorders_db reads TKORDERS_TABLE / TKORDERS_ITEMS_TABLE
+# when the module is imported.
+load_dotenv(ENV_PATH, override=True)
+
+# Allow tkorders_db.py to import baseline/db.py.
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+import tkorders_db as db
 
 # ---------------------- Config ----------------------
 CONFIG = {
