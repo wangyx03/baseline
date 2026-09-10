@@ -15,13 +15,14 @@ Useful CLI:
     python tiktokorders.py --refresh <order_id> --store TU
 
 Required .env keys:
-    TTS_APP_KEY=...
-    TTS_APP_SECRET=...
-
+    TTS_TU_APP_KEY=...
+    TTS_TU_APP_SECRET=...
     TTS_TU_ACCESS_TOKEN=...
     TTS_TU_REFRESH_TOKEN=...
     TTS_TU_SHOP_CIPHER=...
 
+    TTS_VB_APP_KEY=...
+    TTS_VB_APP_SECRET=...
     TTS_VB_ACCESS_TOKEN=...
     TTS_VB_REFRESH_TOKEN=...
     TTS_VB_SHOP_CIPHER=...
@@ -59,10 +60,8 @@ import tkorders_db as db
 
 
 # ---------------------------------------------------------
-# Shared app config
+# Per-store app config
 # ---------------------------------------------------------
-APP_KEY = os.environ.get("TTS_APP_KEY", "")
-APP_SECRET = os.environ.get("TTS_APP_SECRET", "")
 BASE_URL = "https://open-api.tiktokglobalshop.com"
 TOKEN_REFRESH_URL = "https://auth.tiktok-shops.com/api/v2/token/refresh"
 
@@ -73,19 +72,14 @@ INITIAL_LOOKBACK_SECONDS = int(
 
 def _shop_config(store_id: int, short_name: str) -> dict:
     prefix = f"TTS_{short_name}_"
-
-    # TU falls back to the old single-shop variable names so the migration
-    # does not immediately break an existing TU setup.
-    old_access = os.environ.get("TTS_ACCESS_TOKEN", "") if short_name == "TU" else ""
-    old_refresh = os.environ.get("TTS_REFRESH_TOKEN", "") if short_name == "TU" else ""
-    old_cipher = os.environ.get("TTS_SHOP_CIPHER", "") if short_name == "TU" else ""
-
     return {
         "store_id": store_id,
         "short_name": short_name,
-        "access_token": os.environ.get(prefix + "ACCESS_TOKEN", "") or old_access,
-        "refresh_token": os.environ.get(prefix + "REFRESH_TOKEN", "") or old_refresh,
-        "shop_cipher": os.environ.get(prefix + "SHOP_CIPHER", "") or old_cipher,
+        "app_key": os.environ.get(prefix + "APP_KEY", "").strip(),
+        "app_secret": os.environ.get(prefix + "APP_SECRET", "").strip(),
+        "access_token": os.environ.get(prefix + "ACCESS_TOKEN", "").strip(),
+        "refresh_token": os.environ.get(prefix + "REFRESH_TOKEN", "").strip(),
+        "shop_cipher": os.environ.get(prefix + "SHOP_CIPHER", "").strip(),
         "env_prefix": prefix,
     }
 
@@ -98,8 +92,8 @@ SHOPS = {
 
 def shop_is_configured(shop: dict) -> bool:
     return bool(
-        APP_KEY
-        and APP_SECRET
+        shop.get("app_key")
+        and shop.get("app_secret")
         and shop.get("access_token")
         and shop.get("shop_cipher")
     )
@@ -128,7 +122,7 @@ def selected_shops(args: list[str]) -> list[dict]:
 # ---------------------------------------------------------
 # Signing / API
 # ---------------------------------------------------------
-def sign_request(path: str, params: dict, body_str: str = "") -> str:
+def sign_request(shop: dict, path: str, params: dict, body_str: str = "") -> str:
     filtered = {
         k: v for k, v in params.items()
         if k not in ("sign", "access_token")
@@ -136,10 +130,11 @@ def sign_request(path: str, params: dict, body_str: str = "") -> str:
     param_str = "".join(
         f"{k}{v}" for k, v in sorted(filtered.items())
     )
-    base_str = f"{APP_SECRET}{path}{param_str}{body_str}{APP_SECRET}"
+    app_secret = shop["app_secret"]
+    base_str = f"{app_secret}{path}{param_str}{body_str}{app_secret}"
 
     return hmac.new(
-        APP_SECRET.encode("utf-8"),
+        app_secret.encode("utf-8"),
         base_str.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
@@ -147,7 +142,7 @@ def sign_request(path: str, params: dict, body_str: str = "") -> str:
 
 def build_common_params(shop: dict, extra: dict) -> dict:
     params = {
-        "app_key": APP_KEY,
+        "app_key": shop["app_key"],
         "timestamp": int(time.time()),
         "shop_cipher": shop["shop_cipher"],
     }
@@ -193,8 +188,8 @@ def refresh_access_token(shop: dict):
     print(f"[{shop['short_name']}] Access token expired — refreshing...")
 
     params = {
-        "app_key": APP_KEY,
-        "app_secret": APP_SECRET,
+        "app_key": shop["app_key"],
+        "app_secret": shop["app_secret"],
         "refresh_token": shop["refresh_token"],
         "grant_type": "refresh_token",
     }
@@ -239,7 +234,7 @@ def call_api(
     ) if body else ""
 
     all_params = build_common_params(shop, params)
-    all_params["sign"] = sign_request(path, all_params, body_str)
+    all_params["sign"] = sign_request(shop, path, all_params, body_str)
     all_params["access_token"] = shop["access_token"]
 
     url = f"{BASE_URL}{path}"
@@ -599,7 +594,7 @@ def main():
     for shop in shops:
         if not shop_is_configured(shop):
             print(
-                f"[{shop['short_name']}] Missing access_token or shop_cipher."
+                f"[{shop['short_name']}] Missing APP_KEY / APP_SECRET / ACCESS_TOKEN / SHOP_CIPHER."
             )
             return
 
