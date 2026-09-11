@@ -2372,6 +2372,16 @@ async function saveAvailability() {
                                     staffId
                                 ),
 
+                            week_start:
+                                dateToString(
+                                    weekStart
+                                ),
+
+                            preference:
+                                document.getElementById(
+                                    "preferenceDisplay"
+                                ).value,
+
                             availability:
                                 entries
                         })
