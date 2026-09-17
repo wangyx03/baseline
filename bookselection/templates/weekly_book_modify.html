@@ -11,6 +11,7 @@
     <h1>Weekly Book Modify</h1>
     <div class="header-actions">
       <button id="refreshBtn" class="btn btn-light">Refresh</button>
+      <button id="maxAllBtn" class="btn btn-light">Max All Planned</button>
       <button id="confirmBtn" class="btn btn-dark" disabled>Confirm</button>
     </div>
   </div>
@@ -308,6 +309,72 @@ function addBook(store,sku){
   setStatus(`${sku} staged for ${store}. Database is unchanged until Confirm.`,'success');
   render();
 }
+
+function maxAllPlanned(){
+  let changed=0;
+  const sharedDone=new Set();
+
+  for(const store of ['VB','TU']){
+    for(const row of snapshot[store]){
+      const sku=String(row.sku);
+      const k=key(store,sku);
+      if(removals.has(k)) continue;
+
+      const actual=actualForSku(sku,row.actual_stock);
+      const vbBase=snapshot.VB.find(r=>String(r.sku)===sku);
+      const tuBase=snapshot.TU.find(r=>String(r.sku)===sku);
+
+      if(vbBase && tuBase){
+        if(sharedDone.has(sku)) continue;
+        sharedDone.add(sku);
+
+        // Shared SKU: split the CURRENT AVAILABLE stock 50/50.
+        // Never reduce either store's existing Planned.
+        const vbCurrent=edits.has(key('VB',sku)) ? n(edits.get(key('VB',sku))) : n(vbBase.planned);
+        const tuCurrent=edits.has(key('TU',sku)) ? n(edits.get(key('TU',sku))) : n(tuBase.planned);
+        const vbUsed=n(vbBase.used);
+        const tuUsed=n(tuBase.used);
+
+        const currentRemaining=Math.max(0,vbCurrent-vbUsed)+Math.max(0,tuCurrent-tuUsed);
+        const extra=Math.max(0,actual-currentRemaining);
+        const vbExtra=Math.ceil(extra/2);
+        const tuExtra=Math.floor(extra/2);
+
+        const vbPlanned=vbCurrent+vbExtra;
+        const tuPlanned=tuCurrent+tuExtra;
+
+        if(vbPlanned!==n(vbBase.planned)){
+          edits.set(key('VB',sku),vbPlanned);
+          changed++;
+        }
+        if(tuPlanned!==n(tuBase.planned)){
+          edits.set(key('TU',sku),tuPlanned);
+          changed++;
+        }
+      }else{
+        // Non-shared SKU:
+        // "Max All" only increases Planned; it NEVER reduces an existing Planned.
+        const current=edits.has(k) ? n(edits.get(k)) : n(row.planned);
+        const target=actual+n(row.used);
+        const newPlanned=Math.max(current,target);
+
+        if(newPlanned===n(row.planned)){
+          edits.delete(k);
+        }else{
+          edits.set(k,newPlanned);
+          changed++;
+        }
+      }
+    }
+  }
+
+  setStatus(
+    `Max All staged ${changed} increase(s). Existing Planned is never reduced. Shared SKU remaining stock is split 50/50. Database is unchanged until Confirm.`,
+    'success'
+  );
+  render();
+}
+
 function buildChanges(){
   const out=[];
   edits.forEach((planned,k)=>{const [store,sku]=k.split('|');out.push({action:'MODIFY',store,sku,planned_qty:planned});});
@@ -371,6 +438,7 @@ $('minStock').addEventListener('change',async()=>{
   }catch(e){setStatus(e.message,'error');}
 });
 $('refreshBtn').onclick=refreshAll;
+$('maxAllBtn').onclick=maxAllPlanned;
 $('confirmBtn').onclick=confirmChanges;
 $('weekSelect').addEventListener('change',()=>{edits.clear();removals.clear();additions.clear();refreshAll();});
 (async()=>{try{await loadWeeks();await refreshAll();}catch(e){setStatus(e.message,'error')}})();
