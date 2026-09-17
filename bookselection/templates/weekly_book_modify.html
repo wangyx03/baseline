@@ -12,6 +12,7 @@
     <div class="header-actions">
       <button id="refreshBtn" class="btn btn-light">Refresh</button>
       <button id="maxAllBtn" class="btn btn-light">Max All Planned</button>
+      <button id="balanceBtn" class="btn btn-light">Balance Over Stock</button>
       <button id="confirmBtn" class="btn btn-dark" disabled>Confirm</button>
     </div>
   </div>
@@ -375,6 +376,96 @@ function maxAllPlanned(){
   render();
 }
 
+
+function balanceOverStock(){
+  let changed=0, balancedSku=0;
+
+  const allSkus=new Set([
+    ...snapshot.VB.map(r=>String(r.sku)),
+    ...snapshot.TU.map(r=>String(r.sku))
+  ]);
+
+  for(const sku of allSkus){
+    const vb=rowFor('VB',sku);
+    const tu=rowFor('TU',sku);
+    const actual=actualForSku(sku, vb?.actual_stock ?? tu?.actual_stock ?? 0);
+
+    const vbRemaining=vb ? Math.max(0,n(vb.planned)-n(vb.used)) : 0;
+    const tuRemaining=tu ? Math.max(0,n(tu.planned)-n(tu.used)) : 0;
+    const total=vbRemaining+tuRemaining;
+    const excess=total-actual;
+
+    if(excess<=0) continue;
+
+    // Non-shared SKU: reduce its Remaining directly to Actual Stock.
+    if(vb && !tu){
+      const base=snapshot.VB.find(r=>String(r.sku)===sku);
+      const newPlanned=n(vb.used)+actual;
+      const k=key('VB',sku);
+      if(base && newPlanned===n(base.planned)) edits.delete(k);
+      else edits.set(k,newPlanned);
+      if(newPlanned!==n(vb.planned)) changed++;
+      balancedSku++;
+      continue;
+    }
+
+    if(tu && !vb){
+      const base=snapshot.TU.find(r=>String(r.sku)===sku);
+      const newPlanned=n(tu.used)+actual;
+      const k=key('TU',sku);
+      if(base && newPlanned===n(base.planned)) edits.delete(k);
+      else edits.set(k,newPlanned);
+      if(newPlanned!==n(tu.planned)) changed++;
+      balancedSku++;
+      continue;
+    }
+
+    // Shared SKU: split the required reduction as evenly as possible.
+    if(vb && tu){
+      let vbReduce=Math.min(vbRemaining,Math.ceil(excess/2));
+      let tuReduce=Math.min(tuRemaining,Math.floor(excess/2));
+      let left=excess-vbReduce-tuReduce;
+
+      if(left>0){
+        const take=Math.min(vbRemaining-vbReduce,left);
+        vbReduce+=take;
+        left-=take;
+      }
+      if(left>0){
+        const take=Math.min(tuRemaining-tuReduce,left);
+        tuReduce+=take;
+        left-=take;
+      }
+
+      const newVB=Math.max(n(vb.used),n(vb.planned)-vbReduce);
+      const newTU=Math.max(n(tu.used),n(tu.planned)-tuReduce);
+      const vbBase=snapshot.VB.find(r=>String(r.sku)===sku);
+      const tuBase=snapshot.TU.find(r=>String(r.sku)===sku);
+
+      const vbKey=key('VB',sku);
+      const tuKey=key('TU',sku);
+
+      if(vbBase && newVB===n(vbBase.planned)) edits.delete(vbKey);
+      else edits.set(vbKey,newVB);
+
+      if(tuBase && newTU===n(tuBase.planned)) edits.delete(tuKey);
+      else edits.set(tuKey,newTU);
+
+      if(newVB!==n(vb.planned)) changed++;
+      if(newTU!==n(tu.planned)) changed++;
+      balancedSku++;
+    }
+  }
+
+  setStatus(
+    balancedSku
+      ? `Balanced ${balancedSku} over-stock SKU(s) with ${changed} Planned adjustment(s). Remaining Total now equals Actual Stock. Database is unchanged until Confirm.`
+      : 'No SKU is over stock. Nothing needs balancing.',
+    'success'
+  );
+  render();
+}
+
 function buildChanges(){
   const out=[];
   edits.forEach((planned,k)=>{const [store,sku]=k.split('|');out.push({action:'MODIFY',store,sku,planned_qty:planned});});
@@ -439,6 +530,7 @@ $('minStock').addEventListener('change',async()=>{
 });
 $('refreshBtn').onclick=refreshAll;
 $('maxAllBtn').onclick=maxAllPlanned;
+$('balanceBtn').onclick=balanceOverStock;
 $('confirmBtn').onclick=confirmChanges;
 $('weekSelect').addEventListener('change',()=>{edits.clear();removals.clear();additions.clear();refreshAll();});
 (async()=>{try{await loadWeeks();await refreshAll();}catch(e){setStatus(e.message,'error')}})();
