@@ -126,16 +126,7 @@ def get_selectable_live_sessions(
     limit = max(1, min(limit, 1000))
 
     filters = [
-        "ls.count_as_used = 1",
-        """
-        NOT EXISTS (
-            SELECT 1
-            FROM inventory_locked il
-            WHERE il.week_id = ls.week_id
-              AND il.store_id = ls.store_id
-              AND il.live_id = ls.live_id
-        )
-        """
+        "ls.count_as_used = 1"
     ]
     params = []
 
