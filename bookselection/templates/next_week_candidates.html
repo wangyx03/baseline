@@ -1386,11 +1386,16 @@ const candidateBatchSelect =
 
             liveList.innerHTML = `
                 <div class="empty">
-                    No LIVE IDs found.
+                    No LIVE IDs found.<br>
+                    Selected LIVE Sales will be treated as 0.
                 </div>
             `;
 
-            generateBtn.disabled = true;
+            selectedCount.textContent = "0";
+
+            // A period with no LIVE sales is valid.
+            // The backend already supports selected_lives = [].
+            generateBtn.disabled = false;
 
             return;
         }
