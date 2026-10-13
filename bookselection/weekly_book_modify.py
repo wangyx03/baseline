@@ -73,25 +73,36 @@ def _weekly_rows(cursor, week_id, store_id):
             GROUP BY sku
         ) stock_data ON stock_data.sku = wi.sku
         LEFT JOIN (
-            SELECT sku, SUM(quantity) AS locked_used
-            FROM inventory_locked
-            WHERE week_id = %s AND store_id = %s
-            GROUP BY sku
+            SELECT il.sku, SUM(il.quantity) AS locked_used
+            FROM inventory_locked il
+            INNER JOIN live_sessions ls
+                ON ls.week_id = il.week_id
+                AND ls.store_id = il.store_id
+                AND ls.live_id = il.live_id
+                AND ls.count_as_used = 1
+            WHERE il.week_id = %s AND il.store_id = %s
+            GROUP BY il.sku
         ) locked_data ON locked_data.sku = wi.sku
+
         LEFT JOIN (
             SELECT sr.sku, SUM(sr.quantity) AS draft_used
             FROM sku_recording sr
+            INNER JOIN live_sessions ls
+                ON ls.week_id = sr.week_id
+                AND ls.store_id = sr.store_id
+                AND ls.live_id = sr.live_id
+                AND ls.count_as_used = 1
             LEFT JOIN (
                 SELECT DISTINCT week_id, store_id, live_id
                 FROM inventory_locked
                 WHERE week_id = %s AND store_id = %s
             ) locked_live
-              ON locked_live.week_id = sr.week_id
-             AND locked_live.store_id = sr.store_id
-             AND locked_live.live_id = sr.live_id
+                ON locked_live.week_id = sr.week_id
+                AND locked_live.store_id = sr.store_id
+                AND locked_live.live_id = sr.live_id
             WHERE sr.week_id = %s
-              AND sr.store_id = %s
-              AND locked_live.live_id IS NULL
+            AND sr.store_id = %s
+            AND locked_live.live_id IS NULL
             GROUP BY sr.sku
         ) draft_data ON draft_data.sku = wi.sku
         WHERE wi.week_id = %s AND wi.store_id = %s
