@@ -586,15 +586,15 @@
 
                 <tr>
 
-                    <th>
+                    <th class="sortable" onclick="sortInventory('sku')">
                         SKU
                     </th>
 
-                    <th>
+                    <th class="sortable" onclick="sortInventory('title')">
                         Title
                     </th>
 
-                    <th>
+                    <th class="sortable" onclick="sortInventory('author')">
                         Author
                     </th>
 
@@ -1548,40 +1548,20 @@ function renderInventory() {
 
 
     if (sortColumn) {
-
-        rows.sort(
-            (a, b) => {
-
-                const valueA =
-                    Number(
-                        a[sortColumn]
-                        ||
-                        0
-                    );
-
-                const valueB =
-                    Number(
-                        b[sortColumn]
-                        ||
-                        0
-                    );
-
-                if (
-                    sortDirection === "asc"
-                ) {
-
-                    return (
-                        valueA -
-                        valueB
-                    );
-                }
-
-                return (
-                    valueB -
-                    valueA
+        const textColumns = ["sku", "title", "author"];
+        rows.sort((a, b) => {
+            let comparison;
+            if (textColumns.includes(sortColumn)) {
+                comparison = String(a[sortColumn] ?? "").localeCompare(
+                    String(b[sortColumn] ?? ""),
+                    undefined,
+                    { numeric: true, sensitivity: "base" }
                 );
+            } else {
+                comparison = Number(a[sortColumn] || 0) - Number(b[sortColumn] || 0);
             }
-        );
+            return sortDirection === "asc" ? comparison : -comparison;
+        });
     }
 
 

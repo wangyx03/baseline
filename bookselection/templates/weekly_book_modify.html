@@ -3,6 +3,7 @@
 
 {% block styles %}
 .page-container{max-width:1550px;margin:0 auto;padding:24px}.page-header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}.page-header h1{margin:0;font-size:30px}.header-actions{display:flex;gap:10px}.btn{border:0;border-radius:7px;padding:10px 18px;font-weight:700;cursor:pointer}.btn-dark{background:#111;color:#fff}.btn-light{background:#fff;border:1px solid #bbb;color:#111}.btn:disabled{opacity:.45;cursor:not-allowed}.panel{background:#fff;border:1px solid #ddd;border-radius:10px;padding:18px;margin-bottom:18px}.controls{display:flex;align-items:end;gap:18px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px}.field label{font-weight:700}.field select,.field input{height:42px;border:1px solid #bbb;border-radius:7px;padding:0 12px;font-size:15px;background:#fff}.field select{min-width:210px}.field input[type=number]{width:150px}.last-refresh{color:#666;font-size:13px;margin-left:auto}.summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.summary-card{border:1px solid #ddd;border-radius:10px;padding:18px}.summary-card h2{margin:0 0 14px}.summary-row{display:flex;justify-content:space-between;padding:4px 0;font-size:16px}.summary-row strong{font-weight:800}.tabs{display:flex;gap:8px;margin-bottom:14px}.tab-btn{border:1px solid #bbb;background:#fff;border-radius:7px;padding:9px 20px;font-weight:700;cursor:pointer}.tab-btn.active{background:#111;color:#fff;border-color:#111}.toolbar{display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.search{min-width:330px;height:40px;border:1px solid #bbb;border-radius:7px;padding:0 12px}.table-wrap{overflow:auto;border:1px solid #ddd;border-radius:8px}table{width:100%;border-collapse:collapse;min-width:1250px}th,td{padding:10px 12px;border-bottom:1px solid #eee;text-align:left;vertical-align:middle}th{background:#f6f7f8;position:sticky;top:0;z-index:1}.qty-input{width:90px;padding:7px;border:1px solid #bbb;border-radius:5px}.action-btn{border:1px solid #bbb;background:#111;color:#fff;border-radius:5px;padding:6px 10px;cursor:pointer;margin:2px 5px 2px 0;font-weight:700}.action-btn:disabled{background:#999;border-color:#999;cursor:not-allowed;opacity:.75}.danger{background:#fff;color:#a40000}.pending-row{background:#fff9df}.removed-row{text-decoration:line-through;opacity:.5}.stock-over-row{background:#ffe5e5!important;color:#a40000}.stock-shortage-row{background:#ffe5e5;color:#a40000}.stock-shortage-row td{background:#ffe5e5}.status{margin-top:10px;font-weight:600}.status.error{color:#a40000}.status.success{color:#137333}.hint{color:#666;font-size:13px}.empty{text-align:center;color:#777;padding:28px}.badge{display:inline-block;border:1px solid #ccc;border-radius:999px;padding:2px 8px;font-size:12px}.shared-badge{display:inline-block;background:#111;color:#fff;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700}.pending-list{margin:0;padding-left:22px}.pending-list li{margin:7px 0}.num-strong{font-weight:800}@media(max-width:850px){.summary-grid{grid-template-columns:1fr}.last-refresh{width:100%;margin-left:0}}
+.sort-head{cursor:pointer;user-select:none;white-space:nowrap}.sort-head:hover{background:#e8eaed}
 {% endblock %}
 
 {% block content %}
@@ -55,6 +56,27 @@
 <script>
 const $=id=>document.getElementById(id);
 let currentTab='VB', snapshot={VB:[],TU:[]}, wholeInventory=[], edits=new Map(), removals=new Set(), additions=new Map();
+const sortStates = {VB:{key:null,dir:1},TU:{key:null,dir:1},'Whole Inventory':{key:null,dir:1}};
+function setTableSort(key){
+  const state=sortStates[currentTab];
+  if(state.key===key) state.dir*=-1;
+  else {state.key=key;state.dir=1;}
+  render();
+}
+function sortableHeader(label,key){
+  const state=sortStates[currentTab];
+  return `<th class="sort-head" tabindex="0" role="button" aria-label="Sort by ${label}" onclick="setTableSort('${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setTableSort('${key}');}">${label}</th>`;
+}
+function sortedRows(rows, getValue){
+  const state=sortStates[currentTab];
+  if(!state.key) return rows;
+  return rows.map((row,index)=>({row,index})).sort((a,b)=>{
+    const av=getValue(a.row,state.key), bv=getValue(b.row,state.key);
+    const numeric=typeof av==='number' && typeof bv==='number';
+    const result=numeric ? av-bv : String(av??'').localeCompare(String(bv??''),undefined,{numeric:true,sensitivity:'base'});
+    return result*state.dir || a.index-b.index;
+  }).map(item=>item.row);
+}
 const key=(store,sku)=>store+'|'+sku;
 const n=v=>Number(v||0);
 function minStockValue(){
@@ -152,6 +174,18 @@ function wholeSummary(){
     <div class="summary-row"><span>Not Used</span><strong>${notUsed}</strong></div>
     <div class="summary-row"><span>Available Qty</span><strong>${available}</strong></div>`;
 }
+function storeSortValue(r,k){
+  const planned=edits.has(key(currentTab,r.sku))?n(edits.get(key(currentTab,r.sku))):n(r.planned);
+  const used=n(r.used);
+  const shared=isShared(r.sku);
+  const vals={sku:String(r.sku),title:r.title,author:r.author,actual_stock:n(r.actual_stock),planned,used,remaining:planned-used,remaining_total:totalRemaining(r.sku),shared:shared?1:0,type:n(r.is_resident)?'Resident':'Regular'};
+  return vals[k];
+}
+function wholeSortValue(r,k){
+  const vb=rowFor('VB',r.sku),tu=rowFor('TU',r.sku);
+  const vals={sku:String(r.sku),title:r.title,author:r.author,spice_type:r.spice_type,actual_stock:n(r.actual_stock),available:availableQty(r.sku,r.actual_stock),vb_planned:vb?n(vb.planned):-1,tu_planned:tu?n(tu.planned):-1,remaining_total:totalRemaining(r.sku)};
+  return vals[k];
+}
 function renderSummary(){summary('VB');summary('TU');wholeSummary();}
 function matches(r,q){q=q.toLowerCase();return !q||String(r.sku).toLowerCase().includes(q)||String(r.title||'').toLowerCase().includes(q)||String(r.author||'').toLowerCase().includes(q);}
 
@@ -162,10 +196,10 @@ function render(){
 
   if(currentTab==='Whole Inventory'){
     $('tabHint').textContent="Whole Inventory = Snapshot SKUs above Min Stock Filter + every SKU already in this week's VB/TU Weekly Inventory. Actual Stock always comes from Snapshot.";
-    $('thead').innerHTML='<tr><th>SKU</th><th>Book Title</th><th>Author</th><th>Spice Type</th><th>Actual Stock</th><th>Available Qty</th><th>VB Planned</th><th>TU Planned</th><th>Remaining Total</th><th>Action</th></tr>';
+    $('thead').innerHTML='<tr>'+[['SKU','sku'],['Book Title','title'],['Author','author'],['Spice Type','spice_type'],['Actual Stock','actual_stock'],['Available Qty','available'],['VB Planned','vb_planned'],['TU Planned','tu_planned'],['Remaining Total','remaining_total']].map(([label,k])=>sortableHeader(label,k)).join('')+'<th>Action</th></tr>';
     const merged=new Map(wholeInventory.map(r=>[String(r.sku),r]));
     additions.forEach(a=>{if(!merged.has(String(a.sku)))merged.set(String(a.sku),a);});
-    const rows=Array.from(merged.values()).filter(r=>matches(r,q));
+    const rows=sortedRows(Array.from(merged.values()).filter(r=>matches(r,q)),wholeSortValue);
     $('tbody').innerHTML=rows.length?rows.map(r=>{
       const vbRow=rowFor('VB',r.sku), tuRow=rowFor('TU',r.sku);
       const inVB=!!vbRow, inTU=!!tuRow, remTotal=totalRemaining(r.sku), available=availableQty(r.sku,r.actual_stock), shortage=(n(r.actual_stock)-remTotal)<minStockValue();
@@ -193,9 +227,9 @@ function render(){
     }).join(''):'<tr><td colspan="10" class="empty">No books match this filter.</td></tr>';
   } else {
     $('tabHint').textContent='Actual / Used are fixed at the last Refresh. Planned increases must keep Actual Stock - Remaining Total >= Min Stock Filter.';
-    $('thead').innerHTML='<tr><th>SKU</th><th>Title</th><th>Author</th><th>Actual Stock</th><th>Planned</th><th>Used</th><th>Remaining</th><th>Remaining Total</th><th>Shared</th><th>Type</th><th>Action</th></tr>';
+    $('thead').innerHTML='<tr>'+[['SKU','sku'],['Title','title'],['Author','author'],['Actual Stock','actual_stock'],['Planned','planned'],['Used','used'],['Remaining','remaining'],['Remaining Total','remaining_total'],['Shared','shared'],['Type','type']].map(([label,k])=>sortableHeader(label,k)).join('')+'<th>Action</th></tr>';
     const base=[...snapshot[currentTab], ...Array.from(additions.values()).filter(a=>a.store===currentTab)];
-    const rows=base.filter(r=>matches(r,q));
+    const rows=sortedRows(base.filter(r=>matches(r,q)),storeSortValue);
     $('tbody').innerHTML=rows.length?rows.map(r=>{
       const k=key(currentTab,r.sku), removed=removals.has(k), planned=edits.has(k)?edits.get(k):n(r.planned), used=n(r.used), rem=planned-used, added=additions.has(k), shared=isShared(r.sku), totalRem=totalRemaining(r.sku), remTotal=shared?totalRem:'—', stockOver=actualForSku(r.sku,r.actual_stock)-totalRem<minStockValue();
       return `<tr class="${removed?'removed-row':(stockOver?'stock-over-row':(edits.has(k)||added?'pending-row':''))}">

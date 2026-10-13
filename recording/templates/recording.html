@@ -245,6 +245,10 @@
         }
 
 
+        .recording-search-row { margin: 0 0 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        #recordingSearchInput { width: 380px; max-width: 100%; padding: 10px 12px; border: 1px solid #aaa; border-radius: 5px; font-size: 15px; }
+        #recordingSearchStatus { color: #666; font-size: 13px; }
+
         .recording-table-wrapper {
             width: 100%;
             max-height: calc(100vh - 300px);
@@ -884,6 +888,11 @@
         </div>
 
 
+        <div class="recording-search-row">
+            <input id="recordingSearchInput" type="search" placeholder="Search SKU or Product Name" autocomplete="off" aria-label="Search current LIVE recordings">
+            <span id="recordingSearchStatus" aria-live="polite"></span>
+        </div>
+
         <div class="recording-table-wrapper">
 
         <table>
@@ -1063,6 +1072,70 @@ let insertBeforeSeq = null;
 let recordingRefreshTimer = null;
 
 let lastRecordingVersion = null;
+
+// Search across every page of the current LIVE, without changing the backend.
+let recordingSearchTimer = null;
+let recordingSearchRequest = 0;
+let recordingSearchRows = null;
+const recordingSearchInput = document.getElementById("recordingSearchInput");
+const recordingSearchStatus = document.getElementById("recordingSearchStatus");
+const recordingPagination = document.querySelector(".pagination");
+
+recordingSearchInput.addEventListener("input", () => {
+    clearTimeout(recordingSearchTimer);
+    const request = ++recordingSearchRequest;
+    const query = recordingSearchInput.value.trim();
+    if (!query) {
+        recordingSearchRows = null;
+        recordingSearchStatus.textContent = "";
+        recordingPagination.style.display = "";
+        if (currentWeekId && currentLiveId) loadRecordings(currentPage);
+        return;
+    }
+    recordingSearchTimer = setTimeout(() => searchAllRecordings(request), 300);
+});
+
+async function searchAllRecordings(request = ++recordingSearchRequest) {
+    const query = recordingSearchInput.value.trim().toLocaleLowerCase();
+    if (!query || !currentWeekId || !currentLiveId) return;
+    const week = currentWeekId, live = currentLiveId;
+    const base = "/api/recordings?week_id=" + encodeURIComponent(week)
+        + "&store_id=" + encodeURIComponent(STORE_ID)
+        + "&live_id=" + encodeURIComponent(live) + "&page=";
+    recordingSearchStatus.textContent = "Searching all pages...";
+    try {
+        const firstResponse = await fetch(base + "1", {cache: "no-store"});
+        const first = await firstResponse.json();
+        if (!firstResponse.ok || !first.success) throw new Error(first.message || "Search failed");
+        const pages = Math.max(1, Number(first.pagination.total_pages) || 1);
+        const results = [first.items || []];
+        // Fetch a few pages concurrently to avoid overwhelming the server.
+        for (let start = 2; start <= pages; start += 4) {
+            const numbers = Array.from({length: Math.min(4, pages - start + 1)}, (_, i) => start + i);
+            const batch = await Promise.all(numbers.map(async n => {
+                const response = await fetch(base + n, {cache: "no-store"});
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.message || "Search failed");
+                return data.items || [];
+            }));
+            if (request !== recordingSearchRequest || week !== currentWeekId || live !== currentLiveId) return;
+            results.push(...batch);
+        }
+        if (request !== recordingSearchRequest || week !== currentWeekId || live !== currentLiveId) return;
+        recordingSearchRows = results.flat().filter(row =>
+            String(row.sku || "").toLocaleLowerCase().includes(query) ||
+            String(row.book_title || "").toLocaleLowerCase().includes(query)
+        );
+        recordingPagination.style.display = "none";
+        renderRecordings(recordingSearchRows);
+        recordingSearchStatus.textContent = recordingSearchRows.length + " match(es)";
+    } catch (error) {
+        if (request !== recordingSearchRequest) return;
+        console.error(error);
+        recordingSearchStatus.textContent = "Search failed. Please try again.";
+    }
+}
+
 
 let recordingVersionCheckRunning = false;
 
@@ -1548,6 +1621,12 @@ async function startLive() {
     if (currentLiveId) {
 
         stopRecordingAutoRefresh();
+        clearTimeout(recordingSearchTimer);
+        ++recordingSearchRequest;
+        recordingSearchInput.value = "";
+        recordingSearchStatus.textContent = "";
+        recordingPagination.style.display = "";
+        recordingSearchRows = null;
 
         clearRecordingSession();
 
@@ -3331,9 +3410,12 @@ async function loadRecordings(
         saveRecordingSession();
 
 
-        renderRecordings(
-            data.items
-        );
+        if (recordingSearchInput.value.trim()) {
+            clearTimeout(recordingSearchTimer);
+            recordingSearchTimer = setTimeout(() => searchAllRecordings(), 100);
+        } else {
+            renderRecordings(data.items);
+        }
 
 
         updatePagination(
