@@ -412,12 +412,17 @@ def get_weekly_inventory():
 
                 FROM sku_recording sr
 
+                INNER JOIN live_sessions ls
+                    ON ls.week_id = sr.week_id
+                    AND ls.store_id = sr.store_id
+                    AND ls.live_id = sr.live_id
+                    AND ls.count_as_used = 1
+
                 LEFT JOIN (
                     SELECT DISTINCT
                         week_id,
                         store_id,
                         live_id
-
                     FROM inventory_locked
 
                     WHERE week_id = %s
