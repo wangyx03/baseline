@@ -575,8 +575,60 @@ def manual_refresh(
 # ---------------------------------------------------------
 # Main
 # ---------------------------------------------------------
+def webhook_order_id(event):
+    """Only recognized order events trigger detail fetches."""
+    event_type = str(event.get('type') or event.get('event_type') or '').upper()
+    if event_type not in {'ORDER_STATUS_CHANGE', 'ORDER_CREATE', 'ORDER_CREATED'}:
+        return None
+    data = event.get('data') or {}
+    if not isinstance(data, dict):
+        return None
+    order_id = data.get('order_id')
+    return str(order_id) if order_id else None
+
+
+def run_webhook_worker():
+    """Process durable inbox without searching for new orders on a schedule."""
+    conn = db.get_connection()
+    db.init_schema(conn)
+    db.init_webhook_schema(conn)
+    print('Webhook worker started (Ctrl+C to stop)', flush=True)
+    try:
+        while True:
+            row = db.claim_webhook(conn)
+            if not row:
+                time.sleep(2)
+                continue
+            try:
+                event = row['payload']
+                if isinstance(event, str):
+                    event = json.loads(event)
+                order_id = webhook_order_id(event)
+                if not order_id:
+                    db.finish_webhook(conn, row['id'], 'IGNORED')
+                    continue
+                shop = SHOPS[row['store_id']]
+                details = get_order_detail(shop, [order_id])
+                if not details:
+                    raise RuntimeError(f'Order not returned yet: {order_id}')
+                store_orders(conn, shop, details, is_refresh=False)
+                conn.commit()
+                db.finish_webhook(conn, row['id'], 'DONE')
+                print(f"[{shop['short_name']}] Webhook synced {order_id}", flush=True)
+            except Exception as exc:
+                conn.rollback()
+                delay = min(3600, 30 * 2 ** min(row['attempts'], 7))
+                db.finish_webhook(conn, row['id'], 'FAILED', exc, delay)
+                print(f"Webhook {row['id']} failed: {exc}", flush=True)
+    finally:
+        conn.close()
+
+
 def main():
     args = sys.argv[1:]
+    if "--webhook-worker" in args:
+        run_webhook_worker()
+        return
 
     try:
         shops = selected_shops(args)

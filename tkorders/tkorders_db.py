@@ -1030,3 +1030,80 @@ def get_order_summary(
         return cur.fetchone()
     finally:
         cur.close()
+
+# Durable webhook inbox. An event is ACKed only after committing to MySQL.
+CREATE_WEBHOOK_INBOX = """
+CREATE TABLE IF NOT EXISTS tkorders_webhook_inbox (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    store_id SMALLINT UNSIGNED NOT NULL,
+    notification_id VARCHAR(128) DEFAULT NULL,
+    payload JSON NOT NULL,
+    status ENUM('PENDING','PROCESSING','DONE','IGNORED','FAILED') NOT NULL DEFAULT 'PENDING',
+    attempts INT UNSIGNED NOT NULL DEFAULT 0,
+    next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    locked_at DATETIME DEFAULT NULL,
+    error_message VARCHAR(500) DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_notification (store_id, notification_id),
+    KEY idx_ready (status, next_attempt_at),
+    CONSTRAINT fk_tkorders_webhook_store FOREIGN KEY (store_id) REFERENCES stores(store_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+def init_webhook_schema(conn):
+    cur = conn.cursor()
+    try:
+        cur.execute(CREATE_WEBHOOK_INBOX)
+        conn.commit()
+    finally:
+        cur.close()
+
+
+def enqueue_webhook(conn, store_id, payload):
+    import json
+    notification_id = payload.get('tts_notification_id') or None
+    cur = conn.cursor()
+    try:
+        cur.execute('''INSERT INTO tkorders_webhook_inbox
+            (store_id, notification_id, payload) VALUES (%s,%s,%s)
+            ON DUPLICATE KEY UPDATE id=id''',
+            (store_id, str(notification_id) if notification_id else None,
+             json.dumps(payload, ensure_ascii=False)))
+    finally:
+        cur.close()
+
+
+def claim_webhook(conn):
+    """Claim one event with MySQL 8 SKIP LOCKED for concurrent workers."""
+    cur = conn.cursor(dictionary=True)
+    try:
+        conn.start_transaction()
+        cur.execute('''SELECT id, store_id, payload, attempts FROM tkorders_webhook_inbox
+            WHERE (status IN ('PENDING','FAILED') AND next_attempt_at <= UTC_TIMESTAMP())
+               OR (status='PROCESSING' AND locked_at < UTC_TIMESTAMP() - INTERVAL 10 MINUTE)
+            ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED''')
+        row = cur.fetchone()
+        if row:
+            cur.execute('''UPDATE tkorders_webhook_inbox
+                SET status='PROCESSING', locked_at=UTC_TIMESTAMP(), attempts=attempts+1
+                WHERE id=%s''', (row['id'],))
+        conn.commit()
+        return row
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+
+
+def finish_webhook(conn, inbox_id, status, error=None, retry_seconds=0):
+    cur = conn.cursor()
+    try:
+        cur.execute('''UPDATE tkorders_webhook_inbox SET status=%s, error_message=%s,
+            locked_at=NULL, next_attempt_at=UTC_TIMESTAMP() + INTERVAL %s SECOND
+            WHERE id=%s''', (status, (str(error)[:500] if error else None), retry_seconds, inbox_id))
+        conn.commit()
+    finally:
+        cur.close()
