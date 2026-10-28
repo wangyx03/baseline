@@ -1266,66 +1266,38 @@ input.edit-qty {
     }
 
 
-    function populateTargetWeeks(
-        baseWeekId
-    ) {
-        const parsed =
-            parseISOWeek(
-                baseWeekId
-            );
-
+    function populateTargetWeeks() {
+        // Use Eastern Time, consistent with the business calendar.
+        const easternParts = new Intl.DateTimeFormat("en-US", {
+            timeZone: "America/New_York",
+            year: "numeric", month: "2-digit", day: "2-digit"
+        }).formatToParts(new Date());
+        const getPart = type => Number(easternParts.find(p => p.type === type).value);
+        const today = new Date(Date.UTC(
+            getPart("year"), getPart("month") - 1, getPart("day")
+        ));
+        const currentWeekId = isoWeekFromDate(today);
+        const parsed = parseISOWeek(currentWeekId);
+        const monday = mondayOfISOWeek(parsed.year, parsed.week);
+        const previousSelection = targetWeek.value;
         targetWeek.innerHTML = "";
 
-        if (!parsed) {
-            targetWeek.innerHTML =
-                '<option value="">Select week</option>';
-            return;
+        // Current ISO week and four subsequent weeks, inclusive.
+        for (let offset = 0; offset < 5; offset++) {
+            const date = new Date(monday);
+            date.setUTCDate(date.getUTCDate() + offset * 7);
+            const weekId = isoWeekFromDate(date);
+            const option = document.createElement("option");
+            option.value = weekId;
+            option.textContent = weekId;
+            targetWeek.appendChild(option);
         }
 
-        const baseMonday =
-            mondayOfISOWeek(
-                parsed.year,
-                parsed.week
-            );
-
-        // Allow the user to choose the next 16 weeks.
-        for (
-            let offset = 1;
-            offset <= 16;
-            offset++
-        ) {
-            const date =
-                new Date(
-                    baseMonday
-                );
-
-            date.setUTCDate(
-                date.getUTCDate()
-                + offset * 7
-            );
-
-            const weekId =
-                isoWeekFromDate(
-                    date
-                );
-
-            const option =
-                document.createElement(
-                    "option"
-                );
-
-            option.value =
-                weekId;
-
-            option.textContent =
-                weekId;
-
-            targetWeek.appendChild(
-                option
-            );
-        }
+        // Preserve a user-selected week only while it remains eligible.
+        targetWeek.value = Array.from(targetWeek.options).some(
+            option => option.value === previousSelection
+        ) ? previousSelection : currentWeekId;
     }
-
 
     async function loadBatches() {
 
@@ -1397,9 +1369,7 @@ input.edit-qty {
         batchSelect.value =
             String(batches[0].batch_id);
 
-        populateTargetWeeks(
-            batches[0].week_id
-        );
+        populateTargetWeeks();
 
         generateBtn.disabled = false;
     }
@@ -3503,11 +3473,7 @@ input.edit-qty {
                     )
                 ];
 
-            populateTargetWeeks(
-                item
-                ? item.week_id
-                : ""
-            );
+            populateTargetWeeks();
 
             try {
                 await loadCandidatePool();

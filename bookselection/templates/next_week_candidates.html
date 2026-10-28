@@ -436,7 +436,7 @@ Next Week Candidate List
 
             <div class="field">
                 <label for="currentWeek">
-                    Current Week
+                    Target Week
                 </label>
 
                 <select
@@ -1186,25 +1186,12 @@ const candidateBatchSelect =
         if (selectBatchId) {
             candidateBatchSelect.value =
                 String(selectBatchId);
-        } else if (
-            data.items &&
-            data.items.length > 0
-        ) {
-
-            const latestBatchId =
-                data.items[0].batch_id;
-
-            candidateBatchSelect.value =
-                String(latestBatchId);
-
-            await loadSavedBatch(
-                latestBatchId
-            );
-
         } else {
 
-            candidateBatchSelect.value =
-                "new";
+            // On initial page load, start a new candidate list.
+            // Do not overwrite the newest Target Week with a saved batch week.
+            candidateBatchSelect.value = "new";
+            resetNewCandidateMode();
         }
     }
 
@@ -1236,6 +1223,7 @@ const candidateBatchSelect =
         const batch =
             data.batch || {};
 
+        ensureTargetWeekOption(batch.week_id);
         currentWeekInput.value =
             batch.week_id || "";
 
@@ -1269,6 +1257,14 @@ const candidateBatchSelect =
 
 
     function resetNewCandidateMode() {
+
+        // Remove historical-only options and restore a valid target week.
+        const previouslySelected = currentWeekInput.value;
+        const weeks = allowedTargetWeeks();
+        currentWeekInput.replaceChildren();
+        weeks.forEach(week => currentWeekInput.add(new Option(week, week)));
+        currentWeekInput.value = weeks.includes(previouslySelected)
+            ? previouslySelected : weeks[0];
 
         setEditorReadOnly(false);
 
@@ -1469,138 +1465,53 @@ const candidateBatchSelect =
         updateSelectedCount();
     }
 
-    async function loadWeekOptions() {
+    // Target Week is independent of Weekly Inventory existence.
+    function isoWeekId(date) {
+        const d = new Date(Date.UTC(
+            date.getFullYear(), date.getMonth(), date.getDate()
+        ));
+        const day = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - day);
+        const year = d.getUTCFullYear();
+        const yearStart = new Date(Date.UTC(year, 0, 1));
+        const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        return `${year}-W${String(week).padStart(2, "0")}`;
+    }
 
-        try {
+    function allowedTargetWeeks() {
+        const now = new Date();
+        const weeks = [];
+        // Current ISO week + four following weeks (five total).
+        for (let offset = 0; offset < 5; offset++) {
+            const date = new Date(now);
+            date.setHours(12, 0, 0, 0);
+            date.setDate(date.getDate() + offset * 7);
+            weeks.push(isoWeekId(date));
+        }
+        return weeks;
+    }
 
-            const response =
-                await fetch(
-                    "/api/weekly-weeks?store_id=1"
-                );
-
-            const data =
-                await response.json();
-
-            if (!response.ok) {
-                throw new Error(
-                    data.error
-                    ||
-                    "Failed to load weeks."
-                );
-            }
-
-            const rawWeeks =
-                Array.isArray(data)
-                ? data
-                : (
-                    data.items
-                    ||
-                    data.weeks
-                    ||
-                    []
-                );
-
-            const weeks =
-                rawWeeks
-                    .map(
-                        item => {
-
-                            if (
-                                typeof item
-                                ===
-                                "string"
-                            ) {
-                                return item;
-                            }
-
-                            return (
-                                item.week_id
-                                ||
-                                item.week
-                                ||
-                                ""
-                            );
-                        }
-                    )
-                    .filter(Boolean);
-
-            currentWeekInput.innerHTML =
-                "";
-
-            if (!weeks.length) {
-
-                const option =
-                    document.createElement(
-                        "option"
-                    );
-
-                option.value = "";
-                option.textContent =
-                    "No weeks available";
-
-                currentWeekInput.appendChild(
-                    option
-                );
-
-                return;
-            }
-
-            weeks.forEach(
-                weekId => {
-
-                    const option =
-                        document.createElement(
-                            "option"
-                        );
-
-                    option.value =
-                        weekId;
-
-                    option.textContent =
-                        weekId;
-
-                    currentWeekInput.appendChild(
-                        option
-                    );
-                }
-            );
-
-            // The API is expected to return newest first.
-            // Select the first/latest available week.
-            currentWeekInput.value =
-                weeks[0];
-
-        } catch (error) {
-
-            console.error(
-                "Failed to load week options:",
-                error
-            );
-
-            currentWeekInput.innerHTML =
-                "";
-
-            const option =
-                document.createElement(
-                    "option"
-                );
-
-            option.value = "";
-            option.textContent =
-                "Failed to load weeks";
-
-            currentWeekInput.appendChild(
-                option
-            );
+    function ensureTargetWeekOption(weekId) {
+        // Historical batches can be viewed, but expired weeks cannot
+        // be chosen for a new candidate list.
+        if (!weekId) return;
+        if (![...currentWeekInput.options].some(o => o.value === weekId)) {
+            const option = new Option(`${weekId} (Historical)`, weekId);
+            option.disabled = true;
+            currentWeekInput.add(option);
         }
     }
 
+    async function loadWeekOptions() {
+        const weeks = allowedTargetWeeks();
+        currentWeekInput.replaceChildren();
+        weeks.forEach(week => currentWeekInput.add(new Option(week, week)));
+        currentWeekInput.value = weeks[0];
+    }
 
     async function loadLives() {
 
-        const weekId =
-            currentWeekInput.value.trim();
-
+        // LIVE selection is independent of Target Week.
         liveStatus.className =
             "status";
 
@@ -1613,13 +1524,6 @@ const candidateBatchSelect =
 
             const params =
                 new URLSearchParams();
-
-            if (weekId) {
-                params.set(
-                    "week_id",
-                    weekId
-                );
-            }
 
             if (liveStartDateValue) {
                 params.set(
@@ -1796,13 +1700,19 @@ const candidateBatchSelect =
         const currentWeekId =
             currentWeekInput.value.trim();
 
+        if (!allowedTargetWeeks().includes(currentWeekId)) {
+            generateStatus.className = "status error";
+            generateStatus.textContent = "Target Week must be within the current five-week window.";
+            return;
+        }
+
         if (!currentWeekId) {
 
             generateStatus.className =
                 "status error";
 
             generateStatus.textContent =
-                "Current Week is required.";
+                "Target Week is required.";
 
             return;
         }
