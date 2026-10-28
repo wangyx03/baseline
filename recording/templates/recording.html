@@ -1481,129 +1481,61 @@ function clearRecordingSession() {
 // Load Weeks
 // =========================================================
 
+// Use New York time and ISO-8601 week numbering (Monday to Sunday).
+function getCurrentIsoWeek() {
+    const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(new Date());
+    const get = type => Number(parts.find(p => p.type === type).value);
+    const date = new Date(Date.UTC(get("year"), get("month") - 1, get("day")));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+    const year = date.getUTCFullYear();
+    const jan1 = new Date(Date.UTC(year, 0, 1));
+    const week = Math.ceil((((date - jan1) / 86400000) + 1) / 7);
+    return { year, week };
+}
+
+function formatCurrentWeek(existingWeeks) {
+    const { year, week } = getCurrentIsoWeek();
+    const padded = String(week).padStart(2, "0");
+    const sample = existingWeeks.find(w => /^\d{4}[-_]?W\d{1,2}$/i.test(w));
+    if (sample) {
+        const separator = sample.match(/^\d{4}([-_]?)W/i)[1];
+        const width = sample.match(/W(\d+)$/i)[1].length;
+        return `${year}${separator}W${width === 1 ? week : padded}`;
+    }
+    // Default when no historical week is available; verify against database convention.
+    return `${year}W${padded}`;
+}
+
 async function loadWeeks() {
-
-
+    let weeks = [];
     try {
-
-
-        const response =
-            await fetch(
-
-                "/api/weekly-weeks"
-
-                + "?store_id="
-
-                + encodeURIComponent(
-                    STORE_ID
-                )
-
-            );
-
-
-        const data =
-            await response.json();
-
-
-        weekSelect.innerHTML =
-            "";
-
-
-        if (
-            !response.ok
-            ||
-            !data.success
-        ) {
-
-
-            showMessage(
-                data.message
-                ||
-                "Could not load weeks.",
-                "error"
-            );
-
-
-            return;
-
-        }
-
-
-        if (
-            !data.weeks
-            ||
-            data.weeks.length === 0
-        ) {
-
-
-            const option =
-                document.createElement(
-                    "option"
-                );
-
-
-            option.value =
-                "";
-
-
-            option.textContent =
-                "No weekly inventory";
-
-
-            weekSelect.appendChild(
-                option
-            );
-
-
-            return;
-
-        }
-
-
-        for (
-            const week
-            of data.weeks
-        ) {
-
-
-            const option =
-                document.createElement(
-                    "option"
-                );
-
-
-            option.value =
-                week;
-
-
-            option.textContent =
-                week;
-
-
-            weekSelect.appendChild(
-                option
-            );
-
-        }
-
-
+        const response = await fetch(
+            "/api/weekly-weeks?store_id=" + encodeURIComponent(STORE_ID),
+            { cache: "no-store" }
+        );
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.message || "Could not load weeks.");
+        weeks = Array.isArray(data.weeks) ? data.weeks.map(String) : [];
+    } catch (error) {
+        console.error(error);
+        showMessage("Could not load historical weeks; current week is still available.", "error");
     }
 
-    catch (error) {
-
-
-        console.error(
-            error
-        );
-
-
-        showMessage(
-            "Could not load weeks.",
-            "error"
-        );
-
+    const current = formatCurrentWeek(weeks);
+    const savedWeek = sessionStorage.getItem(RECORDING_WEEK_KEY);
+    // Keep a previously started session available for restoration even without inventory.
+    const allWeeks = [...new Set([current, ...weeks, ...(savedWeek ? [savedWeek] : [])])];
+    allWeeks.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    weekSelect.innerHTML = "";
+    for (const week of allWeeks) {
+        const option = document.createElement("option");
+        option.value = week;
+        option.textContent = week === current ? `${week} (Current)` : week;
+        weekSelect.appendChild(option);
     }
-
+    weekSelect.value = current;
 }
 
 
@@ -1656,6 +1588,7 @@ async function startLive() {
 
         weekSelect.disabled =
             false;
+        weekSelect.value = formatCurrentWeek(Array.from(weekSelect.options, o => o.value));
 
 
         liveInput.disabled =
@@ -3533,10 +3466,9 @@ function renderRecordings(
 
             <td>
 
-                ${escapeHtml(
-                    row.remaining
-                    || ""
-                )}
+                ${row.remaining === null || row.remaining === undefined
+                    ? "Not in Weekly Inventory"
+                    : escapeHtml(String(row.remaining))}
 
             </td>
 
@@ -4300,8 +4232,10 @@ function showBookInfo(
     } else {
 
 
-        weeklyStatus.style.display =
-            "none";
+        weeklyPlanned.textContent = "—";
+        weeklyUsed.textContent = "—";
+        weeklyRemaining.textContent = "Not in Weekly Inventory";
+        weeklyStatus.style.display = "block";
 
     }
 

@@ -657,31 +657,7 @@ def record():
 
     try:
 
-        cursor.execute(
-            """
-            SELECT 1
-
-            FROM weekly_inventory
-
-            WHERE week_id = %s
-              AND store_id = %s
-
-            LIMIT 1
-            """,
-            (
-                week_id,
-                store_id
-            )
-        )
-
-        if cursor.fetchone() is None:
-
-            return jsonify({
-                "success": False,
-                "message":
-                    "Weekly inventory not found "
-                    "for this store and week"
-            }), 400
+        # Recording is allowed even when no weekly inventory plan exists.
 
 
         cursor.execute(
