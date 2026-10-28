@@ -543,6 +543,18 @@
             }
         }
 
+
+        /* Week selector: capped to ten visible rows, with a scrollbar. */
+        .week-picker { position: relative; width: 100%; }
+        #weekId { display: none; }
+        #weekPickerButton { width: 100%; padding: 12px; font-size: 18px; text-align: left; display: flex; align-items: center; justify-content: space-between; background: white; }
+        #weekPickerButton:disabled { background: #eee; color: #777; }
+        #weekPickerMenu { position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 100; max-height: 420px; overflow-y: auto; overscroll-behavior: contain; background: white; border: 1px solid #888; box-shadow: 0 4px 12px #0002; }
+        #weekPickerMenu[hidden] { display: none; }
+        .week-picker-option { display: block; width: 100%; padding: 10px 14px; border: 0; border-radius: 0; text-align: left; font-size: 18px; background: white; }
+        .week-picker-option:hover, .week-picker-option:focus-visible { background: #e6efff; }
+        .week-picker-option[aria-selected="true"] { background: #d7e7ff; }
+
     </style>
 
 </head>
@@ -579,13 +591,15 @@
                 Week
             </label>
 
-            <select id="weekId">
-
-                <option value="">
-                    Loading...
-                </option>
-
-            </select>
+            <div class="week-picker" id="weekPicker">
+                <select id="weekId" aria-label="Week" tabindex="-1">
+                    <option value="">Loading...</option>
+                </select>
+                <button type="button" id="weekPickerButton" aria-haspopup="listbox" aria-expanded="false" aria-controls="weekPickerMenu" onclick="toggleWeekPicker()">
+                    <span id="weekPickerLabel">Loading...</span><span aria-hidden="true">⌄</span>
+                </button>
+                <div id="weekPickerMenu" role="listbox" aria-label="Week" hidden></div>
+            </div>
 
         </div>
 
@@ -1512,7 +1526,7 @@ async function loadWeeks() {
     let weeks = [];
     try {
         const response = await fetch(
-            "/api/weekly-weeks?store_id=" + encodeURIComponent(STORE_ID),
+            "/api/recordings/weeks?store_id=" + encodeURIComponent(STORE_ID),
             { cache: "no-store" }
         );
         const data = await response.json();
@@ -1536,8 +1550,54 @@ async function loadWeeks() {
         weekSelect.appendChild(option);
     }
     weekSelect.value = current;
+    syncWeekPicker();
 }
 
+
+// Custom Week picker uses the original select as the single source of truth.
+function syncWeekPicker() {
+    const button = document.getElementById("weekPickerButton");
+    const label = document.getElementById("weekPickerLabel");
+    const menu = document.getElementById("weekPickerMenu");
+    button.disabled = weekSelect.disabled;
+    label.textContent = weekSelect.selectedOptions[0]?.textContent.trim() || "Select Week";
+    menu.replaceChildren();
+    for (const option of weekSelect.options) {
+        if (!option.value) continue;
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "week-picker-option";
+        item.setAttribute("role", "option");
+        item.setAttribute("aria-selected", String(option.value === weekSelect.value));
+        item.textContent = option.textContent;
+        item.addEventListener("click", () => {
+            weekSelect.value = option.value;
+            weekSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            syncWeekPicker();
+            closeWeekPicker();
+        });
+        menu.appendChild(item);
+    }
+    if (weekSelect.disabled) closeWeekPicker();
+}
+function closeWeekPicker() {
+    document.getElementById("weekPickerMenu").hidden = true;
+    document.getElementById("weekPickerButton").setAttribute("aria-expanded", "false");
+}
+function toggleWeekPicker() {
+    if (weekSelect.disabled) return;
+    const menu = document.getElementById("weekPickerMenu");
+    const opening = menu.hidden;
+    menu.hidden = !opening;
+    document.getElementById("weekPickerButton").setAttribute("aria-expanded", String(opening));
+    if (opening) menu.querySelector('[aria-selected="true"]')?.scrollIntoView({block:"nearest"});
+}
+document.addEventListener("click", e => {
+    if (!document.getElementById("weekPicker").contains(e.target)) closeWeekPicker();
+});
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeWeekPicker();
+});
 
 // =========================================================
 // Start / Change LIVE
@@ -1589,6 +1649,7 @@ async function startLive() {
         weekSelect.disabled =
             false;
         weekSelect.value = formatCurrentWeek(Array.from(weekSelect.options, o => o.value));
+        syncWeekPicker();
 
 
         liveInput.disabled =
@@ -2073,6 +2134,7 @@ function activateRecordingSession() {
 
     weekSelect.disabled =
         true;
+    syncWeekPicker();
 
 
     liveInput.disabled =
@@ -2262,6 +2324,7 @@ async function restoreRecordingSession() {
 
     weekSelect.value =
         currentWeekId;
+    syncWeekPicker();
 
 
     liveInput.value =

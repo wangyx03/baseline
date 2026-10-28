@@ -213,6 +213,37 @@ def recording(store_code):
         cursor.close()
         db.close()
 
+@recording_bp.route("/api/recordings/weeks", methods=["GET"])
+@login_required
+def get_recording_weeks():
+    """Historical weeks with actual SKU recordings, optionally filtered by store."""
+    store_id = request.args.get("store_id", type=int)
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        if store_id is None:
+            cursor.execute("""
+                SELECT DISTINCT week_id
+                FROM sku_recording
+                WHERE week_id IS NOT NULL AND week_id <> ''
+                ORDER BY week_id DESC
+            """)
+        else:
+            cursor.execute("""
+                SELECT DISTINCT week_id
+                FROM sku_recording
+                WHERE week_id IS NOT NULL AND week_id <> ''
+                  AND store_id = %s
+                ORDER BY week_id DESC
+            """, (store_id,))
+        return jsonify({"success": True, "weeks": [row["week_id"] for row in cursor.fetchall()]})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        db.close()
+
+
 @recording_bp.route(
     "/api/recordings/version",
     methods=["GET"]
