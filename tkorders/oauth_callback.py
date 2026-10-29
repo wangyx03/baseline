@@ -335,7 +335,7 @@ def generate_signature(
     if body:
         pieces.append(body)
 
-    message = "".join(pieces)
+    message = app_secret + "".join(pieces) + app_secret
 
     signature = hmac.new(
         app_secret.encode("utf-8"),
