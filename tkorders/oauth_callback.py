@@ -449,6 +449,22 @@ def get_authorized_shops(
         timeout=HTTP_TIMEOUT,
     )
 
+    if not response.ok:
+        try:
+            error = response.json()
+            app.logger.error(
+                "Get Authorized Shops failed: HTTP=%s, code=%s, message=%s, request_id=%s",
+                response.status_code,
+                error.get("code"),
+                error.get("message"),
+                error.get("request_id"),
+            )
+        except ValueError:
+            app.logger.error(
+                "Get Authorized Shops failed: HTTP=%s, non-JSON response",
+                response.status_code,
+            )
+
     response.raise_for_status()
 
     try:
