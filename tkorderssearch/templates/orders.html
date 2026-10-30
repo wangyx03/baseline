@@ -2,26 +2,861 @@
 {% block title %}TikTok Orders{% endblock %}
 {% block styles %}
 .orders-page{max-width:1600px;margin:25px auto;padding:0 22px}.filters,.results{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;margin-bottom:16px}.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.field label{display:block;font-size:12px;color:#596273;margin-bottom:6px}.field input,.field select,.multi-toggle{width:100%;border:1px solid #d5dbe3;border-radius:7px;padding:10px;font:inherit;background:white;color:#202735}.multi{position:relative}.multi-toggle{text-align:left;cursor:pointer}.multi-panel{position:absolute;z-index:20;top:100%;left:0;right:0;max-height:300px;overflow:auto;background:white;border:1px solid #cbd5e1;box-shadow:0 8px 24px #0002;border-radius:8px;padding:9px}.multi-panel[hidden]{display:none}.multi-panel label{display:flex;align-items:center;gap:7px;padding:7px 3px;font-size:13px;color:#202735;cursor:pointer}.multi-panel input[type=checkbox]{width:auto}.multi-search{width:100%;padding:8px;border:1px solid #d5dbe3;border-radius:6px}.small{color:#667085;font-size:12px}.actions{display:flex;gap:10px;align-items:center;margin-top:15px}.btn{padding:10px 15px;background:#1769aa;color:white;border:0;border-radius:7px;cursor:pointer;text-decoration:none}.btn.secondary{background:#edf1f5;color:#344054}.table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:11px 9px;border-bottom:1px solid #e9edf2;text-align:left;vertical-align:top}th{white-space:nowrap;background:#f8fafc}.paging{display:flex;justify-content:space-between;align-items:center;margin-top:16px}.mono{font-family:ui-monospace,monospace}.nowrap{white-space:nowrap}
+.calendar-range-field {
+    position: relative;
+    min-width: 310px;
+}
+
+.date-range-button {
+    width: 310px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 12px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    background: white;
+    color: #111;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.date-range-button:hover {
+    background: #f7f7f7;
+}
+
+.calendar-popover {
+    display: none;
+    position: absolute;
+    z-index: 1200;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 360px;
+    padding: 16px;
+    border: 1px solid #d9dce1;
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+}
+
+.calendar-popover.show {
+    display: block;
+}
+
+.calendar-header {
+    display: grid;
+    grid-template-columns: 42px 1fr 42px;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.calendar-month-title {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.calendar-nav {
+    padding: 7px 0;
+    border: 0;
+    background: transparent;
+    color: #111;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.calendar-nav:hover {
+    background: #f3f4f6;
+}
+
+.calendar-weekdays,
+.calendar-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+}
+
+.calendar-weekdays {
+    margin-bottom: 6px;
+    color: #5f6670;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.calendar-weekdays span {
+    padding: 5px 0;
+}
+
+.calendar-day {
+    position: relative;
+    height: 42px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #111;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 0;
+    cursor: pointer;
+}
+
+.calendar-day:hover {
+    background: #f2f4f7;
+}
+
+.calendar-day.outside-month {
+    color: #b6bbc3;
+}
+
+.calendar-day.in-range,
+.calendar-day.range-start,
+.calendar-day.range-end {
+    background: #eaf2ff;
+}
+
+.calendar-day.range-start::after,
+.calendar-day.range-end::after {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    border-radius: 50%;
+    background: #111;
+    z-index: 0;
+}
+
+.calendar-day.range-start span,
+.calendar-day.range-end span {
+    position: relative;
+    z-index: 1;
+    color: white;
+}
+
+.calendar-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #eceef1;
+}
+
+.calendar-text-button {
+    padding: 5px 7px;
+    border: 0;
+    background: transparent;
+    color: #1f5fbf;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.calendar-text-button:hover {
+    background: #f3f6fb;
+}
+
+
+.orders-search-row{grid-column:1/-1}.orders-search-row input{width:100%}.calendar-range-field{min-width:310px}.date-range-button{width:100%}
+.created-sort{border:0;background:transparent;font:inherit;font-weight:inherit;color:inherit;cursor:pointer;padding:0;white-space:nowrap}.created-sort:hover{text-decoration:underline}
 {% endblock %}
 {% block content %}
-<div class="orders-page"><h1>TikTok Orders</h1><p class="small">Read-only order search · All dates shown in Eastern Time</p>
+<div class="orders-page"><h1>TikTok Orders</h1><p class="small">Read-only order search · Dates shown in selected time zone</p>
 <form method="get" id="filters" class="filters">
 <div class="filter-grid">
-<div class="field"><label>Store (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="stores">Select stores ▾</button><div class="multi-panel" id="stores" hidden><label><input type="checkbox" name="store" value="1" {% if '1' in selected_stores %}checked{% endif %}> Truth Unfolds (TU)</label><label><input type="checkbox" name="store" value="2" {% if '2' in selected_stores %}checked{% endif %}> Vesper Books (VB)</label></div></div></div>
-<div class="field"><label>Order Status (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="statuses">Select statuses ▾</button><div class="multi-panel" id="statuses" hidden>{% for s in statuses %}{% if s.value %}<label><input type="checkbox" name="status" value="{{ s.value }}" {% if s.value in selected_statuses %}checked{% endif %}> {{ s.value }} <span class="small">({{ s.n }})</span></label>{% endif %}{% endfor %}</div></div></div>
-<div class="field"><label>Warehouse (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="warehouses">Select warehouses ▾</button><div class="multi-panel" id="warehouses" hidden><input class="multi-search" type="search" placeholder="Search warehouse / ID" data-search="warehouses">{% for w in warehouses %}<label data-option="{{ w.warehouse|lower }} {{ w.warehouse_id }} {{ w.store_id }}"><input type="checkbox" name="warehouse" value="{{ w.warehouse_id }}" {% if w.warehouse_id in selected_warehouses %}checked{% endif %}> {{ w.warehouse }} ({{ 'TU' if w.store_id == 1 else 'VB' }}) <span class="small">{{ w.n }}</span></label>{% endfor %}</div></div></div>
+<div class="field"><label>Store (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="stores">Select stores ▾</button><div class="multi-panel" id="stores" hidden><label><input type="checkbox" class="select-all" data-all="stores" checked> All</label><label><input type="checkbox" name="store" value="1" {% if '1' in selected_stores %}checked{% endif %}> Truth Unfolds (TU)</label><label><input type="checkbox" name="store" value="2" {% if '2' in selected_stores %}checked{% endif %}> Vesper Books (VB)</label></div></div></div>
+<div class="field"><label>Order Status (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="statuses">Select statuses ▾</button><div class="multi-panel" id="statuses" hidden><label><input type="checkbox" class="select-all" data-all="statuses" checked> All</label>{% for s in statuses %}{% if s.value %}<label><input type="checkbox" name="status" value="{{ s.value }}" {% if s.value in selected_statuses %}checked{% endif %}> {{ s.value }} <span class="small">({{ s.n }})</span></label>{% endif %}{% endfor %}</div></div></div>
+<div class="field"><label>Warehouse (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="warehouses">Select warehouses ▾</button><div class="multi-panel" id="warehouses" hidden><label><input type="checkbox" class="select-all" data-all="warehouses" checked> All</label><input class="multi-search" type="search" placeholder="Search warehouse / ID" data-search="warehouses">{% for w in warehouses %}<label data-option="{{ w.warehouse|lower }} {{ w.warehouse_id }} {{ w.store_id }}"><input type="checkbox" name="warehouse" value="{{ w.store_id }}:{{ w.warehouse_id }}" {% if (w.store_id|string ~ ":" ~ w.warehouse_id|string) in selected_warehouses %}checked{% endif %}> {{ w.warehouse }} ({{ 'TU' if w.store_id == 1 else 'VB' }}) <span class="small">{{ w.n }}</span></label>{% endfor %}</div></div></div>
 <div class="field"><label>Order Tag · LIVE Giveaway</label><select name="giveaway"><option value="all" {% if giveaway=='all' %}selected{% endif %}>All orders</option><option value="include" {% if giveaway=='include' %}selected{% endif %}>Include LIVE Giveaway</option><option value="exclude" {% if giveaway=='exclude' %}selected{% endif %}>Exclude LIVE Giveaway</option></select></div>
-<div class="field"><label>From (ET)</label><input type="date" name="from" value="{{ params.get('from','') }}"></div><div class="field"><label>To (ET)</label><input type="date" name="to" value="{{ params.get('to','') }}"></div>
-{% for field,title in [('order_id','Order ID'),('product_id','Product ID'),('product_name','Product Name'),('seller_sku','Seller SKU')] %}<div class="field"><label>{{ title }}</label><input name="{{ field }}" value="{{ params.get(field,'') }}" placeholder="Search {{ title }}"></div>{% endfor %}
+<div class="field"><label>Time Zone</label><select name="tz">{% for zone, short in time_zones.items() %}<option value="{{ zone }}" {% if selected_tz == zone %}selected{% endif %}>{{ short }} ({{ zone }})</option>{% endfor %}</select></div><div class="field"><label>Seller SKUs</label><select name="sku_rule">
+<option value="all" {% if params.get('sku_rule','all') == 'all' %}selected{% endif %}>All Seller SKUs</option>
+<option value="match" {% if params.get('sku_rule') == 'match' %}selected{% endif %}>Starts with 9 · 13 digits</option>
+<option value="nonmatch" {% if params.get('sku_rule') == 'nonmatch' %}selected{% endif %}>Does not match</option>
+</select></div>
+<div class="field calendar-range-field">
+
+                <label>
+                    Order Date Range
+                </label>
+
+                <button
+                    id="dateRangeButton"
+                    type="button"
+                    class="date-range-button"
+                >
+                    <span id="dateRangeText">
+                        Select dates
+                    </span>
+
+                    <span>
+                        📅
+                    </span>
+                </button>
+
+                <div
+                    id="calendarPopover"
+                    class="calendar-popover"
+                >
+
+                    <div class="calendar-header">
+
+                        <button
+                            id="prevMonthBtn"
+                            type="button"
+                            class="calendar-nav"
+                        >
+                            ‹
+                        </button>
+
+                        <div
+                            id="calendarMonthTitle"
+                            class="calendar-month-title"
+                        ></div>
+
+                        <button
+                            id="nextMonthBtn"
+                            type="button"
+                            class="calendar-nav"
+                        >
+                            ›
+                        </button>
+
+                    </div>
+
+                    <div class="calendar-weekdays">
+                        <span>Sun</span>
+                        <span>Mon</span>
+                        <span>Tue</span>
+                        <span>Wed</span>
+                        <span>Thu</span>
+                        <span>Fri</span>
+                        <span>Sat</span>
+                    </div>
+
+                    <div
+                        id="calendarDays"
+                        class="calendar-days"
+                    ></div>
+
+                    <div class="calendar-footer">
+
+                        <button
+                            id="clearDateRangeBtn"
+                            type="button"
+                            class="calendar-text-button"
+                        >
+                            Clear
+                        </button>
+
+                        <button
+                            id="todayDateRangeBtn"
+                            type="button"
+                            class="calendar-text-button"
+                        >
+                            Today
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            
+<input type="hidden" name="from" id="ordersFrom" value="{{ params.get('from','') }}">
+<input type="hidden" name="to" id="ordersTo" value="{{ params.get('to','') }}">
+<div class="field orders-search-row"><label>Search</label><input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Order ID, Product ID, Product Name, Seller SKU, Tracking"></div>
 </div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span></div>
 </form>
-<section class="results"><h2>{{ total }} matching orders</h2><div class="table-scroll"><table><thead><tr><th>Store</th><th>Order ID</th><th>Status</th><th>Tag</th><th>Created (ET)</th><th>Warehouse</th><th>Products</th><th>Seller SKUs</th><th>Total</th></tr></thead><tbody>{% for o in orders %}<tr><td>{{ 'TU' if o.store_id==1 else 'VB' }}</td><td class="mono nowrap">{{ o.order_id }}</td><td>{{ o.status or '—' }}</td><td>{{ 'LIVE Giveaway' if o.order_type=='ZERO_LOTTERY' else '—' }}</td><td class="nowrap">{{ o.create_time_et or '—' }}</td><td>{{ o.warehouse_name or o.warehouse_id or '—' }}</td><td>{{ o.products or '—' }}</td><td>{{ o.skus or '—' }}</td><td class="nowrap">{{ o.total_amount if o.total_amount is not none else '—' }} {{ o.currency or '' }}</td></tr>{% else %}<tr><td colspan="9">No matching orders.</td></tr>{% endfor %}</tbody></table></div>
+<section class="results"><h2>{{ total }} matching orders</h2><div class="table-scroll"><table><thead><tr><th>Store</th><th>Order ID</th><th>Status</th><th>Tag</th><th><button type="button" class="created-sort" onclick="toggleCreatedSort()" title="Toggle created time sorting">Created ({{ tz_label }}) <span aria-hidden="true">{{ "↑" if sort_dir == "asc" else "↓" }}</span></button></th><th>Warehouse</th><th>Products</th><th>Seller SKUs</th><th>Tracking</th></tr></thead><tbody>{% for o in orders %}<tr><td>{{ 'TU' if o.store_id==1 else 'VB' }}</td><td class="mono nowrap">{{ o.order_id }}</td><td>{{ o.status or '—' }}</td><td>{{ 'LIVE Giveaway' if o.order_type=='ZERO_LOTTERY' else '—' }}</td><td class="nowrap">{{ o.create_time_local or '—' }}</td><td>{{ o.warehouse_name or o.warehouse_id or '—' }}</td><td>{{ o.products or '—' }}</td><td>{{ o.skus or '—' }}</td><td class="nowrap">{{ o.tracking or '—' }}</td></tr>{% else %}<tr><td colspan="9">No matching orders.</td></tr>{% endfor %}</tbody></table></div>
 <div class="paging"><span class="small">Page {{ page }} of {{ pages }}</span><div>{% if page>1 %}<button class="btn secondary" type="button" onclick="goPage({{ page-1 }})">Previous</button>{% endif %} {% if page<pages %}<button class="btn secondary" type="button" onclick="goPage({{ page+1 }})">Next</button>{% endif %}</div></div></section></div>
 {% endblock %}
 {% block scripts %}<script>
-document.querySelectorAll('[data-toggle]').forEach(b=>b.addEventListener('click',()=>{let p=document.getElementById(b.dataset.toggle);p.hidden=!p.hidden}));
-document.querySelectorAll('[data-search]').forEach(s=>s.addEventListener('input',()=>{let p=document.getElementById(s.dataset.search);p.querySelectorAll('[data-option]').forEach(l=>l.hidden=!l.dataset.option.includes(s.value.toLowerCase()))}));
+const dateRangeButton =
+    document.getElementById(
+        "dateRangeButton"
+    );
+
+const dateRangeText =
+    document.getElementById(
+        "dateRangeText"
+    );
+
+const calendarPopover =
+    document.getElementById(
+        "calendarPopover"
+    );
+
+const calendarMonthTitle =
+    document.getElementById(
+        "calendarMonthTitle"
+    );
+
+const calendarDays =
+    document.getElementById(
+        "calendarDays"
+    );
+
+const prevMonthBtn =
+    document.getElementById(
+        "prevMonthBtn"
+    );
+
+const nextMonthBtn =
+    document.getElementById(
+        "nextMonthBtn"
+    );
+
+const clearDateRangeBtn =
+    document.getElementById(
+        "clearDateRangeBtn"
+    );
+
+const todayDateRangeBtn =
+    document.getElementById(
+        "todayDateRangeBtn"
+    );
+
+const storeSelect =
+    document.getElementById(
+        "storeId"
+    );
+
+const loadLivesBtn =
+    document.getElementById(
+        "loadLivesBtn"
+    );
+
+const liveList =
+    document.getElementById(
+        "liveList"
+    );
+
+const liveStatus =
+    document.getElementById(
+        "liveStatus"
+    );
+
+const selectedCount =
+    document.getElementById(
+        "selectedCount"
+    );
+
+const downloadBtn =
+    document.getElementById(
+        "downloadBtn"
+    );
+
+const downloadStatus =
+    document.getElementById(
+        "downloadStatus"
+    );
+
+
+let liveStartDateValue = document.getElementById("ordersFrom").value;
+let liveEndDateValue = document.getElementById("ordersTo").value;
+
+let calendarViewDate =
+    new Date();
+
+
+function toISODate(date) {
+
+    const year =
+        date.getFullYear();
+
+    const month =
+        String(
+            date.getMonth() + 1
+        ).padStart(
+            2,
+            "0"
+        );
+
+    const day =
+        String(
+            date.getDate()
+        ).padStart(
+            2,
+            "0"
+        );
+
+    return (
+        `${year}-${month}-${day}`
+    );
+}
+
+
+function fromISODate(value) {
+
+    if (!value) {
+        return null;
+    }
+
+    const parts =
+        value
+            .split("-")
+            .map(Number);
+
+    return new Date(
+        parts[0],
+        parts[1] - 1,
+        parts[2],
+        12
+    );
+}
+
+
+function displayDate(date) {
+
+    return date.toLocaleDateString(
+        "en-US",
+        {
+            month: "short",
+            day: "numeric",
+            year: "numeric"
+        }
+    );
+}
+
+
+function sameDate(a, b) {
+
+    return (
+        a
+        &&
+        b
+        &&
+        a.getFullYear()
+            ===
+        b.getFullYear()
+        &&
+        a.getMonth()
+            ===
+        b.getMonth()
+        &&
+        a.getDate()
+            ===
+        b.getDate()
+    );
+}
+
+
+function updateDateRangeText() {
+ document.getElementById("ordersFrom").value=liveStartDateValue;
+ document.getElementById("ordersTo").value=liveEndDateValue;
+
+    const start =
+        fromISODate(
+            liveStartDateValue
+        );
+
+    const end =
+        fromISODate(
+            liveEndDateValue
+        );
+
+    if (start && end) {
+
+        dateRangeText.textContent =
+            `${displayDate(start)} → ${displayDate(end)}`;
+
+    } else if (start) {
+
+        dateRangeText.textContent =
+            `${displayDate(start)} → Select end`;
+
+    } else {
+
+        dateRangeText.textContent =
+            "Select dates";
+    }
+}
+
+
+function renderCalendar() {
+
+    calendarDays.innerHTML = "";
+
+    const year =
+        calendarViewDate.getFullYear();
+
+    const month =
+        calendarViewDate.getMonth();
+
+    calendarMonthTitle.textContent =
+        calendarViewDate.toLocaleDateString(
+            "en-US",
+            {
+                month: "long",
+                year: "numeric"
+            }
+        );
+
+    const firstOfMonth =
+        new Date(
+            year,
+            month,
+            1,
+            12
+        );
+
+    const gridStart =
+        new Date(
+            year,
+            month,
+            1 - firstOfMonth.getDay(),
+            12
+        );
+
+    const selectedStart =
+        fromISODate(
+            liveStartDateValue
+        );
+
+    const selectedEnd =
+        fromISODate(
+            liveEndDateValue
+        );
+
+    for (
+        let i = 0;
+        i < 42;
+        i++
+    ) {
+
+        const date =
+            new Date(
+                gridStart
+            );
+
+        date.setDate(
+            gridStart.getDate() + i
+        );
+
+        const button =
+            document.createElement(
+                "button"
+            );
+
+        button.type =
+            "button";
+
+        button.className =
+            "calendar-day";
+
+        if (
+            date.getMonth()
+            !==
+            month
+        ) {
+            button.classList.add(
+                "outside-month"
+            );
+        }
+
+        if (
+            selectedStart
+            &&
+            selectedEnd
+            &&
+            date > selectedStart
+            &&
+            date < selectedEnd
+        ) {
+            button.classList.add(
+                "in-range"
+            );
+        }
+
+        if (
+            sameDate(
+                date,
+                selectedStart
+            )
+        ) {
+            button.classList.add(
+                "range-start"
+            );
+        }
+
+        if (
+            sameDate(
+                date,
+                selectedEnd
+            )
+        ) {
+            button.classList.add(
+                "range-end"
+            );
+        }
+
+        const span =
+            document.createElement(
+                "span"
+            );
+
+        span.textContent =
+            date.getDate();
+
+        button.appendChild(
+            span
+        );
+
+        button.addEventListener(
+            "click",
+            function(event) {
+
+                event.preventDefault();
+                event.stopPropagation();
+
+                const clicked =
+                    toISODate(
+                        date
+                    );
+
+                if (
+                    !liveStartDateValue
+                    ||
+                    liveEndDateValue
+                ) {
+
+                    liveStartDateValue =
+                        clicked;
+
+                    liveEndDateValue =
+                        "";
+
+                    updateDateRangeText();
+                    renderCalendar();
+
+                    return;
+                }
+
+                const start =
+                    fromISODate(
+                        liveStartDateValue
+                    );
+
+                if (
+                    date < start
+                ) {
+
+                    liveEndDateValue =
+                        liveStartDateValue;
+
+                    liveStartDateValue =
+                        clicked;
+
+                } else {
+
+                    liveEndDateValue =
+                        clicked;
+                }
+
+                updateDateRangeText();
+                renderCalendar();
+
+                calendarPopover
+                    .classList
+                    .remove(
+                        "show"
+                    );
+            }
+        );
+
+        calendarDays.appendChild(
+            button
+        );
+    }
+}
+
+
+
+dateRangeButton.addEventListener(
+    "click",
+    function(event) {
+
+        event.stopPropagation();
+
+        calendarPopover
+            .classList
+            .toggle(
+                "show"
+            );
+
+        renderCalendar();
+    }
+);
+
+
+prevMonthBtn.addEventListener(
+    "click",
+    function() {
+
+        calendarViewDate =
+            new Date(
+                calendarViewDate.getFullYear(),
+                calendarViewDate.getMonth() - 1,
+                1,
+                12
+            );
+
+        renderCalendar();
+    }
+);
+
+
+nextMonthBtn.addEventListener(
+    "click",
+    function() {
+
+        calendarViewDate =
+            new Date(
+                calendarViewDate.getFullYear(),
+                calendarViewDate.getMonth() + 1,
+                1,
+                12
+            );
+
+        renderCalendar();
+    }
+);
+
+
+clearDateRangeBtn.addEventListener(
+    "click",
+    function() {
+
+        liveStartDateValue =
+            "";
+
+        liveEndDateValue =
+            "";
+
+        updateDateRangeText();
+        renderCalendar();
+    }
+);
+
+
+todayDateRangeBtn.addEventListener(
+    "click",
+    function() {
+
+        const today =
+            new Date();
+
+        today.setHours(
+            12,
+            0,
+            0,
+            0
+        );
+
+        liveStartDateValue =
+            toISODate(
+                today
+            );
+
+        liveEndDateValue =
+            toISODate(
+                today
+            );
+
+        calendarViewDate =
+            new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                1,
+                12
+            );
+
+        updateDateRangeText();
+        renderCalendar();
+
+        calendarPopover
+            .classList
+            .remove(
+                "show"
+            );
+    }
+);
+
+
+document.addEventListener(
+    "click",
+    function(event) {
+
+        if (
+            !event.target.closest(
+                ".calendar-range-field"
+            )
+        ) {
+
+            calendarPopover
+                .classList
+                .remove(
+                    "show"
+                );
+        }
+    }
+);
+
+
+
+updateDateRangeText(); renderCalendar();
+
+// Multiple selections are staged locally; empty and all-selected both mean no restriction.
+const multiConfig = {stores:'store', statuses:'status', warehouses:'warehouse'};
+function syncMulti(id) {
+ const panel=document.getElementById(id);
+ const boxes=[...panel.querySelectorAll('input[type=checkbox]:not(.select-all)')];
+ const count=boxes.filter(x=>x.checked).length;
+ const all=panel.querySelector('.select-all');
+ all.checked=count===0 || count===boxes.length;
+ all.indeterminate=false;
+ const label={stores:'Store',statuses:'Order Status',warehouses:'Warehouse'}[id];
+ document.querySelector('[data-toggle="'+id+'"]').textContent =
+  label+': '+(all.checked?'All':count+' selected')+' ▾';
+}
+Object.keys(multiConfig).forEach(id=>{
+ const panel=document.getElementById(id);
+ const boxes=[...panel.querySelectorAll('input[type=checkbox]:not(.select-all)')];
+ const selected=new URLSearchParams(location.search).getAll(multiConfig[id]).filter(v=>v!=='__none__' && v!=='all');
+ // No query values means All; keep every option checked for clear visual feedback.
+ boxes.forEach(box=>box.checked=selected.length===0 || selected.includes(box.value));
+ panel.querySelector('.select-all').addEventListener('change',event=>{
+  boxes.forEach(box=>box.checked=event.target.checked);
+  syncMulti(id);
+ });
+ boxes.forEach(box=>box.addEventListener('change',()=>syncMulti(id)));
+ syncMulti(id);
+});
+document.getElementById('filters').addEventListener('submit',()=>{
+ // Canonicalize All/empty to no query parameter so SQL never applies a stale restriction.
+ Object.keys(multiConfig).forEach(id=>{
+  const boxes=[...document.getElementById(id).querySelectorAll('input[type=checkbox]:not(.select-all)')];
+  const count=boxes.filter(x=>x.checked).length;
+  if(count===0 || count===boxes.length) boxes.forEach(x=>x.checked=false);
+ });
+});
+document.querySelectorAll('[data-toggle]').forEach(b=>b.addEventListener('click',()=>{
+ const p=document.getElementById(b.dataset.toggle);p.hidden=!p.hidden;
+}));
+document.addEventListener('click',event=>{
+ if(!event.target.closest('.multi'))document.querySelectorAll('.multi-panel').forEach(p=>p.hidden=true);
+});
+document.querySelectorAll('[data-search]').forEach(s=>s.addEventListener('input',()=>{
+ let p=document.getElementById(s.dataset.search);
+ p.querySelectorAll('[data-option]').forEach(l=>l.hidden=!l.dataset.option.includes(s.value.toLowerCase()));
+}));
+function toggleCreatedSort(){
+ const u=new URL(location.href);
+ u.searchParams.set('sort', {{ ('"desc"' if sort_dir == 'asc' else '"asc"') | safe }});
+ u.searchParams.set('page','1');
+ location.href=u.toString();
+}
 function goPage(n){let u=new URL(location.href);u.searchParams.set('page',n);location.href=u.toString()}
-// Submit automatically on selections while text fields are committed by Search Orders.
-document.querySelectorAll('#filters select,#filters input[type=checkbox],#filters input[type=date]').forEach(el=>el.addEventListener('change',()=>document.getElementById('filters').requestSubmit()));
+// Preserve the dropdown while checking multiple options; submit only on Search Orders.
 </script>{% endblock %}

@@ -3,19 +3,32 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from flask import Blueprint, render_template, request
 from flask_login import login_required
+from permissions.permissions import module_required, MODULE_TIKTOK_ORDERS
 from db import get_db
 
 orders_bp = Blueprint('orders', __name__, template_folder='templates', url_prefix='/orders')
 ET = ZoneInfo('America/New_York')
+TIME_ZONES = {
+    'America/New_York': 'ET',
+    'America/Chicago': 'CT',
+    'America/Denver': 'MT',
+    'America/Los_Angeles': 'PT',
+    'UTC': 'UTC',
+}
+
+def _selected_timezone(params):
+    name = params.get('tz', 'America/New_York')
+    return name if name in TIME_ZONES else 'America/New_York'
+
 SEARCH_FIELDS = {'order_id': 'o.order_id', 'product_id': 'i.product_id',
                  'product_name': 'i.product_name', 'seller_sku': 'i.seller_sku'}
 
 
-def _day_bound(value, end=False):
+def _day_bound(value, tz_name, end=False):
     if not value:
         return None
     try:
-        local = datetime.strptime(value, '%Y-%m-%d').replace(tzinfo=ET)
+        local = datetime.strptime(value, '%Y-%m-%d').replace(tzinfo=ZoneInfo(tz_name))
         if end:
             local += timedelta(days=1)
         return local.astimezone(timezone.utc).replace(tzinfo=None)
@@ -27,8 +40,8 @@ def _filters(params, omit=None):
     omit = omit or set()
     parts, args = [], []
     stores = [int(v) for v in params.getlist('store') if v in ('1', '2')]
-    statuses = [v for v in params.getlist('status') if v and len(v) <= 64]
-    warehouses = [v for v in params.getlist('warehouse') if v and len(v) <= 64]
+    statuses = [v for v in params.getlist('status') if v and v != 'all' and len(v) <= 64]
+    warehouses = [v for v in params.getlist('warehouse') if v and v != 'all' and len(v) <= 90 and ':' in v]
     tag = params.get('giveaway', 'all')
     if 'store' not in omit and stores:
         parts.append('o.store_id IN (' + ','.join(['%s'] * len(stores)) + ')')
@@ -37,35 +50,46 @@ def _filters(params, omit=None):
         parts.append('o.status IN (' + ','.join(['%s'] * len(statuses)) + ')')
         args.extend(statuses)
     if 'warehouse' not in omit and warehouses:
-        parts.append('o.warehouse_id IN (' + ','.join(['%s'] * len(warehouses)) + ')')
-        args.extend(warehouses)
+        pairs = []
+        for value in warehouses:
+            store_id, warehouse_id = value.split(':', 1)
+            if store_id in ('1', '2') and warehouse_id:
+                pairs.append((int(store_id), warehouse_id))
+        if pairs:
+            parts.append('(' + ' OR '.join('(o.store_id=%s AND o.warehouse_id=%s)' for _ in pairs) + ')')
+            for pair in pairs:
+                args.extend(pair)
     if 'giveaway' not in omit:
         if tag == 'include':
             parts.append("o.order_type = 'ZERO_LOTTERY'")
         elif tag == 'exclude':
             parts.append("(o.order_type <> 'ZERO_LOTTERY' OR o.order_type IS NULL)")
-    start, end = _day_bound(params.get('from')), _day_bound(params.get('to'), True)
+    sku_rule = params.get('sku_rule', 'all')
+    sku_match = ("EXISTS (SELECT 1 FROM tkorders_items sku_filter "
+                 "WHERE sku_filter.store_id=o.store_id "
+                 "AND sku_filter.order_id=o.order_id "
+                 "AND sku_filter.seller_sku REGEXP '^9[0-9]{12}$')")
+    if 'sku_rule' not in omit:
+        if sku_rule == 'match':
+            parts.append(sku_match)
+        elif sku_rule == 'nonmatch':
+            parts.append('NOT ' + sku_match)
+    tz_name = _selected_timezone(params)
+    start, end = _day_bound(params.get('from'), tz_name), _day_bound(params.get('to'), tz_name, True)
     if start:
         parts.append('o.create_time >= %s')
         args.append(start)
     if end:
         parts.append('o.create_time < %s')
         args.append(end)
-    for field in SEARCH_FIELDS:
-        if field in omit:
-            continue
-        term = (params.get(field) or '').strip()
-        if not term:
-            continue
-        if field == 'order_id':
-            parts.append('o.order_id LIKE %s')
-            args.append('%' + term + '%')
-        else:
-            # Each product criterion can match independently within the same order.
-            # This avoids duplicating order totals for multi-item orders.
-            parts.append('EXISTS (SELECT 1 FROM tkorders_items i WHERE i.store_id=o.store_id '
-                         'AND i.order_id=o.order_id AND ' + SEARCH_FIELDS[field] + ' LIKE %s)')
-            args.append('%' + term + '%')
+    keyword = (params.get('q') or '').strip()
+    if keyword and 'q' not in omit:
+        like = '%' + keyword + '%'
+        parts.append('(' + ' OR '.join([
+            'o.order_id LIKE %s',
+            'EXISTS (SELECT 1 FROM tkorders_items i WHERE i.store_id=o.store_id AND i.order_id=o.order_id AND (i.product_id LIKE %s OR i.product_name LIKE %s OR i.seller_sku LIKE %s OR i.tracking_number LIKE %s))'
+        ]) + ')')
+        args.extend([like] * 5)
     return (' WHERE ' + ' AND '.join(parts) if parts else ''), args
 
 
@@ -75,10 +99,13 @@ def _rows(cursor, sql, args=()):
 
 
 @orders_bp.route('/', methods=['GET'])
-@login_required
+@module_required(MODULE_TIKTOK_ORDERS)
 def page():
     page_number = max(1, min(request.args.get('page', 1, type=int) or 1, 100000))
     per_page = 50
+    sort_dir = "asc" if request.args.get("sort") == "asc" else "desc"
+    tz_name = _selected_timezone(request.args)
+    display_tz = ZoneInfo(tz_name)
     where, args = _filters(request.args)
     conn = get_db()
     cur = conn.cursor(dictionary=True)
@@ -86,24 +113,31 @@ def page():
         total = _rows(cur, 'SELECT COUNT(*) AS n FROM tkorders o' + where, args)[0]['n']
         orders = _rows(cur, '''
             SELECT o.store_id, o.order_id, o.status, o.order_type, o.create_time,
-                   o.update_time, o.warehouse_id, o.total_amount, o.currency,
+                   o.update_time, o.warehouse_id,
                    w.warehouse AS warehouse_name,
                    (SELECT GROUP_CONCAT(DISTINCT i.product_name ORDER BY i.product_name SEPARATOR ' | ')
                       FROM tkorders_items i WHERE i.store_id=o.store_id AND i.order_id=o.order_id)
                       AS products,
                    (SELECT GROUP_CONCAT(DISTINCT i.seller_sku ORDER BY i.seller_sku SEPARATOR ', ')
                       FROM tkorders_items i WHERE i.store_id=o.store_id AND i.order_id=o.order_id)
-                      AS skus
+                      AS skus,
+                   (SELECT GROUP_CONCAT(DISTINCT NULLIF(TRIM(i.tracking_number), '') ORDER BY i.tracking_number SEPARATOR ' | ')
+                      FROM tkorders_items i WHERE i.store_id=o.store_id AND i.order_id=o.order_id)
+                      AS tracking
             FROM tkorders o
             LEFT JOIN warehouses w ON w.store_id=o.store_id AND w.warehouse_id=o.warehouse_id
-        ''' + where + ' ORDER BY o.create_time DESC, o.order_id DESC LIMIT %s OFFSET %s',
+        ''' + where + f' ORDER BY o.create_time {sort_dir.upper()}, o.order_id {sort_dir.upper()} LIMIT %s OFFSET %s',
             args + [per_page, (page_number - 1) * per_page])
         for order in orders:
             if order['create_time']:
-                order['create_time_et'] = order['create_time'].replace(tzinfo=timezone.utc).astimezone(ET).strftime('%Y-%m-%d %I:%M %p')
+                order['create_time_local'] = order['create_time'].replace(tzinfo=timezone.utc).astimezone(display_tz).strftime('%Y-%m-%d %I:%M %p')
         # Facets use all active filters except their own dimension.
         status_where, status_args = _filters(request.args, {'status'})
         statuses = _rows(cur, 'SELECT o.status AS value, COUNT(*) AS n FROM tkorders o' + status_where + ' GROUP BY o.status ORDER BY n DESC', status_args)
+        existing_statuses = {s['value'] for s in statuses}
+        for selected in request.args.getlist('status'):
+            if selected and selected not in ('all','__none__') and selected not in existing_statuses:
+                statuses.append({'value': selected, 'n': 0})
         warehouse_where, warehouse_args = _filters(request.args, {'warehouse'})
         warehouses = _rows(cur, '''SELECT w.store_id, w.warehouse_id, w.warehouse,
             COUNT(o.order_id) AS n FROM warehouses w
@@ -125,4 +159,4 @@ def page():
                            selected_statuses=request.args.getlist('status'),
                            selected_warehouses=request.args.getlist('warehouse'),
                            giveaway=request.args.get('giveaway', 'all'),
-                           params=request.args)
+                           params=request.args, sort_dir=sort_dir, selected_tz=tz_name, tz_label=TIME_ZONES[tz_name], time_zones=TIME_ZONES)

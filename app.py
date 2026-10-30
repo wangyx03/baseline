@@ -25,7 +25,8 @@ from permissions.permissions import (
     MODULE_SCHEDULE_MANAGEMENT,
     MODULE_SCHEDULE,
     MODULE_PERMISSION_MANAGEMENT,
-    MODULE_BOOK_SELECTION
+    MODULE_BOOK_SELECTION,
+    MODULE_TIKTOK_ORDERS
 )
 
 from recording.recording import recording_bp
@@ -352,7 +353,10 @@ def index():
             MODULE_PERMISSION_MANAGEMENT,
 
         MODULE_BOOK_SELECTION=
-            MODULE_BOOK_SELECTION
+            MODULE_BOOK_SELECTION,
+
+        MODULE_TIKTOK_ORDERS=
+            MODULE_TIKTOK_ORDERS
     )
 
 
