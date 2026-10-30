@@ -28,6 +28,8 @@ MODULE_PERMISSION_MANAGEMENT = 6
 
 MODULE_BOOK_SELECTION = 7
 
+MODULE_TIKTOK_ORDERS = 8
+
 
 # =========================
 # Feature Permission Keys
