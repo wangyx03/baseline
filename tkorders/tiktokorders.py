@@ -13,6 +13,7 @@ Useful CLI:
     python tiktokorders.py --store VB
     python tiktokorders.py --backfill --store TU
     python tiktokorders.py --refresh <order_id> --store TU
+    python tiktokorders.py --history --from 2026-10-01 --to 2026-10-30 --store TU
 
 Required .env keys:
     TTS_TU_APP_KEY=...
@@ -33,12 +34,14 @@ Optional:
     TTS_LOOP_FOREVER=false
 """
 
+import argparse
 import hashlib
 import hmac
 import json
 import os
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -338,7 +341,69 @@ def search_new_orders(
     return orders
 
 
-def get_order_detail(shop: dict, order_ids: list[str]):
+def iter_order_pages(shop: dict, start_ts: int, end_ts: int, page_size: int = 100):
+    """Stream pages; never hold a whole day of search results in memory."""
+    page_token = ""
+    seen_tokens = set()
+    while True:
+        params = {"page_size": page_size, "sort_field": "create_time", "sort_order": "ASC"}
+        if page_token:
+            params["page_token"] = page_token
+        data = call_api(shop, "POST", "/order/202309/orders/search", params,
+                        {"create_time_ge": start_ts, "create_time_le": end_ts})
+        yield data.get("orders", []) or []
+        next_token = data.get("next_page_token") or ""
+        if not next_token:
+            return
+        if next_token in seen_tokens:
+            raise RuntimeError("TikTok returned a repeated page token")
+        seen_tokens.add(next_token)
+        page_token = next_token
+
+
+def history_import(conn, shop: dict, start_date, end_date):
+    """UTC calendar-day windows, inclusive dates. Restart unfinished day safely."""
+    if end_date < start_date:
+        raise ValueError("--to must not precede --from")
+    current = start_date
+    while current <= end_date:
+        day = current.isoformat()
+        if db.history_day_done(conn, shop["store_id"], day):
+            print(f"[{shop['short_name']}] {day}: already completed", flush=True)
+            current += timedelta(days=1)
+            continue
+        start_ts = int(datetime.combine(current, datetime.min.time(), tzinfo=timezone.utc).timestamp())
+        end_ts = start_ts + 86400 - 1
+        pages = imported = skipped = 0
+        try:
+            for results in iter_order_pages(shop, start_ts, end_ts):
+                pages += 1
+                ids = list(dict.fromkeys(str(o["id"]) for o in results if o.get("id")))
+                existing = db.existing_order_ids(conn, shop["store_id"], ids)
+                missing = [oid for oid in ids if oid not in existing]
+                skipped += len(ids) - len(missing)
+                if missing:
+                    details = get_order_detail(shop, missing, save_debug=False)
+                    received = {str(o.get("id")) for o in details}
+                    absent = set(missing) - received
+                    if absent:
+                        raise RuntimeError(f"Detail API omitted {len(absent)} order(s): {sorted(absent)[:3]}")
+                    for order in details:
+                        if db.insert_historical_if_absent(conn, shop["store_id"], order,
+                                                           extract_line_items(order)):
+                            imported += 1
+                    conn.commit()
+                print(f"[{shop['short_name']}] {day} page={pages} new={imported} existing={skipped}", flush=True)
+            db.mark_history_day_done(conn, shop["store_id"], day, imported, skipped)
+            conn.commit()
+            print(f"[{shop['short_name']}] {day} COMPLETE new={imported} existing={skipped}", flush=True)
+        except Exception:
+            conn.rollback()
+            raise
+        current += timedelta(days=1)
+
+
+def get_order_detail(shop: dict, order_ids: list[str], save_debug: bool = True):
     path = "/order/202309/orders"
     all_orders = []
     batch_size = 50
@@ -349,15 +414,11 @@ def get_order_detail(shop: dict, order_ids: list[str]):
 
         data = call_api(shop, "GET", path, params)
 
-        # Debug copy. Separate file per store so TU/VB do not overwrite each other.
-        output_file = (
-            SCRIPT_DIR
-            / f"order_detail_raw_{shop['short_name']}.json"
-        )
-        output_file.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        if save_debug:
+            output_file = SCRIPT_DIR / f"order_detail_raw_{shop['short_name']}.json"
+            output_file.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
         all_orders.extend(data.get("orders", []))
 
@@ -659,6 +720,23 @@ def main():
                 f"[{shop['short_name']}] Missing APP_KEY / APP_SECRET / ACCESS_TOKEN / SHOP_CIPHER."
             )
             return
+
+    if "--history" in args:
+        parser = argparse.ArgumentParser(description="Historical TikTok order import (UTC dates)")
+        parser.add_argument("--history", action="store_true")
+        parser.add_argument("--store", choices=["TU", "VB", "1", "2"])
+        parser.add_argument("--from", dest="start", required=True, type=lambda x: datetime.strptime(x, "%Y-%m-%d").date())
+        parser.add_argument("--to", dest="end", required=True, type=lambda x: datetime.strptime(x, "%Y-%m-%d").date())
+        opts = parser.parse_args(args)
+        conn = db.get_connection()
+        try:
+            db.init_schema(conn)
+            db.init_history_schema(conn)
+            for shop in shops:
+                history_import(conn, shop, opts.start, opts.end)
+        finally:
+            conn.close()
+        return
 
     conn = db.get_connection()
     db.init_schema(conn)
