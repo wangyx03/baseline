@@ -892,6 +892,7 @@ def get_orders_needing_refresh(
             FROM {ORDERS_TABLE} o
             WHERE o.store_id = %s
               AND UPPER(o.status) NOT IN ({cancelled_placeholders})
+              AND UPPER(o.status) <> 'DELIVERED'
 
               AND (
                     (
@@ -981,6 +982,7 @@ def get_stuck_orders(
             FROM {ORDERS_TABLE}
             WHERE store_id = %s
               AND UPPER(status) NOT IN ({cancelled_placeholders})
+              AND UPPER(status) <> 'DELIVERED'
               AND refresh_attempts >= %s
             ORDER BY create_time ASC
             """,
@@ -992,6 +994,23 @@ def get_stuck_orders(
         )
 
         return cur.fetchall()
+    finally:
+        cur.close()
+
+
+def update_order_status_from_webhook(conn, store_id, order_id, status, timestamp):
+    """Apply a timestamped status only if it is newer than saved state."""
+    updated = unix_to_utc_datetime(timestamp)
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""UPDATE {ORDERS_TABLE}
+            SET status=%s, update_time=%s
+            WHERE store_id=%s AND order_id=%s
+              AND (update_time IS NULL OR update_time < %s)
+              AND UPPER(COALESCE(status, '')) NOT IN
+                  ('DELIVERED', 'CANCELED', 'CANCELLED')""",
+            (status, updated, store_id, order_id, updated))
+        return cur.rowcount > 0
     finally:
         cur.close()
 
