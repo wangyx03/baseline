@@ -576,13 +576,23 @@ def manual_refresh(
 # Main
 # ---------------------------------------------------------
 def webhook_order_id(event):
-    """Only recognized order events trigger detail fetches."""
+    """Extract order ID from recognized TikTok Shop order events."""
     event_type = str(event.get('type') or event.get('event_type') or '').upper()
-    if event_type not in {'ORDER_STATUS_CHANGE', 'ORDER_CREATE', 'ORDER_CREATED'}:
+
+    allowed_types = {
+        '1',                    # TikTok Shop order status change
+        'ORDER_STATUS_CHANGE',
+        'ORDER_CREATE',
+        'ORDER_CREATED',
+    }
+
+    if event_type not in allowed_types:
         return None
+
     data = event.get('data') or {}
     if not isinstance(data, dict):
         return None
+
     order_id = data.get('order_id')
     return str(order_id) if order_id else None
 

@@ -222,3 +222,6 @@ __marimo__/
 manual.txt
 schedulec_notes.txt
 book_selection_core_algorithm.txt
+
+order_detail_raw_TU.json
+order_detail_raw_VB.json
