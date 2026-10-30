@@ -223,6 +223,15 @@ def refresh_access_token(shop: dict):
     print(f"[{shop['short_name']}] Token refreshed and saved to .env")
 
 
+class TikTokAPIError(RuntimeError):
+    """API failure with safe metadata; never expose signed URLs or tokens."""
+
+    def __init__(self, message, status_code=None, api_code=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.api_code = api_code
+
+
 def call_api(
     shop: dict,
     method: str,
@@ -231,69 +240,77 @@ def call_api(
     body: dict | None = None,
     _retried: bool = False,
 ):
-    body_str = json.dumps(
-        body,
-        separators=(",", ":"),
-    ) if body else ""
-
-    all_params = build_common_params(shop, params)
-    all_params["sign"] = sign_request(shop, path, all_params, body_str)
-    all_params["access_token"] = shop["access_token"]
-
+    """Retry transient failures with a fresh timestamp/signature each attempt."""
+    body_str = json.dumps(body, separators=(",", ":")) if body else ""
     url = f"{BASE_URL}{path}"
-    headers = {
-        "x-tts-access-token": shop["access_token"],
-        "Content-Type": "application/json",
-    }
+    max_attempts = 6  # initial attempt plus five retries
 
-    if method == "GET":
-        resp = requests.get(
-            url,
-            params=all_params,
-            headers=headers,
-            timeout=15,
-        )
-    else:
-        resp = requests.post(
-            url,
-            params=all_params,
-            headers=headers,
-            data=body_str.encode("utf-8"),
-            timeout=15,
-        )
+    for attempt in range(max_attempts):
+        # Timestamp and signature must be regenerated for every retry.
+        all_params = build_common_params(shop, params)
+        all_params["sign"] = sign_request(shop, path, all_params, body_str)
+        all_params["access_token"] = shop["access_token"]
+        headers = {
+            "x-tts-access-token": shop["access_token"],
+            "Content-Type": "application/json",
+        }
 
-    if not resp.ok:
-        print(
-            f"[{shop['short_name']}] TikTok API error response body: "
-            f"{resp.text}"
-        )
-
-        if resp.status_code == 401 and not _retried:
-            try:
-                error_code = resp.json().get("code")
-            except ValueError:
-                error_code = None
-
-            if error_code == 105002:
-                refresh_access_token(shop)
-                return call_api(
-                    shop,
-                    method,
-                    path,
-                    params,
-                    body,
-                    _retried=True,
+        try:
+            if method == "GET":
+                resp = requests.get(url, params=all_params, headers=headers, timeout=20)
+            else:
+                resp = requests.post(
+                    url, params=all_params, headers=headers,
+                    data=body_str.encode("utf-8"), timeout=20,
                 )
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            if attempt < max_attempts - 1:
+                delay = min(32, 2 ** (attempt + 1))
+                print(f"[{shop['short_name']}] {method} {path}: network error "
+                      f"({type(exc).__name__}), retry {attempt + 1}/5 in {delay}s", flush=True)
+                time.sleep(delay)
+                continue
+            raise TikTokAPIError(
+                f"[{shop['short_name']}] {method} {path}: network failure after retries "
+                f"({type(exc).__name__})"
+            ) from None
 
-    resp.raise_for_status()
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = None
+        api_code = payload.get("code") if isinstance(payload, dict) else None
 
-    data = resp.json()
-    if data.get("code") != 0:
-        raise RuntimeError(
-            f"[{shop['short_name']}] TikTok API error: {data}"
-        )
+        if resp.status_code == 401 and api_code == 105002 and not _retried:
+            refresh_access_token(shop)
+            return call_api(shop, method, path, params, body, _retried=True)
 
-    return data["data"]
+        transient = (resp.status_code in (429, 500, 502, 503, 504)
+                     or api_code == 36009003)
+        if transient and attempt < max_attempts - 1:
+            retry_after = resp.headers.get("Retry-After")
+            try:
+                retry_seconds = int(retry_after)
+            except (ValueError, TypeError):
+                retry_seconds = 0
+            delay = max(min(32, 2 ** (attempt + 1)), min(60, retry_seconds))
+            print(f"[{shop['short_name']}] {method} {path}: "
+                  f"HTTP {resp.status_code}, API code {api_code}; "
+                  f"retry {attempt + 1}/5 in {delay}s", flush=True)
+            time.sleep(delay)
+            continue
+
+        if not resp.ok or not isinstance(payload, dict) or api_code != 0:
+            # Do not call raise_for_status(): requests includes access_token in its URL.
+            request_id = payload.get("request_id") if isinstance(payload, dict) else None
+            raise TikTokAPIError(
+                f"[{shop['short_name']}] {method} {path}: HTTP {resp.status_code}, "
+                f"API code {api_code}, request_id {request_id}",
+                status_code=resp.status_code, api_code=api_code,
+            )
+        return payload["data"]
+
+    raise AssertionError("Unreachable retry state")
 
 
 # ---------------------------------------------------------
@@ -458,24 +475,36 @@ def history_import(conn, shop: dict, start_date, end_date):
 
 
 def get_order_detail(shop: dict, order_ids: list[str], save_debug: bool = True):
+    """Fetch order details; split failed batches without losing any order IDs."""
     path = "/order/202309/orders"
-    all_orders = []
-    batch_size = 50
 
-    for i in range(0, len(order_ids), batch_size):
-        batch = order_ids[i:i + batch_size]
-        params = {"ids": ",".join(batch)}
-
-        data = call_api(shop, "GET", path, params)
+    def fetch_batch(batch):
+        try:
+            data = call_api(shop, "GET", path, {"ids": ",".join(batch)})
+        except TikTokAPIError as exc:
+            # A persistent server-side error for 50 IDs may be caused by a
+            # single problematic order. Split recursively until isolated.
+            if (exc.status_code in (429, 500, 502, 503, 504)
+                    or exc.api_code == 36009003) and len(batch) > 1:
+                middle = len(batch) // 2
+                print(f"[{shop['short_name']}] Detail batch of {len(batch)} failed "
+                      f"after retries; splitting into {middle} + {len(batch)-middle}",
+                      flush=True)
+                return fetch_batch(batch[:middle]) + fetch_batch(batch[middle:])
+            print(f"[{shop['short_name']}] Detail request still failed "
+                  f"for {len(batch)} order(s); IDs: {', '.join(batch[:3])}", flush=True)
+            raise
 
         if save_debug:
             output_file = SCRIPT_DIR / f"order_detail_raw_{shop['short_name']}.json"
             output_file.write_text(
                 json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+        return data.get("orders", [])
 
-        all_orders.extend(data.get("orders", []))
-
+    all_orders = []
+    for i in range(0, len(order_ids), 50):
+        all_orders.extend(fetch_batch(order_ids[i:i + 50]))
     return all_orders
 
 
