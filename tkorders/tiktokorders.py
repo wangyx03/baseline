@@ -342,16 +342,49 @@ def search_new_orders(
 
 
 def iter_order_pages(shop: dict, start_ts: int, end_ts: int, page_size: int = 100):
-    """Stream pages; never hold a whole day of search results in memory."""
+    """Stream UTC-day search pages, stopping at the date boundary if ASC order holds.
+
+    TikTok has been observed returning next_page_token even after the requested
+    date range. We still yield the boundary page so in-range orders are saved.
+    Early stop assumes the API honors its requested ascending create_time sort.
+    """
     page_token = ""
     seen_tokens = set()
+    last_create_time = None
+    page_number = 0
+    sorting_reliable = True
     while True:
+        page_number += 1
         params = {"page_size": page_size, "sort_field": "create_time", "sort_order": "ASC"}
         if page_token:
             params["page_token"] = page_token
         data = call_api(shop, "POST", "/order/202309/orders/search", params,
                         {"create_time_ge": start_ts, "create_time_le": end_ts})
-        yield data.get("orders", []) or []
+        orders = data.get("orders", []) or []
+        past_end = False
+        for order in orders:
+            try:
+                created = int(order["create_time"])
+            except (KeyError, TypeError, ValueError):
+                raise RuntimeError(f"Search result missing valid create_time: {order.get('id')}")
+            if last_create_time is not None and created < last_create_time:
+                if sorting_reliable:
+                    print(f"[{shop['short_name']}] page={page_number}: ASC ordering violated; "
+                          "early stop disabled for this run", flush=True)
+                sorting_reliable = False
+            last_create_time = created
+            if created > end_ts:
+                past_end = True
+
+        yield orders
+
+        # Stop only after yielding the boundary page. If the observed sort
+        # order breaks, fall back to reading all pages with date filtering.
+        if past_end and sorting_reliable:
+            print(f"[{shop['short_name']}] page={page_number}: UTC date boundary reached; "
+                  "stopping pagination early", flush=True)
+            return
+
         next_token = data.get("next_page_token") or ""
         if not next_token:
             return
