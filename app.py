@@ -60,6 +60,7 @@ from bookselection.book_selection_generate import (
 from bookselection.weekly_book_modify import weekly_book_modify_bp
 
 from db import get_db
+from tkorderssearch.orders import orders_bp
 
 
 BASE_DIR = Path(
@@ -157,6 +158,8 @@ app.register_blueprint(
 app.register_blueprint(
     weekly_book_modify_bp
 )
+
+app.register_blueprint(orders_bp)
 
 
 # =========================
