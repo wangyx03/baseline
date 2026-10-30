@@ -712,6 +712,30 @@ def webhook_order_id(event):
     return str(order_id) if order_id else None
 
 
+def webhook_status_update(event):
+    """Return status and timestamp only when the event supplies both.
+
+    Never guess an event timestamp: a status-only event cannot be safely
+    ordered against an already-saved order update.
+    """
+    data = event.get('data') or {}
+    if not isinstance(data, dict):
+        return None
+    status = data.get('order_status') or data.get('status')
+    timestamp = data.get('update_time') or data.get('update_timestamp')
+    if not status or timestamp is None:
+        return None
+    try:
+        timestamp = int(timestamp)
+        if timestamp > 10**12:  # milliseconds
+            timestamp //= 1000
+        if timestamp <= 0:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return str(status), timestamp
+
+
 def run_webhook_worker():
     """Process durable inbox without searching for new orders on a schedule."""
     conn = db.get_connection()
@@ -733,13 +757,38 @@ def run_webhook_worker():
                     db.finish_webhook(conn, row['id'], 'IGNORED')
                     continue
                 shop = SHOPS[row['store_id']]
-                details = get_order_detail(shop, [order_id])
-                if not details:
-                    raise RuntimeError(f'Order not returned yet: {order_id}')
-                store_orders(conn, shop, details, is_refresh=False)
-                conn.commit()
+                existing = db.get_order_summary(conn, shop['store_id'], order_id)
+                if existing:
+                    update = webhook_status_update(event)
+                    if update:
+                        status, timestamp = update
+                        changed = db.update_order_status_from_webhook(
+                            conn, shop['store_id'], order_id, status, timestamp)
+                        conn.commit()
+                        print(f"[{shop['short_name']}] Webhook existing {order_id}: "
+                              f"{'status updated' if changed else 'stale/unchanged'}", flush=True)
+                    else:
+                        # Do not fetch details again for existing orders. If
+                        # this event lacks a usable timestamp/status, keep
+                        # the saved record rather than risking a regression.
+                        print(f"[{shop['short_name']}] Webhook existing {order_id}: "
+                              "no timestamped status; unchanged", flush=True)
+                else:
+                    details = get_order_detail(shop, [order_id], save_debug=False)
+                    if not details:
+                        raise RuntimeError(f'Order not returned yet: {order_id}')
+                    # Another writer (e.g. history import) may have inserted
+                    # the same order during the API request. Never overwrite
+                    # it with an older response.
+                    if db.insert_historical_if_absent(
+                            conn, shop['store_id'], details[0],
+                            extract_line_items(details[0])):
+                        conn.commit()
+                        print(f"[{shop['short_name']}] Webhook inserted {order_id}", flush=True)
+                    else:
+                        conn.commit()
+                        print(f"[{shop['short_name']}] Webhook already inserted {order_id}", flush=True)
                 db.finish_webhook(conn, row['id'], 'DONE')
-                print(f"[{shop['short_name']}] Webhook synced {order_id}", flush=True)
             except Exception as exc:
                 conn.rollback()
                 delay = min(3600, 30 * 2 ** min(row['attempts'], 7))
