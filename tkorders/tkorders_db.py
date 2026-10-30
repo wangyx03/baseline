@@ -1107,3 +1107,77 @@ def finish_webhook(conn, inbox_id, status, error=None, retry_seconds=0):
         conn.commit()
     finally:
         cur.close()
+
+
+# History completion is separate from incremental last_check.
+CREATE_HISTORY_PROGRESS = """
+CREATE TABLE IF NOT EXISTS tkorders_history_progress (
+    store_id SMALLINT UNSIGNED NOT NULL,
+    day_utc DATE NOT NULL,
+    completed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    imported_count INT UNSIGNED NOT NULL DEFAULT 0,
+    existing_count INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (store_id, day_utc),
+    CONSTRAINT fk_tkorders_history_store FOREIGN KEY (store_id)
+      REFERENCES stores(store_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+def init_history_schema(conn):
+    cur = conn.cursor()
+    try:
+        cur.execute(CREATE_HISTORY_PROGRESS)
+        conn.commit()
+    finally:
+        cur.close()
+
+
+def history_day_done(conn, store_id, day):
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT 1 FROM tkorders_history_progress WHERE store_id=%s AND day_utc=%s",
+                    (store_id, day))
+        return cur.fetchone() is not None
+    finally:
+        cur.close()
+
+
+def mark_history_day_done(conn, store_id, day, imported, existing):
+    cur = conn.cursor()
+    try:
+        cur.execute("""INSERT INTO tkorders_history_progress
+            (store_id, day_utc, imported_count, existing_count)
+            VALUES (%s,%s,%s,%s) ON DUPLICATE KEY UPDATE
+            completed_at=CURRENT_TIMESTAMP, imported_count=VALUES(imported_count),
+            existing_count=VALUES(existing_count)""",
+            (store_id, day, imported, existing))
+    finally:
+        cur.close()
+
+
+def existing_order_ids(conn, store_id, order_ids):
+    if not order_ids:
+        return set()
+    cur = conn.cursor()
+    try:
+        placeholders = ",".join(["%s"] * len(order_ids))
+        cur.execute(f"SELECT order_id FROM {ORDERS_TABLE} WHERE store_id=%s AND order_id IN ({placeholders})",
+                    (store_id, *order_ids))
+        return {str(row[0]) for row in cur.fetchall()}
+    finally:
+        cur.close()
+
+
+def insert_historical_if_absent(conn, store_id, order, line_items):
+    """Lock existing order row to avoid overwriting a newer webhook update."""
+    cur = conn.cursor()
+    try:
+        cur.execute(f"SELECT 1 FROM {ORDERS_TABLE} WHERE store_id=%s AND order_id=%s FOR UPDATE",
+                    (store_id, str(order["id"])))
+        if cur.fetchone():
+            return False
+        upsert_order(conn, store_id, order, line_items, is_refresh=False)
+        return True
+    finally:
+        cur.close()
