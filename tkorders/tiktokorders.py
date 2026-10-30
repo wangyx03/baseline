@@ -378,7 +378,22 @@ def history_import(conn, shop: dict, start_date, end_date):
         try:
             for results in iter_order_pages(shop, start_ts, end_ts):
                 pages += 1
-                ids = list(dict.fromkeys(str(o["id"]) for o in results if o.get("id")))
+                # The API may continue pagination beyond the requested date window.
+                # Enforce the UTC window locally before fetching order details.
+                valid_results = []
+                outside_count = 0
+                for order in results:
+                    try:
+                        created = int(order["create_time"])
+                    except (KeyError, TypeError, ValueError):
+                        raise RuntimeError(f"Search result missing valid create_time: {order.get('id')}")
+                    if start_ts <= created <= end_ts:
+                        valid_results.append(order)
+                    else:
+                        outside_count += 1
+                if outside_count:
+                    print(f"[{shop['short_name']}] {day} page={pages}: ignored {outside_count} outside-date orders", flush=True)
+                ids = list(dict.fromkeys(str(o["id"]) for o in valid_results if o.get("id")))
                 existing = db.existing_order_ids(conn, shop["store_id"], ids)
                 missing = [oid for oid in ids if oid not in existing]
                 skipped += len(ids) - len(missing)
@@ -389,6 +404,12 @@ def history_import(conn, shop: dict, start_date, end_date):
                     if absent:
                         raise RuntimeError(f"Detail API omitted {len(absent)} order(s): {sorted(absent)[:3]}")
                     for order in details:
+                        try:
+                            detail_ts = int(order["create_time"])
+                        except (KeyError, TypeError, ValueError):
+                            raise RuntimeError(f"Detail missing valid create_time: {order.get('id')}")
+                        if not start_ts <= detail_ts <= end_ts:
+                            raise RuntimeError(f"Detail outside requested UTC date: {order.get('id')}")
                         if db.insert_historical_if_absent(conn, shop["store_id"], order,
                                                            extract_line_items(order)):
                             imported += 1
