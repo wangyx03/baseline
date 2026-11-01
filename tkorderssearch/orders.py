@@ -282,7 +282,7 @@ def export_csv():
                     local_time = (created.replace(tzinfo=timezone.utc)
                                   .astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')) if created else ''
                     values = [
-                        'TU' if r['store_id'] == 1 else 'VB' if r['store_id'] == 2 else r['store_id'],
+                        'TruthUnfolds' if r['store_id'] == 1 else 'VesperBooks' if r['store_id'] == 2 else r['store_id'],
                         r['order_id'], r['status'], r['order_type'], local_time,
                         r['product_id'], r['seller_sku'], r['product_name'],
                         r['quantity'] if r['quantity'] is not None else '',
