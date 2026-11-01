@@ -26,6 +26,19 @@ SEARCH_FIELDS = {'order_id': 'o.order_id', 'product_id': 'i.product_id',
                  'product_name': 'i.product_name', 'seller_sku': 'i.seller_sku'}
 
 
+def _effective_params(params):
+    """Default to the latest seven calendar days, inclusive, in the selected timezone.
+
+    Preserve explicitly supplied dates and all other filters.
+    """
+    effective = params.copy()
+    if 'from' not in effective and 'to' not in effective:
+        today = datetime.now(ZoneInfo(_selected_timezone(effective))).date()
+        effective.setlist('from', [(today - timedelta(days=6)).isoformat()])
+        effective.setlist('to', [today.isoformat()])
+    return effective
+
+
 def _day_bound(value, tz_name, end=False):
     if not value:
         return None
@@ -107,12 +120,13 @@ def _rows(cursor, sql, args=()):
 @orders_bp.route('/', methods=['GET'])
 @module_required(MODULE_TIKTOK_ORDERS)
 def page():
+    params = _effective_params(request.args)
     page_number = max(1, min(request.args.get('page', 1, type=int) or 1, 100000))
     per_page = 50
     sort_dir = "asc" if request.args.get("sort") == "asc" else "desc"
-    tz_name = _selected_timezone(request.args)
+    tz_name = _selected_timezone(params)
     display_tz = ZoneInfo(tz_name)
-    where, args = _filters(request.args)
+    where, args = _filters(params)
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     try:
@@ -168,19 +182,19 @@ def page():
             if order['create_time']:
                 order['create_time_local'] = order['create_time'].replace(tzinfo=timezone.utc).astimezone(display_tz).strftime('%Y-%m-%d %I:%M %p')
         # Facets use all active filters except their own dimension.
-        status_where, status_args = _filters(request.args, {'status'})
+        status_where, status_args = _filters(params, {'status'})
         statuses = _rows(cur, 'SELECT o.status AS value, COUNT(*) AS n FROM tkorders o' + status_where + ' GROUP BY o.status ORDER BY n DESC', status_args)
         existing_statuses = {s['value'] for s in statuses}
-        for selected in request.args.getlist('status'):
+        for selected in params.getlist('status'):
             if selected and selected not in ('all','__none__') and selected not in existing_statuses:
                 statuses.append({'value': selected, 'n': 0})
-        type_where, type_args = _filters(request.args, {'order_type'})
+        type_where, type_args = _filters(params, {'order_type'})
         order_types = _rows(cur, 'SELECT o.order_type AS value, COUNT(*) AS n FROM tkorders o' + type_where + ' GROUP BY o.order_type ORDER BY n DESC', type_args)
         known_types = {t['value'] for t in order_types if t['value']}
-        for selected in request.args.getlist('order_type'):
+        for selected in params.getlist('order_type'):
             if selected not in ('', 'all', '__none__', '__null__') and selected not in known_types:
                 order_types.append({'value': selected, 'n': 0})
-        warehouse_where, warehouse_args = _filters(request.args, {'warehouse'})
+        warehouse_where, warehouse_args = _filters(params, {'warehouse'})
         warehouses = _rows(cur, '''SELECT w.store_id, w.warehouse_id, w.warehouse,
             COUNT(o.order_id) AS n FROM warehouses w
             LEFT JOIN tkorders o ON o.store_id=w.store_id AND o.warehouse_id=w.warehouse_id
@@ -197,20 +211,21 @@ def page():
     return render_template('orders.html', orders=orders, total=total, total_products=total_products, page=page_number,
                            pages=max(1, (total + per_page - 1) // per_page),
                            statuses=statuses, order_types=order_types, warehouses=all_warehouses,
-                           selected_stores=request.args.getlist('store'),
-                           selected_statuses=request.args.getlist('status'),
-                           selected_order_types=request.args.getlist('order_type'),
-                           selected_warehouses=request.args.getlist('warehouse'),
-                           params=request.args, sort_dir=sort_dir, selected_tz=tz_name, tz_label=TIME_ZONES[tz_name], time_zones=TIME_ZONES)
+                           selected_stores=params.getlist('store'),
+                           selected_statuses=params.getlist('status'),
+                           selected_order_types=params.getlist('order_type'),
+                           selected_warehouses=params.getlist('warehouse'),
+                           params=params, sort_dir=sort_dir, selected_tz=tz_name, tz_label=TIME_ZONES[tz_name], time_zones=TIME_ZONES)
 
 
 @orders_bp.route('/export.csv', methods=['GET'])
 @module_required(MODULE_TIKTOK_ORDERS)
 def export_csv():
     """Export all matching orders, one CSV row per line item (not one per order)."""
-    tz_name = _selected_timezone(request.args)
+    params = _effective_params(request.args)
+    tz_name = _selected_timezone(params)
     display_tz = ZoneInfo(tz_name)
-    where, args = _filters(request.args)
+    where, args = _filters(params)
     sort_dir = "ASC" if request.args.get('sort') == 'asc' else "DESC"
     headers = [
         'Store', 'Order ID', 'Status', 'Tag', 'Created Time',
