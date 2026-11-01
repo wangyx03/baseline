@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}TikTok Orders{% endblock %}
 {% block styles %}
-.orders-page{max-width:1600px;margin:25px auto;padding:0 22px}.filters,.results{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;margin-bottom:16px}.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.field label{display:block;font-size:12px;color:#596273;margin-bottom:6px}.field input,.field select,.multi-toggle{width:100%;border:1px solid #d5dbe3;border-radius:7px;padding:10px;font:inherit;background:white;color:#202735}.multi{position:relative}.multi-toggle{text-align:left;cursor:pointer}.multi-panel{position:absolute;z-index:20;top:100%;left:0;right:0;max-height:300px;overflow:auto;background:white;border:1px solid #cbd5e1;box-shadow:0 8px 24px #0002;border-radius:8px;padding:9px}.multi-panel[hidden]{display:none}.multi-panel label{display:flex;align-items:center;gap:7px;padding:7px 3px;font-size:13px;color:#202735;cursor:pointer}.multi-panel input[type=checkbox]{width:auto}.multi-search{width:100%;padding:8px;border:1px solid #d5dbe3;border-radius:6px}.small{color:#667085;font-size:12px}.actions{display:flex;gap:10px;align-items:center;margin-top:15px}.btn{padding:10px 15px;background:#1769aa;color:white;border:0;border-radius:7px;cursor:pointer;text-decoration:none}.btn.secondary{background:#edf1f5;color:#344054}.table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:11px 9px;border-bottom:1px solid #e9edf2;text-align:left;vertical-align:top}th{white-space:nowrap;background:#f8fafc}.paging{display:flex;justify-content:space-between;align-items:center;margin-top:16px}.mono{font-family:ui-monospace,monospace}.nowrap{white-space:nowrap}
+.orders-page{max-width:1600px;margin:25px auto;padding:0 22px}.filters,.results{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;margin-bottom:16px}.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.field label{display:block;font-size:12px;color:#596273;margin-bottom:6px}.field input,.field select,.multi-toggle{width:100%;border:1px solid #d5dbe3;border-radius:7px;padding:10px;font:inherit;background:white;color:#202735}.multi{position:relative}.multi-toggle{text-align:left;cursor:pointer}.multi-panel{position:absolute;z-index:20;top:100%;left:0;right:0;max-height:300px;overflow:auto;background:white;border:1px solid #cbd5e1;box-shadow:0 8px 24px #0002;border-radius:8px;padding:9px}.multi-panel[hidden]{display:none}.multi-panel label{display:flex;align-items:center;gap:7px;padding:7px 3px;font-size:13px;color:#202735;cursor:pointer}.multi-panel input[type=checkbox]{width:auto}.multi-search{width:100%;padding:8px;border:1px solid #d5dbe3;border-radius:6px}.small{color:#667085;font-size:12px}.actions{display:flex;gap:10px;align-items:center;margin-top:15px}.btn{padding:10px 15px;background:#1769aa;color:white;border:0;border-radius:7px;cursor:pointer;text-decoration:none}.btn.secondary{background:#edf1f5;color:#344054}.table-scroll{overflow-x:auto;scrollbar-width:thin}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:11px 9px;border-bottom:1px solid #e9edf2;text-align:left;vertical-align:top}th{white-space:nowrap;background:#f8fafc}.paging{display:flex;justify-content:space-between;align-items:center;margin-top:16px}.mono{font-family:ui-monospace,monospace}.nowrap{white-space:nowrap}
 .calendar-range-field {
     position: relative;
     min-width: 310px;
@@ -159,6 +159,12 @@
 
 .orders-search-row{grid-column:1/-1}.orders-search-row input{width:100%}.calendar-range-field{min-width:310px}.date-range-button{width:100%}
 .created-sort{border:0;background:transparent;font:inherit;font-weight:inherit;color:inherit;cursor:pointer;padding:0;white-space:nowrap}.created-sort:hover{text-decoration:underline}
+/* Floating horizontal scrollbar follows the visible table viewport. */
+.results .table-scroll{scrollbar-width:none}
+.results .table-scroll::-webkit-scrollbar{display:none}
+.order-bottom-scroll{position:fixed;bottom:10px;left:0;width:100px;z-index:1050;overflow-x:scroll;overflow-y:hidden;height:20px;background:#f1f3f6;border:1px solid #d9dee7;border-radius:6px;scrollbar-width:auto;box-sizing:border-box;display:none}
+.order-bottom-scroll-inner{height:1px}
+.actions .download-csv-btn{margin-left:auto;background:#c9efd4;color:#185b32;border:1px solid #9edbb2;font-weight:600;white-space:nowrap}.actions .download-csv-btn:hover{background:#afe5c0}
 {% endblock %}
 {% block content %}
 <div class="orders-page"><h1>TikTok Orders</h1><p class="small">Read-only order search · Dates shown in selected time zone</p>
@@ -166,8 +172,8 @@
 <div class="filter-grid">
 <div class="field"><label>Store (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="stores">Select stores ▾</button><div class="multi-panel" id="stores" hidden><label><input type="checkbox" class="select-all" data-all="stores" checked> All</label><label><input type="checkbox" name="store" value="1" {% if '1' in selected_stores %}checked{% endif %}> Truth Unfolds (TU)</label><label><input type="checkbox" name="store" value="2" {% if '2' in selected_stores %}checked{% endif %}> Vesper Books (VB)</label></div></div></div>
 <div class="field"><label>Order Status (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="statuses">Select statuses ▾</button><div class="multi-panel" id="statuses" hidden><label><input type="checkbox" class="select-all" data-all="statuses" checked> All</label>{% for s in statuses %}{% if s.value %}<label><input type="checkbox" name="status" value="{{ s.value }}" {% if s.value in selected_statuses %}checked{% endif %}> {{ s.value }} <span class="small">({{ s.n }})</span></label>{% endif %}{% endfor %}</div></div></div>
+<div class="field"><label>Order Type (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="orderTypes">Order Type: All ▾</button><div class="multi-panel" id="orderTypes" hidden><label><input type="checkbox" class="select-all" data-all="orderTypes" checked> All</label>{% for t in order_types %}{% if t.value %}<label><input type="checkbox" name="order_type" value="{{ t.value }}" {% if t.value in selected_order_types %}checked{% endif %}> {{ t.value }} <span class="small">({{ t.n }})</span></label>{% endif %}{% endfor %}{% if order_types | selectattr('value', 'none') | list %}<label><input type="checkbox" name="order_type" value="__null__" {% if '__null__' in selected_order_types %}checked{% endif %}> Unspecified</label>{% endif %}</div></div></div>
 <div class="field"><label>Warehouse (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="warehouses">Select warehouses ▾</button><div class="multi-panel" id="warehouses" hidden><label><input type="checkbox" class="select-all" data-all="warehouses" checked> All</label><input class="multi-search" type="search" placeholder="Search warehouse / ID" data-search="warehouses">{% for w in warehouses %}<label data-option="{{ w.warehouse|lower }} {{ w.warehouse_id }} {{ w.store_id }}"><input type="checkbox" name="warehouse" value="{{ w.store_id }}:{{ w.warehouse_id }}" {% if (w.store_id|string ~ ":" ~ w.warehouse_id|string) in selected_warehouses %}checked{% endif %}> {{ w.warehouse }} ({{ 'TU' if w.store_id == 1 else 'VB' }}) <span class="small">{{ w.n }}</span></label>{% endfor %}</div></div></div>
-<div class="field"><label>Order Tag · LIVE Giveaway</label><select name="giveaway"><option value="all" {% if giveaway=='all' %}selected{% endif %}>All orders</option><option value="include" {% if giveaway=='include' %}selected{% endif %}>Include LIVE Giveaway</option><option value="exclude" {% if giveaway=='exclude' %}selected{% endif %}>Exclude LIVE Giveaway</option></select></div>
 <div class="field"><label>Time Zone</label><select name="tz">{% for zone, short in time_zones.items() %}<option value="{{ zone }}" {% if selected_tz == zone %}selected{% endif %}>{{ short }} ({{ zone }})</option>{% endfor %}</select></div><div class="field"><label>Seller SKUs</label><select name="sku_rule">
 <option value="all" {% if params.get('sku_rule','all') == 'all' %}selected{% endif %}>All Seller SKUs</option>
 <option value="match" {% if params.get('sku_rule') == 'match' %}selected{% endif %}>Starts with 9 · 13 digits</option>
@@ -266,9 +272,44 @@
 <input type="hidden" name="from" id="ordersFrom" value="{{ params.get('from','') }}">
 <input type="hidden" name="to" id="ordersTo" value="{{ params.get('to','') }}">
 <div class="field orders-search-row"><label>Search</label><input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Order ID, Product ID, Product Name, Seller SKU, Tracking"></div>
-</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span></div>
+</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn download-csv-btn" type="submit" formaction="{{ url_for('orders.export_csv') }}" formmethod="get">Download CSV</button></div>
 </form>
-<section class="results"><h2>{{ total }} matching orders</h2><div class="table-scroll"><table><thead><tr><th>Store</th><th>Order ID</th><th>Status</th><th>Tag</th><th><button type="button" class="created-sort" onclick="toggleCreatedSort()" title="Toggle created time sorting">Created ({{ tz_label }}) <span aria-hidden="true">{{ "↑" if sort_dir == "asc" else "↓" }}</span></button></th><th>Warehouse</th><th>Products</th><th>Seller SKUs</th><th>Tracking</th></tr></thead><tbody>{% for o in orders %}<tr><td>{{ 'TU' if o.store_id==1 else 'VB' }}</td><td class="mono nowrap">{{ o.order_id }}</td><td>{{ o.status or '—' }}</td><td>{{ 'LIVE Giveaway' if o.order_type=='ZERO_LOTTERY' else '—' }}</td><td class="nowrap">{{ o.create_time_local or '—' }}</td><td>{{ o.warehouse_name or o.warehouse_id or '—' }}</td><td>{{ o.products or '—' }}</td><td>{{ o.skus or '—' }}</td><td class="nowrap">{{ o.tracking or '—' }}</td></tr>{% else %}<tr><td colspan="9">No matching orders.</td></tr>{% endfor %}</tbody></table></div>
+<style>
+.order-main-row td { vertical-align: middle; }
+.order-summary { display:block; max-width:270px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.order-expand { border:1px solid #d5dbe3; background:#fff; border-radius:6px; padding:5px 9px; cursor:pointer; font:inherit; color:#1769aa; margin-top:5px; white-space:nowrap; }
+.order-expand:hover { background:#eef5fc; }
+.order-details-row td { background:#f8fafc; padding:12px 18px; }
+.order-details-table { width:100%; border-collapse:collapse; font-size:13px; }
+.order-details-table th,.order-details-table td { padding:8px 10px; border-bottom:1px solid #e5e7eb; }
+.order-details-table th { background:#eef2f7; }
+</style>
+<section class="results"><h2>{{ total }} matching orders · {{ total_products }} total products (Qty)</h2><div class="table-scroll"><table><thead><tr><th>Store</th><th>Order ID</th><th>Status</th><th>Order Type</th><th><button type="button" class="created-sort" onclick="toggleCreatedSort()" title="Toggle created time sorting">Created ({{ tz_label }}) <span aria-hidden="true">{{ "↑" if sort_dir == "asc" else "↓" }}</span></button></th><th>Warehouse</th><th>Seller SKUs</th><th>Products</th><th>Qty</th><th>Tracking</th></tr></thead><tbody>{% for o in orders %}
+<tr class="order-main-row">
+<td>{{ 'TU' if o.store_id==1 else 'VB' }}</td>
+<td class="mono nowrap">{{ o.order_id }}</td>
+<td>{{ o.status or '—' }}</td>
+<td>{{ o.order_type or '—' }}</td>
+<td class="nowrap">{{ o.create_time_local or '—' }}</td>
+<td>{{ o.warehouse_name or o.warehouse_id or '—' }}</td>
+<td>
+  <span class="order-summary" title="{{ o.first_item.seller_sku if o.first_item else '' }}">{{ (o.first_item.seller_sku or '—') if o.first_item else '—' }}</span>
+  {% if o.item_count > 1 %}<button class="order-expand" type="button" aria-expanded="false" aria-controls="order-items-{{ loop.index }}" onclick="toggleOrderItems(this)">Show {{ o.item_count }} items ▾</button>{% endif %}
+</td>
+<td><span class="order-summary" title="{{ o.first_item.product_name if o.first_item else '' }}">{{ (o.first_item.product_name or '—') if o.first_item else '—' }}</span></td>
+<td>{{ o.total_qty }}</td>
+<td class="nowrap">{{ o.tracking or '—' }}</td>
+</tr>
+{% if o.item_count > 1 %}
+<tr id="order-items-{{ loop.index }}" class="order-details-row" hidden>
+<td colspan="10">
+  <strong>Order {{ o.order_id }} · {{ o.item_count }} line items</strong>
+  <table class="order-details-table"><thead><tr><th>Seller SKU</th><th>Product</th><th>Product ID</th><th>Quantity</th></tr></thead>
+  <tbody>{% for item in o.line_items %}<tr><td>{{ item.seller_sku or '—' }}</td><td>{{ item.product_name or '—' }}</td><td>{{ item.product_id or '—' }}</td><td>{{ item.quantity }}</td></tr>{% endfor %}</tbody></table>
+</td></tr>
+{% endif %}
+{% else %}<tr><td colspan="10">No matching orders.</td></tr>{% endfor %}</tbody></table></div>
+<div class="order-bottom-scroll" id="orderBottomScroll" aria-label="Horizontal order table scrollbar" tabindex="0"><div class="order-bottom-scroll-inner" id="orderBottomScrollInner"></div></div>
 <div class="paging"><span class="small">Page {{ page }} of {{ pages }}</span><div>{% if page>1 %}<button class="btn secondary" type="button" onclick="goPage({{ page-1 }})">Previous</button>{% endif %} {% if page<pages %}<button class="btn secondary" type="button" onclick="goPage({{ page+1 }})">Next</button>{% endif %}</div></div></section></div>
 {% endblock %}
 {% block scripts %}<script>
@@ -808,7 +849,7 @@ document.addEventListener(
 updateDateRangeText(); renderCalendar();
 
 // Multiple selections are staged locally; empty and all-selected both mean no restriction.
-const multiConfig = {stores:'store', statuses:'status', warehouses:'warehouse'};
+const multiConfig = {stores:'store', statuses:'status', orderTypes:'order_type', warehouses:'warehouse'};
 function syncMulti(id) {
  const panel=document.getElementById(id);
  const boxes=[...panel.querySelectorAll('input[type=checkbox]:not(.select-all)')];
@@ -816,7 +857,7 @@ function syncMulti(id) {
  const all=panel.querySelector('.select-all');
  all.checked=count===0 || count===boxes.length;
  all.indeterminate=false;
- const label={stores:'Store',statuses:'Order Status',warehouses:'Warehouse'}[id];
+ const label={stores:'Store',statuses:'Order Status',orderTypes:'Order Type',warehouses:'Warehouse'}[id];
  document.querySelector('[data-toggle="'+id+'"]').textContent =
   label+': '+(all.checked?'All':count+' selected')+' ▾';
 }
@@ -857,6 +898,45 @@ function toggleCreatedSort(){
  u.searchParams.set('page','1');
  location.href=u.toString();
 }
+function toggleOrderItems(button) {
+ const row=document.getElementById(button.getAttribute('aria-controls'));
+ const opening=row.hidden;
+ row.hidden=!opening;
+ button.setAttribute('aria-expanded', String(opening));
+ const count=row.querySelectorAll('.order-details-table tbody tr').length;
+ button.textContent=opening ? 'Hide items ▴' : `Show ${count} items ▾`;
+}
 function goPage(n){let u=new URL(location.href);u.searchParams.set('page',n);location.href=u.toString()}
+// Floating scrollbar: show only while the table extends below the viewport.
+(function () {
+ const tableScroll=document.querySelector('.results .table-scroll');
+ const bottom=document.getElementById('orderBottomScroll');
+ const inner=document.getElementById('orderBottomScrollInner');
+ if(!tableScroll || !bottom || !inner) return;
+ let syncing=false;
+ function refresh(){
+   const rect=tableScroll.getBoundingClientRect();
+   const overflow=tableScroll.scrollWidth>tableScroll.clientWidth+1;
+   const visible=rect.top<window.innerHeight-35 && rect.bottom>window.innerHeight-5;
+   bottom.style.display=(overflow && visible)?'block':'none';
+   if(!overflow || !visible)return;
+   bottom.style.left=Math.max(0,rect.left)+'px';
+   bottom.style.width=Math.min(rect.width,window.innerWidth-Math.max(0,rect.left))+'px';
+   inner.style.width=tableScroll.scrollWidth+'px';
+   bottom.scrollLeft=tableScroll.scrollLeft;
+ }
+ tableScroll.addEventListener('scroll',()=>{
+   if(syncing)return;
+   syncing=true;bottom.scrollLeft=tableScroll.scrollLeft;syncing=false;
+ },{passive:true});
+ bottom.addEventListener('scroll',()=>{
+   if(syncing)return;
+   syncing=true;tableScroll.scrollLeft=bottom.scrollLeft;syncing=false;
+ },{passive:true});
+ window.addEventListener('resize',refresh);
+ window.addEventListener('scroll',refresh,{passive:true});
+ if(window.ResizeObserver){new ResizeObserver(refresh).observe(tableScroll);}
+ refresh();
+})();
 // Preserve the dropdown while checking multiple options; submit only on Search Orders.
 </script>{% endblock %}
