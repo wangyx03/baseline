@@ -779,6 +779,19 @@ def upsert_order(
             params,
         )
 
+        # Preserve tracking already received from a package notification when
+        # a later Order Detail snapshot omits it. Do not erase known tracking.
+        cur.execute(
+            f"SELECT line_item_id, tracking_number FROM {ITEMS_TABLE} "
+            "WHERE store_id=%s AND order_id=%s AND tracking_number IS NOT NULL "
+            "AND tracking_number<>''",
+            (store_id, order.get("id")),
+        )
+        previous_tracking = {str(line_id): tracking for line_id, tracking in cur.fetchall()}
+        for li in line_items:
+            if not li.get("tracking_number"):
+                li["tracking_number"] = previous_tracking.get(str(li.get("line_item_id")))
+
         # The Order Detail API returns the current complete line-item list.
         # Replace this order's items atomically inside the same transaction.
         cur.execute(

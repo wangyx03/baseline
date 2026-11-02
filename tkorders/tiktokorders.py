@@ -843,10 +843,25 @@ def run_webhook_worker():
     db.init_schema(conn)
     db.init_webhook_schema(conn)
     print('Webhook worker started (Ctrl+C to stop)', flush=True)
+    # Backfill only when the inbox is idle; no separate polling service needed.
+    # Set TTS_WEBHOOK_BACKFILL_SECONDS=0 to disable.
+    backfill_interval = max(0, int(os.environ.get('TTS_WEBHOOK_BACKFILL_SECONDS', '300')))
+    next_backfill = time.monotonic() + backfill_interval
     try:
         while True:
             row = db.claim_webhook(conn)
             if not row:
+                if backfill_interval and time.monotonic() >= next_backfill:
+                    next_backfill = time.monotonic() + backfill_interval
+                    for shop in SHOPS.values():
+                        if not shop_is_configured(shop):
+                            continue
+                        try:
+                            run_backfill(conn, shop)
+                        except Exception as exc:
+                            conn.rollback()
+                            print(f"[{shop['short_name']}] Webhook idle backfill failed: {exc}", flush=True)
+                    next_backfill = time.monotonic() + backfill_interval
                 time.sleep(2)
                 continue
             try:
