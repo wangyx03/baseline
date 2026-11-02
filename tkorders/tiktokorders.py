@@ -866,37 +866,33 @@ def run_webhook_worker():
                     db.finish_webhook(conn, row['id'], 'IGNORED')
                     continue
                 shop = SHOPS[row['store_id']]
-                existing = db.get_order_summary(conn, shop['store_id'], order_id)
-                if existing:
-                    update = webhook_status_update(event)
-                    if update:
-                        status, timestamp = update
-                        changed = db.update_order_status_from_webhook(
-                            conn, shop['store_id'], order_id, status, timestamp)
-                        conn.commit()
-                        print(f"[{shop['short_name']}] Webhook existing {order_id}: "
-                              f"{'status updated' if changed else 'stale/unchanged'}", flush=True)
-                    else:
-                        # Do not fetch details again for existing orders. If
-                        # this event lacks a usable timestamp/status, keep
-                        # the saved record rather than risking a regression.
-                        print(f"[{shop['short_name']}] Webhook existing {order_id}: "
-                              "no timestamped status; unchanged", flush=True)
+                # Type 1: fetch the latest complete order on every notification.
+                # This also syncs tracking when the order moves to AWAITING_COLLECTION.
+                details = get_order_detail(shop, [order_id], save_debug=False)
+                matching = [order for order in details if str(order.get('id')) == order_id]
+                if len(matching) != 1:
+                    raise RuntimeError(f'Webhook detail missing/ambiguous order: {order_id}')
+                order = matching[0]
+
+                # Do not let an older API snapshot regress a newer stored order.
+                cur = conn.cursor(dictionary=True)
+                try:
+                    cur.execute(
+                        "SELECT update_time FROM tkorders WHERE store_id=%s AND order_id=%s",
+                        (shop['store_id'], order_id))
+                    stored = cur.fetchone()
+                finally:
+                    cur.close()
+                incoming_time = db.unix_to_utc_datetime(order.get('update_time'))
+                if (stored and stored['update_time'] is not None and incoming_time is not None
+                        and incoming_time < stored['update_time']):
+                    print(f"[{shop['short_name']}] Webhook {order_id}: "
+                          "stale API snapshot; skipped", flush=True)
                 else:
-                    details = get_order_detail(shop, [order_id], save_debug=False)
-                    if not details:
-                        raise RuntimeError(f'Order not returned yet: {order_id}')
-                    # Another writer (e.g. history import) may have inserted
-                    # the same order during the API request. Never overwrite
-                    # it with an older response.
-                    if db.insert_historical_if_absent(
-                            conn, shop['store_id'], details[0],
-                            extract_line_items(details[0])):
-                        conn.commit()
-                        print(f"[{shop['short_name']}] Webhook inserted {order_id}", flush=True)
-                    else:
-                        conn.commit()
-                        print(f"[{shop['short_name']}] Webhook already inserted {order_id}", flush=True)
+                    store_orders(conn, shop, [order], is_refresh=False)
+                    conn.commit()
+                    print(f"[{shop['short_name']}] Webhook full sync {order_id}: "
+                          f"status={order.get('status')}", flush=True)
                 db.finish_webhook(conn, row['id'], 'DONE')
             except Exception as exc:
                 conn.rollback()
