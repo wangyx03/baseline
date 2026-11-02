@@ -765,6 +765,58 @@ def webhook_status_update(event):
     return str(status), timestamp
 
 
+def package_event_order_ids(event):
+    """Return distinct order IDs linked to a Type 4 package notification."""
+    if str(event.get('type') or event.get('event_type') or '').upper() not in ('4', 'PACKAGE_UPDATE'):
+        return None
+    data = event.get('data') or {}
+    if not isinstance(data, dict):
+        raise ValueError('Package event data is not an object')
+    packages = data.get('package_list') or []
+    if not isinstance(packages, list):
+        raise ValueError('Package event package_list is not a list')
+    ids = []
+    for package in packages:
+        if not isinstance(package, dict):
+            raise ValueError('Package event contains invalid package')
+        order_ids = package.get('order_id_list') or []
+        if not isinstance(order_ids, list):
+            raise ValueError('Package event order_id_list is not a list')
+        ids.extend(str(oid) for oid in order_ids if oid)
+    return list(dict.fromkeys(ids))
+
+
+def sync_package_tracking(conn, shop, order_ids):
+    """Refresh tracking only, without overwriting newer order status/other fields."""
+    if not order_ids:
+        return 0
+    details = get_order_detail(shop, order_ids, save_debug=False)
+    found = {str(o.get('id')) for o in details}
+    missing = set(order_ids) - found
+    if missing:
+        raise RuntimeError(f'Package detail missing orders: {sorted(missing)[:3]}')
+    cur = conn.cursor()
+    changed = 0
+    try:
+        for order in details:
+            oid = str(order['id'])
+            for item in extract_line_items(order):
+                tracking = item.get('tracking_number')
+                line_id = item.get('line_item_id')
+                if not tracking or not line_id:
+                    continue
+                cur.execute("""UPDATE tkorders_items
+                    SET tracking_number=%s
+                    WHERE store_id=%s AND order_id=%s AND line_item_id=%s
+                      AND (tracking_number IS NULL OR tracking_number<>%s)""",
+                    (tracking, shop['store_id'], oid, str(line_id), tracking))
+                changed += cur.rowcount
+        conn.commit()
+    finally:
+        cur.close()
+    return changed
+
+
 def run_webhook_worker():
     """Process durable inbox without searching for new orders on a schedule."""
     conn = db.get_connection()
@@ -781,6 +833,14 @@ def run_webhook_worker():
                 event = row['payload']
                 if isinstance(event, str):
                     event = json.loads(event)
+                package_ids = package_event_order_ids(event)
+                if package_ids is not None:
+                    shop = SHOPS[row['store_id']]
+                    changed = sync_package_tracking(conn, shop, package_ids)
+                    print(f"[{shop['short_name']}] Package update: "
+                          f"orders={len(package_ids)} tracking_rows_updated={changed}", flush=True)
+                    db.finish_webhook(conn, row['id'], 'DONE')
+                    continue
                 order_id = webhook_order_id(event)
                 if not order_id:
                     db.finish_webhook(conn, row['id'], 'IGNORED')
