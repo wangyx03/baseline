@@ -787,20 +787,33 @@ def package_event_order_ids(event):
 
 
 def sync_package_tracking(conn, shop, order_ids):
-    """Refresh tracking only, without overwriting newer order status/other fields."""
-    if not order_ids:
-        return 0
-    details = get_order_detail(shop, order_ids, save_debug=False)
-    found = {str(o.get('id')) for o in details}
-    missing = set(order_ids) - found
-    if missing:
-        raise RuntimeError(f'Package detail missing orders: {sorted(missing)[:3]}')
-    cur = conn.cursor()
+    """Update tracking per order; isolate unavailable package-linked IDs.
+
+    A 21008111 response is not proof of deletion. Never delete local data.
+    Successful orders are committed individually so retries are idempotent.
+    """
     changed = 0
-    try:
-        for order in details:
-            oid = str(order['id'])
-            for item in extract_line_items(order):
+    skipped = 0
+    for oid in dict.fromkeys(str(value) for value in order_ids if value):
+        try:
+            details = get_order_detail(shop, [oid], save_debug=False)
+        except TikTokAPIError as exc:
+            if str(exc.api_code) == '21008111':
+                existing = db.get_order_summary(conn, shop['store_id'], oid)
+                print(f"[{shop['short_name']}] Package order {oid}: "
+                      f"API 21008111, local={'EXISTS' if existing else 'NOT_FOUND'}; "
+                      "retained existing data, skipped tracking refresh", flush=True)
+                skipped += 1
+                continue
+            raise
+
+        matching = [order for order in details if str(order.get('id')) == oid]
+        if len(matching) != 1:
+            raise RuntimeError(f'Package detail missing/ambiguous order: {oid}')
+
+        cur = conn.cursor()
+        try:
+            for item in extract_line_items(matching[0]):
                 tracking = item.get('tracking_number')
                 line_id = item.get('line_item_id')
                 if not tracking or not line_id:
@@ -811,9 +824,16 @@ def sync_package_tracking(conn, shop, order_ids):
                       AND (tracking_number IS NULL OR tracking_number<>%s)""",
                     (tracking, shop['store_id'], oid, str(line_id), tracking))
                 changed += cur.rowcount
-        conn.commit()
-    finally:
-        cur.close()
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+
+    if skipped:
+        print(f"[{shop['short_name']}] Package update: "
+              f"skipped_unavailable_orders={skipped}", flush=True)
     return changed
 
 
