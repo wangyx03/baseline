@@ -17,6 +17,8 @@ load_dotenv(BASE_DIR / '.env')
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tiktokorders as sync
 import tkorders_db as db
+import tkproducts_db as products_db
+import os
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
@@ -45,7 +47,17 @@ def accept(store):
         conn = db.get_connection()
         try:
             db.init_webhook_schema(conn)
-            db.enqueue_webhook(conn, shop['store_id'], event)
+            # Product event type IDs must be configured from the actual
+            # TikTok Shop webhook subscription. Unknown events retain the
+            # existing order inbox behavior.
+            product_types = {x.strip().upper() for x in
+                os.environ.get('TTS_PRODUCT_WEBHOOK_TYPES', '').split(',') if x.strip()}
+            event_type = str(event.get('type') or event.get('event_type') or '').upper()
+            if event_type in product_types:
+                products_db.init_schema(conn)
+                products_db.enqueue_webhook(conn, shop['store_id'], event)
+            else:
+                db.enqueue_webhook(conn, shop['store_id'], event)
             conn.commit()
         finally:
             conn.close()

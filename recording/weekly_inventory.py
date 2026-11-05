@@ -416,7 +416,7 @@ def get_weekly_inventory():
                     ON ls.week_id = sr.week_id
                     AND ls.store_id = sr.store_id
                     AND ls.live_id = sr.live_id
-                    AND ls.count_as_used = 1
+                    AND ls.inventory_source = 'M6'
 
                 LEFT JOIN (
                     SELECT DISTINCT
@@ -506,5 +506,69 @@ def get_weekly_inventory():
 
     finally:
 
+        cursor.close()
+        db.close()
+
+
+@weekly_bp.route("/api/wookoo-inventory", methods=["GET"])
+@login_required
+def get_wookoo_inventory():
+    store_id = request.args.get("store_id", type=int)
+    if store_id is None:
+        return jsonify(success=False, message="Store ID is required"), 400
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT w.sku, COALESCE(bs.book_title, '') AS title,
+                   COALESCE(bs.book_author, '') AS author,
+                   SUM(w.planned_qty) AS planned,
+                   COALESCE(u.used, 0) AS used,
+                   SUM(w.planned_qty) - COALESCE(u.used, 0) AS remaining
+            FROM wookoo_inventory w
+            LEFT JOIN book_sku bs ON bs.isbn=w.sku
+            LEFT JOIN (
+                SELECT sr.store_id, sr.sku, SUM(sr.quantity) AS used
+                FROM sku_recording sr
+                INNER JOIN live_sessions ls
+                  ON ls.week_id=sr.week_id AND ls.store_id=sr.store_id
+                 AND ls.live_id=sr.live_id AND ls.inventory_source='WOOKOO'
+                WHERE sr.store_id=%s
+                GROUP BY sr.store_id, sr.sku
+            ) u ON u.store_id=w.store_id AND u.sku=w.sku
+            WHERE w.store_id=%s
+            GROUP BY w.sku, bs.book_title, bs.book_author, u.used
+            ORDER BY used ASC, remaining DESC, w.sku ASC
+        """, (store_id, store_id))
+        rows = cursor.fetchall()
+        cursor.execute("""
+            SELECT COALESCE(MAX(log_id),0) AS version
+            FROM sku_recording_log WHERE store_id=%s
+        """, (store_id,))
+        version = int(cursor.fetchone()["version"] or 0)
+        return jsonify(success=True, store_id=store_id, version=version,
+                       can_view_actual_stock=False, items=rows)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        cursor.close()
+        db.close()
+
+
+@weekly_bp.route("/api/wookoo-inventory/version", methods=["GET"])
+@login_required
+def get_wookoo_inventory_version():
+    store_id = request.args.get("store_id", type=int)
+    if store_id is None:
+        return jsonify(success=False, message="Store ID is required"), 400
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT COALESCE(MAX(log_id),0) AS version
+            FROM sku_recording_log WHERE store_id=%s
+        """, (store_id,))
+        return jsonify(success=True, version=int(cursor.fetchone()["version"] or 0))
+    finally:
         cursor.close()
         db.close()

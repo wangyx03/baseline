@@ -2,7 +2,8 @@ def get_weekly_item_statuses(
     cursor,
     week_id,
     store_id,
-    skus
+    skus,
+    live_id=None
 ):
     """
     Return weekly inventory status for many SKUs in one database query.
@@ -21,6 +22,18 @@ def get_weekly_item_statuses(
     in_weekly_inventory=False.
     """
 
+    source = "M6"
+    if live_id is not None:
+        cursor.execute("""
+            SELECT inventory_source FROM live_sessions
+            WHERE week_id=%s AND store_id=%s AND live_id=%s LIMIT 1
+        """, (week_id, store_id, live_id))
+        row = cursor.fetchone()
+        source = row["inventory_source"] if row else "OFFICE"
+    if source == "OFFICE":
+        return {str(s): {"in_weekly_inventory": False, "planned": 0,
+                         "used": 0, "remaining": 0} for s in skus}
+
     unique_skus = list(dict.fromkeys(
         str(sku).strip()
         for sku in skus
@@ -29,6 +42,32 @@ def get_weekly_item_statuses(
 
     if not unique_skus:
         return {}
+
+    if source == "WOOKOO":
+        placeholders = ", ".join(["%s"] * len(unique_skus))
+        cursor.execute(f"""
+            SELECT w.sku, SUM(w.planned_qty) AS planned,
+                   COALESCE(u.used, 0) AS used
+            FROM wookoo_inventory w
+            LEFT JOIN (
+                SELECT sr.sku, SUM(sr.quantity) AS used
+                FROM sku_recording sr
+                INNER JOIN live_sessions ls
+                  ON ls.week_id=sr.week_id AND ls.store_id=sr.store_id
+                 AND ls.live_id=sr.live_id AND ls.inventory_source='WOOKOO'
+                WHERE sr.store_id=%s AND sr.sku IN ({placeholders})
+                GROUP BY sr.sku
+            ) u ON u.sku=w.sku
+            WHERE w.store_id=%s AND w.sku IN ({placeholders})
+            GROUP BY w.sku, u.used
+        """, [store_id] + unique_skus + [store_id] + unique_skus)
+        result = {sku: {"in_weekly_inventory": False, "planned": 0,
+                        "used": 0, "remaining": 0} for sku in unique_skus}
+        for row in cursor.fetchall():
+            planned, used = int(row["planned"] or 0), int(row["used"] or 0)
+            result[row["sku"]] = {"in_weekly_inventory": True,
+                "planned": planned, "used": used, "remaining": planned-used}
+        return result
 
     placeholders = ", ".join(["%s"] * len(unique_skus))
 
@@ -70,7 +109,7 @@ def get_weekly_item_statuses(
                 ON ls.week_id = sr.week_id
                 AND ls.store_id = sr.store_id
                 AND ls.live_id = sr.live_id
-                AND ls.count_as_used = 1
+                AND ls.inventory_source = 'M6'
 
             LEFT JOIN (
                 SELECT DISTINCT
@@ -142,7 +181,8 @@ def get_weekly_item_status(
     cursor,
     week_id,
     store_id,
-    sku
+    sku,
+    live_id=None
 ):
     """
     Backward-compatible single-SKU helper.
@@ -153,7 +193,8 @@ def get_weekly_item_status(
         cursor=cursor,
         week_id=week_id,
         store_id=store_id,
-        skus=[sku]
+        skus=[sku],
+        live_id=live_id
     )
 
     return statuses.get(

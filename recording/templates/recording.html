@@ -663,8 +663,12 @@
 
             <div style="margin-top:10px;">
                 <label style="display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-weight:600;">
-                    <input type="checkbox" id="countAsUsedCheckbox" checked onchange="updateCountAsUsed()">
-                    Reduce Inventory
+                    Inventory Source
+                    <select id="inventorySourceSelect" onchange="updateInventorySource()" style="padding:8px;font-size:16px;">
+                        <option value="OFFICE">Office</option>
+                        <option value="M6">M6</option>
+                        <option value="WOOKOO">Wookoo</option>
+                    </select>
                 </label>
             </div>
 
@@ -1323,10 +1327,7 @@ const currentLiveText =
         "currentLiveText"
     );
 
-const countAsUsedCheckbox =
-    document.getElementById(
-        "countAsUsedCheckbox"
-    );
+const inventorySourceSelect = document.getElementById("inventorySourceSelect");
 
 
 const roundControls =
@@ -1846,8 +1847,8 @@ async function startLive() {
                 ||
                 1;
 
-            countAsUsedCheckbox.checked =
-                info.count_as_used !== false;
+            inventorySourceSelect.value = info.inventory_source || "OFFICE";
+            inventorySourceSelect.dataset.saved = inventorySourceSelect.value;
 
 
         } else {
@@ -1855,6 +1856,8 @@ async function startLive() {
 
             currentRound =
                 1;
+            inventorySourceSelect.value = "OFFICE";
+            inventorySourceSelect.dataset.saved = "OFFICE";
 
         }
 
@@ -1892,46 +1895,27 @@ async function startLive() {
 // =========================================================
 // Count current LIVE as Used
 // =========================================================
-async function updateCountAsUsed() {
+async function updateInventorySource() {
     if (!currentWeekId || !currentLiveId) return;
-
-    const desired = countAsUsedCheckbox.checked;
-    countAsUsedCheckbox.disabled = true;
-
+    const desired = inventorySourceSelect.value;
+    const previous = inventorySourceSelect.dataset.saved || "OFFICE";
+    inventorySourceSelect.disabled = true;
     try {
-        const response = await fetch(
-            "/api/recordings/count-as-used",
-            {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                    week_id: currentWeekId,
-                    store_id: STORE_ID,
-                    live_id: currentLiveId,
-                    count_as_used: desired
-                })
-            }
-        );
+        const response = await fetch("/api/recordings/inventory-source", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({week_id: currentWeekId, store_id: STORE_ID,
+                live_id: currentLiveId, inventory_source: desired})
+        });
         const data = await response.json();
-        if (!response.ok || !data.success) {
-            countAsUsedCheckbox.checked = !desired;
-            showMessage(data.message || "Could not update Reduce Inventory.", "error");
-            return;
-        }
-        countAsUsedCheckbox.checked = data.count_as_used;
-        showMessage(
-            data.count_as_used
-                ? "✓ This LIVE will count as Used."
-                : "✓ This LIVE will NOT count as Used.",
-            "success"
-        );
+        if (!response.ok || !data.success) throw new Error(data.message || "Update failed");
+        inventorySourceSelect.value = data.inventory_source;
+        inventorySourceSelect.dataset.saved = data.inventory_source;
+        showMessage("✓ Inventory Source: " + data.inventory_source, "success");
+        await loadRecordings(currentPage);
     } catch (error) {
-        console.error(error);
-        countAsUsedCheckbox.checked = !desired;
-        showMessage("Connection error while updating Reduce Inventory.", "error");
-    } finally {
-        countAsUsedCheckbox.disabled = false;
-    }
+        inventorySourceSelect.value = previous;
+        showMessage(error.message || "Could not update Inventory Source", "error");
+    } finally { inventorySourceSelect.disabled = false; }
 }
 
 // =========================================================
@@ -4297,7 +4281,7 @@ function showBookInfo(
 
         weeklyPlanned.textContent = "—";
         weeklyUsed.textContent = "—";
-        weeklyRemaining.textContent = "Not in Weekly Inventory";
+        weeklyRemaining.textContent = "Not in selected inventory";
         weeklyStatus.style.display = "block";
 
     }

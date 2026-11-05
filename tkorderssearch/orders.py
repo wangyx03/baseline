@@ -182,6 +182,10 @@ def page():
             if order['create_time']:
                 order['create_time_local'] = order['create_time'].replace(tzinfo=timezone.utc).astimezone(display_tz).strftime('%Y-%m-%d %I:%M %p')
         # Facets use all active filters except their own dimension.
+        # Store facet counts: honor all other active filters, but not store selections.
+        store_where, store_args = _filters(params, {'store'})
+        store_rows = _rows(cur, 'SELECT o.store_id AS value, COUNT(*) AS n FROM tkorders o' + store_where + ' GROUP BY o.store_id', store_args)
+        store_counts = {r['value']: r['n'] for r in store_rows}
         status_where, status_args = _filters(params, {'status'})
         statuses = _rows(cur, 'SELECT o.status AS value, COUNT(*) AS n FROM tkorders o' + status_where + ' GROUP BY o.status ORDER BY n DESC', status_args)
         existing_statuses = {s['value'] for s in statuses}
@@ -190,6 +194,7 @@ def page():
                 statuses.append({'value': selected, 'n': 0})
         type_where, type_args = _filters(params, {'order_type'})
         order_types = _rows(cur, 'SELECT o.order_type AS value, COUNT(*) AS n FROM tkorders o' + type_where + ' GROUP BY o.order_type ORDER BY n DESC', type_args)
+        unspecified_type_count = sum(r['n'] for r in order_types if not r['value'])
         known_types = {t['value'] for t in order_types if t['value']}
         for selected in params.getlist('order_type'):
             if selected not in ('', 'all', '__none__', '__null__') and selected not in known_types:
@@ -211,6 +216,7 @@ def page():
     return render_template('orders.html', orders=orders, total=total, total_products=total_products, page=page_number,
                            pages=max(1, (total + per_page - 1) // per_page),
                            statuses=statuses, order_types=order_types, warehouses=all_warehouses,
+                           store_counts=store_counts, unspecified_type_count=unspecified_type_count,
                            selected_stores=params.getlist('store'),
                            selected_statuses=params.getlist('status'),
                            selected_order_types=params.getlist('order_type'),

@@ -437,7 +437,7 @@ def recording_session_info():
 
         cursor.execute(
             """
-            SELECT count_as_used
+            SELECT inventory_source
             FROM live_sessions
             WHERE week_id = %s
               AND store_id = %s
@@ -447,10 +447,8 @@ def recording_session_info():
             (week_id, store_id, live_id)
         )
         session_row = cursor.fetchone()
-        count_as_used = (
-            bool(session_row["count_as_used"])
-            if session_row is not None
-            else True
+        inventory_source = (
+            session_row["inventory_source"] if session_row else "OFFICE"
         )
 
         return jsonify({
@@ -468,8 +466,7 @@ def recording_session_info():
             "next_seq":
                 max_seq + 1,
 
-            "count_as_used":
-                count_as_used
+            "inventory_source": inventory_source
         })
 
     except Exception as e:
@@ -486,61 +483,41 @@ def recording_session_info():
         db.close()
 
 # =========================================================
-# LIVE session: Count as Used
+# LIVE session: inventory source (applies to the entire LIVE)
 # =========================================================
-@recording_bp.route(
-    "/api/recordings/count-as-used",
-    methods=["POST"]
-)
+@recording_bp.route("/api/recordings/inventory-source", methods=["POST"])
 @login_required
-def set_recording_count_as_used():
-    data = request.get_json() or {}
+def set_recording_inventory_source():
+    data = request.get_json(silent=True) or {}
     week_id = str(data.get("week_id", "")).strip()
-    store_id = data.get("store_id")
     live_id = str(data.get("live_id", "")).strip()
-    count_as_used = 1 if bool(data.get("count_as_used", True)) else 0
-
-    if not week_id or store_id is None or not live_id:
-        return jsonify({
-            "success": False,
-            "message": "Week ID, Store ID and LIVE ID are required"
-        }), 400
-
+    source = str(data.get("inventory_source", "")).upper().strip()
+    try:
+        store_id = int(data.get("store_id"))
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="Invalid store ID"), 400
+    if not week_id or not live_id or source not in ("OFFICE", "M6", "WOOKOO"):
+        return jsonify(success=False, message="Invalid LIVE or inventory source"), 400
     db = get_db()
     cursor = db.cursor(dictionary=True)
     try:
-        cursor.execute(
-            """
-            INSERT INTO live_sessions (
-                week_id, store_id, live_id, count_as_used, created_at
-            )
+        cursor.execute("""
+            INSERT INTO live_sessions
+                (week_id, store_id, live_id, inventory_source, created_at)
             VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
-            ON DUPLICATE KEY UPDATE
-                count_as_used = VALUES(count_as_used)
-            """,
-            (week_id, store_id, live_id, count_as_used)
-        )
-
+            ON DUPLICATE KEY UPDATE inventory_source = VALUES(inventory_source)
+        """, (week_id, store_id, live_id, source))
         write_recording_log(
-            cursor=cursor,
-            week_id=week_id,
-            store_id=store_id,
-            live_id=live_id,
-            action_type="COUNT_AS_USED",
+            cursor=cursor, week_id=week_id, store_id=store_id,
+            live_id=live_id, action_type="INVENTORY_SOURCE",
             operator_user_id=current_user.id,
-            changes=[{
-                "change_type": "COUNT_AS_USED",
-                "count_as_used": bool(count_as_used),
-            }],
+            changes=[{"change_type": "INVENTORY_SOURCE", "inventory_source": source}],
         )
         db.commit()
-        return jsonify({
-            "success": True,
-            "count_as_used": bool(count_as_used)
-        })
+        return jsonify(success=True, inventory_source=source)
     except Exception as e:
         db.rollback()
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify(success=False, message=str(e)), 500
     finally:
         cursor.close()
         db.close()
@@ -897,7 +874,8 @@ def record():
                 cursor=cursor,
                 week_id=week_id,
                 store_id=store_id,
-                sku=sku
+                sku=sku,
+                live_id=live_id
             )
         )
 
@@ -1307,7 +1285,8 @@ def insert_recording_before():
                 cursor=cursor,
                 week_id=week_id,
                 store_id=store_id,
-                sku=sku
+                sku=sku,
+                live_id=live_id
             )
         )
 
@@ -2093,7 +2072,7 @@ def change_recorded_live_id():
         # Preserve the LIVE-level Used setting across rename.
         cursor.execute(
             """
-            SELECT count_as_used
+            SELECT inventory_source
             FROM live_sessions
             WHERE week_id = %s AND store_id = %s AND live_id = %s
             LIMIT 1
@@ -2101,9 +2080,8 @@ def change_recorded_live_id():
             (week_id, store_id, old_live_id)
         )
         old_session = cursor.fetchone()
-        old_count_as_used = (
-            int(old_session["count_as_used"])
-            if old_session is not None else 1
+        old_inventory_source = (
+            old_session["inventory_source"] if old_session else "OFFICE"
         )
 
         # =================================================
@@ -2141,10 +2119,10 @@ def change_recorded_live_id():
         cursor.execute(
             """
             UPDATE live_sessions
-            SET count_as_used = %s
+            SET inventory_source = %s
             WHERE week_id = %s AND store_id = %s AND live_id = %s
             """,
-            (old_count_as_used, week_id, store_id, new_live_id)
+            (old_inventory_source, week_id, store_id, new_live_id)
         )
         delete_live_session_if_empty(
             cursor,
@@ -2443,7 +2421,8 @@ def get_recordings():
             skus=[
                 row["sku"]
                 for row in rows
-            ]
+            ],
+            live_id=live_id
         )
 
         for row in rows:

@@ -55,7 +55,7 @@
             border-radius: 10px;
             display: flex;
             align-items: flex-end;
-            gap: 22px;
+            gap: 12px;
             flex-wrap: wrap;
         }
 
@@ -328,6 +328,15 @@
 
         }
 
+
+        .inventory-filter-picker { position: relative; min-width: 165px; }
+        #usedFilterButton, #plannedFilterButton { min-width: 165px; display: flex; justify-content: space-between; gap: 10px; align-items: center; background: white; padding: 13px 14px; }
+        .inventory-filter-menu { position: absolute; z-index: 100; top: calc(100% + 2px); left: 0; width: 280px; background: white; border: 1px solid #cbd5e1; border-radius: 9px; box-shadow: 0 8px 24px #0002; padding: 10px 0; }
+        .inventory-filter-menu[hidden] { display: none; }
+        .inventory-filter-menu label { display: flex; align-items: center; gap: 12px; padding: 11px 16px; font-size: 16px; font-weight: normal; cursor: pointer; }
+        .inventory-filter-menu label:hover { background: #f2f5f9; }
+        .inventory-filter-menu input { width: 18px; height: 18px; accent-color: #1677ed; }
+
     </style>
 
 </head>
@@ -358,9 +367,16 @@
     <div class="controls">
 
 
+        <div class="control-group">
+            <label for="inventorySource">Inventory</label>
+            <select id="inventorySource" style="padding:13px 16px;font-size:18px;">
+                <option value="M6">M6</option>
+                <option value="WOOKOO">Wookoo</option>
+            </select>
+        </div>
         <!-- WEEK -->
 
-        <div class="control-group">
+        <div class="control-group" id="weekControl">
 
             <label for="weekId">
                 Week
@@ -411,37 +427,30 @@
         </button>
 
 
-        <!-- FILTERS -->
-
-        <button
-            type="button"
-            id="filterAll"
-            class="filter-button active"
-            onclick="setFilter('all')"
-        >
-            All
-        </button>
-
-
-        <button
-            type="button"
-            id="filterNeverUsed"
-            class="filter-button"
-            onclick="setFilter('unused')"
-        >
-            Used = 0
-        </button>
-
-
-        <button
-            type="button"
-            id="filterInStock"
-            class="filter-button"
-            onclick="setFilter('instock')"
-        >
-            In Stock
-        </button>
-
+        <!-- TWO INDEPENDENT MULTI-SELECT FILTERS -->
+        <div class="control-group">
+            <label>Used (multiple)</label>
+            <div class="inventory-filter-picker" id="usedFilterPicker">
+                <button type="button" id="usedFilterButton" aria-expanded="false" onclick="toggleQuantityFilter('used')"><span id="usedFilterLabel">Used: All</span> ▾</button>
+                <div id="usedFilterMenu" class="inventory-filter-menu" hidden>
+                    <label><input type="checkbox" id="usedAll" checked onchange="changeQuantityFilter('used','all',this.checked)"> All</label>
+                    <label><input type="checkbox" id="usedZero" checked onchange="changeQuantityFilter('used','zero',this.checked)"> Used = 0</label>
+                    <label><input type="checkbox" id="usedPositive" checked onchange="changeQuantityFilter('used','positive',this.checked)"> Used &gt; 0</label>
+                </div>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Planned (multiple)</label>
+            <div class="inventory-filter-picker" id="plannedFilterPicker">
+                <button type="button" id="plannedFilterButton" aria-expanded="false" onclick="toggleQuantityFilter('planned')"><span id="plannedFilterLabel">Planned: All</span> ▾</button>
+                <div id="plannedFilterMenu" class="inventory-filter-menu" hidden>
+                    <label><input type="checkbox" id="plannedAll" checked onchange="changeQuantityFilter('planned','all',this.checked)"> All</label>
+                    <label><input type="checkbox" id="plannedZero" checked onchange="changeQuantityFilter('planned','zero',this.checked)"> Planned = 0</label>
+                    <label><input type="checkbox" id="plannedPositive" checked onchange="changeQuantityFilter('planned','positive',this.checked)"> Planned &gt; 0</label>
+                </div>
+            </div>
+        </div>
+        <button type="button" id="filterInStock" class="filter-button" aria-pressed="false" onclick="toggleInStock()">In Stock</button>
 
     </div>
 
@@ -600,7 +609,7 @@
 
                     {% if can_view_actual_stock %}
 
-                    <th
+                    <th id="actualStockHeader"
                         class="number sortable"
                         onclick="sortInventory('actual_stock')"
                     >
@@ -677,14 +686,14 @@
 <script>
 
 
+const inventorySourceSelect = document.getElementById("inventorySource");
+const weekControl = document.getElementById("weekControl");
+
 const CAN_VIEW_ACTUAL_STOCK =
     {{ can_view_actual_stock | tojson }};
 
 
-const INVENTORY_COLUMN_COUNT =
-    CAN_VIEW_ACTUAL_STOCK
-    ? 7
-    : 6;
+const INVENTORY_COLUMN_COUNT = 7;
 
 
 // =========================================================
@@ -697,6 +706,8 @@ const STORAGE_WEEK_KEY =
 
 const STORAGE_STORE_KEY =
     "weeklyInventoryStore";
+
+const STORAGE_SOURCE_KEY = "weeklyInventorySource";
 
 
 const AUTO_REFRESH_MS =
@@ -719,8 +730,8 @@ let allItems =
     [];
 
 
-let currentFilter =
-    "all";
+let quantityFilters = {used: new Set(["zero", "positive"]), planned: new Set(["zero", "positive"])};
+let inStockOnly = false;
 
 
 let loadingInventory =
@@ -1038,11 +1049,7 @@ async function loadInventory() {
         storeSelect.value;
 
 
-    if (
-        !weekId
-        ||
-        !storeId
-    ) {
+    if ((!weekId && inventorySourceSelect.value === "M6") || !storeId) {
 
         return;
 
@@ -1065,7 +1072,7 @@ async function loadInventory() {
 
         const url =
 
-            "/api/weekly-inventory"
+            (inventorySourceSelect.value === "WOOKOO" ? "/api/wookoo-inventory" : "/api/weekly-inventory")
 
             + "?week_id="
 
@@ -1284,75 +1291,54 @@ function updateSummary() {
 // FILTER
 // =========================================================
 
-function setFilter(
-    filter
-) {
-
-
-    currentFilter =
-        filter;
-
-
-    document
-        .querySelectorAll(
-            ".filter-button"
-        )
-        .forEach(
-            button =>
-                button.classList.remove(
-                    "active"
-                )
-        );
-
-
-    if (
-        filter === "all"
-    ) {
-
-
-        document
-            .getElementById(
-                "filterAll"
-            )
-            .classList.add(
-                "active"
-            );
-
-
-    } else if (
-        filter === "unused"
-    ) {
-
-
-        document
-            .getElementById(
-                "filterNeverUsed"
-            )
-            .classList.add(
-                "active"
-            );
-
-
-    } else if (
-        filter === "instock"
-    ) {
-
-
-        document
-            .getElementById(
-                "filterInStock"
-            )
-            .classList.add(
-                "active"
-            );
-
-    }
-
-
-    renderInventory();
-
+function toggleQuantityFilter(type) {
+    const menu = document.getElementById(type + "FilterMenu");
+    const opening = menu.hidden;
+    ["used", "planned"].forEach(t => {
+        document.getElementById(t + "FilterMenu").hidden = true;
+        document.getElementById(t + "FilterButton").setAttribute("aria-expanded", "false");
+    });
+    menu.hidden = !opening;
+    document.getElementById(type + "FilterButton").setAttribute("aria-expanded", String(opening));
 }
 
+document.addEventListener("click", event => {
+    ["used", "planned"].forEach(type => {
+        if (!document.getElementById(type + "FilterPicker").contains(event.target)) {
+            document.getElementById(type + "FilterMenu").hidden = true;
+            document.getElementById(type + "FilterButton").setAttribute("aria-expanded", "false");
+        }
+    });
+});
+
+function changeQuantityFilter(type, option, checked) {
+    const selected = quantityFilters[type];
+    if (option === "all") {
+        selected.clear();
+        if (checked) { selected.add("zero"); selected.add("positive"); }
+    } else if (checked) {
+        selected.add(option);
+    } else {
+        selected.delete(option);
+    }
+    document.getElementById(type + "All").checked = selected.size === 2;
+    document.getElementById(type + "Zero").checked = selected.has("zero");
+    document.getElementById(type + "Positive").checked = selected.has("positive");
+    const name = type === "used" ? "Used" : "Planned";
+    document.getElementById(type + "FilterLabel").textContent = name + ": " + (
+        selected.size === 2 ? "All" : selected.size === 0 ? "None" :
+        selected.has("zero") ? name + " = 0" : name + " > 0"
+    );
+    renderInventory();
+}
+
+function toggleInStock() {
+    inStockOnly = !inStockOnly;
+    const button = document.getElementById("filterInStock");
+    button.classList.toggle("active", inStockOnly);
+    button.setAttribute("aria-pressed", String(inStockOnly));
+    renderInventory();
+}
 
 // =========================================================
 // SORT
@@ -1513,33 +1499,12 @@ function renderInventory() {
                 }
 
 
-                // Filter
-
-                if (
-                    currentFilter
-                    ===
-                    "unused"
-                    &&
-                    used !== 0
-                ) {
-
-                    return false;
-
-                }
-
-
-                if (
-                    currentFilter
-                    ===
-                    "instock"
-                    &&
-                    remaining <= 0
-                ) {
-
-                    return false;
-
-                }
-
+                const usedChoices = quantityFilters.used;
+                const plannedChoices = quantityFilters.planned;
+                const planned = Number(item.planned || 0);
+                if (!(usedChoices.has("zero") && used === 0 || usedChoices.has("positive") && used > 0)) return false;
+                if (!(plannedChoices.has("zero") && planned === 0 || plannedChoices.has("positive") && planned > 0)) return false;
+                if (inStockOnly && remaining <= 0) return false;
 
                 return true;
 
@@ -1579,7 +1544,7 @@ function renderInventory() {
             <tr>
 
                 <td
-                    colspan="${INVENTORY_COLUMN_COUNT}"
+                    colspan="${CAN_VIEW_ACTUAL_STOCK && inventorySourceSelect.value === 'M6' ? 7 : 6}"
                     class="empty-row"
                 >
 
@@ -1629,7 +1594,7 @@ function renderInventory() {
             actualStock - remaining;
 
         if (
-            CAN_VIEW_ACTUAL_STOCK
+            CAN_VIEW_ACTUAL_STOCK && inventorySourceSelect.value === "M6"
             &&
             stockDifference <= 0
         ) {
@@ -1639,7 +1604,7 @@ function renderInventory() {
             );
 
         } else if (
-            CAN_VIEW_ACTUAL_STOCK
+            CAN_VIEW_ACTUAL_STOCK && inventorySourceSelect.value === "M6"
             &&
             stockDifference < 5
         ) {
@@ -1665,7 +1630,7 @@ function renderInventory() {
             </td>
 
             ${
-                CAN_VIEW_ACTUAL_STOCK
+                CAN_VIEW_ACTUAL_STOCK && inventorySourceSelect.value === "M6"
                 ? `
                     <td class="number">
                         ${Number(item.actual_stock || 0)}
@@ -1758,11 +1723,7 @@ async function checkInventoryVersion() {
         storeSelect.value;
 
 
-    if (
-        !weekId
-        ||
-        !storeId
-    ) {
+    if ((!weekId && inventorySourceSelect.value === "M6") || !storeId) {
 
         return;
 
@@ -1779,7 +1740,7 @@ async function checkInventoryVersion() {
         const response =
             await fetch(
 
-                "/api/weekly-inventory/version"
+                (inventorySourceSelect.value === "WOOKOO" ? "/api/wookoo-inventory/version" : "/api/weekly-inventory/version")
 
                 + "?week_id="
 
@@ -2047,6 +2008,13 @@ window.addEventListener(
 
         restoreStore();
 
+        const savedSource = localStorage.getItem(STORAGE_SOURCE_KEY);
+        if (savedSource === "M6" || savedSource === "WOOKOO") {
+            inventorySourceSelect.value = savedSource;
+        }
+        weekControl.style.display = inventorySourceSelect.value === "WOOKOO" ? "none" : "";
+        const actualHeader = document.getElementById("actualStockHeader");
+        if (actualHeader) actualHeader.style.display = inventorySourceSelect.value === "WOOKOO" ? "none" : "";
 
         /*
         2. Load available Weeks for that Store.
@@ -2075,6 +2043,14 @@ window.addEventListener(
 );
 
 
+inventorySourceSelect.addEventListener("change", () => {
+    localStorage.setItem(STORAGE_SOURCE_KEY, inventorySourceSelect.value);
+    weekControl.style.display = inventorySourceSelect.value === "WOOKOO" ? "none" : "";
+    const actualHeader = document.getElementById("actualStockHeader");
+    if (actualHeader) actualHeader.style.display = inventorySourceSelect.value === "WOOKOO" ? "none" : "";
+    lastInventoryVersion = null;
+    loadInventory();
+});
 </script>
 
 
