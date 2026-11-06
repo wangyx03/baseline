@@ -739,18 +739,40 @@
     ];
 
 
-    const TIME_BLOCKS = [
-        ["11:00", "12:00"],
-        ["12:00", "13:00"],
-        ["13:00", "14:00"],
-        ["14:00", "15:00"],
-        ["15:00", "16:00"],
-        ["16:00", "17:00"],
-        ["17:00", "18:00"],
-        ["18:00", "19:00"],
-        ["19:00", "20:00"],
-        ["20:00", "21:00"]
-    ];
+    /* =========================================================
+       Work hours
+       Visible hour range for the week, set by Schedule Management.
+       { start_hour: 11, end_hour: 21 }  (end_hour 24 = midnight)
+    ========================================================= */
+
+    let workHours = {{ work_hours | tojson }};
+
+
+    function pad2(value) {
+
+        return String(value).padStart(2, "0");
+    }
+
+
+    function hourRows() {
+
+        // [["11:00", "12:00"], ...]  hour 23 -> ["23:00", "00:00"]
+        const rows = [];
+
+        const start = Number(workHours.start_hour);
+        const end = Number(workHours.end_hour);
+
+        for (let hour = start; hour < end; hour++) {
+
+            rows.push([
+                pad2(hour) + ":00",
+                pad2((hour + 1) % 24) + ":00"
+            ]);
+        }
+
+        return rows;
+    }
+
 
 
     let weekStart =
@@ -941,7 +963,7 @@
         body.innerHTML =
             "";
 
-        TIME_BLOCKS.forEach(
+        hourRows().forEach(
             block => {
 
                 const row =
@@ -1524,6 +1546,16 @@
                     ||
                     "Unable to load availability."
                 );
+            }
+
+            if (
+                data.work_hours
+            ) {
+
+                workHours =
+                    data.work_hours;
+
+                renderBody();
             }
 
             document.getElementById(

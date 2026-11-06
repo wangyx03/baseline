@@ -17,6 +17,8 @@ from permissions.permissions import(
 )
 from db import get_db
 
+from .work_hours import load_week_hours
+
 
 schedule_bp = Blueprint(
     "schedule",
@@ -52,6 +54,7 @@ def require_schedule_edit_access():
             "You do not have permission to modify the schedule."
     }), 403
 
+
 # =========================================================
 # Settings
 # =========================================================
@@ -66,19 +69,32 @@ VALID_STATUSES = {
     "published"
 }
 
-OVERRIDE_DAILY_LIMIT = "daily_hour_limit"
-OVERRIDE_CONSECUTIVE = "consecutive_operator"
-
-OVERRIDE_MESSAGES = {
-    OVERRIDE_DAILY_LIMIT:
-        "Daily hour limit would be exceeded.",
-    OVERRIDE_CONSECUTIVE:
-        "Operator would work consecutive slots."
+# Positions per store / hour.
+POSITIONS_PER_ROLE = {
+    "creator": 1,
+    "operator": 2
 }
+
+# Max continuous hours in one role before an override is needed.
+# None = no limit. Continuous = shifts of that role touching end-to-start,
+# any store, any position.
+MAX_CONTINUOUS_HOURS = {
+    "operator": 3,
+    "creator": None
+}
+
+OVERRIDE_DAILY_LIMIT = "daily_hour_limit"
+OVERRIDE_CONSECUTIVE = "consecutive_operator"   # column: override_consecutive
+
+DAY_MINUTES = 24 * 60
 
 
 # =========================================================
-# Helpers
+# Time helpers
+#
+# Shifts are stored as staff_schedule.start_time / end_time (TIME).
+# Internally everything is minutes from midnight of work_date.
+# end_time 00:00 means midnight (= 1440).
 # =========================================================
 
 def parse_date(value):
@@ -90,177 +106,21 @@ def parse_date(value):
         return value
 
     return datetime.strptime(
-        str(value),
+        str(value).strip(),
         "%Y-%m-%d"
     ).date()
 
 
-def normalize_time(value):
-
-    if isinstance(value, time):
-        return value
-
-    if isinstance(value, timedelta):
-
-        total_seconds = int(
-            value.total_seconds()
-        )
-
-        hours = (
-            total_seconds // 3600
-        )
-
-        minutes = (
-            total_seconds % 3600
-        ) // 60
-
-        seconds = (
-            total_seconds % 60
-        )
-
-        return time(
-            hour=hours,
-            minute=minutes,
-            second=seconds
-        )
-
-    value = str(value)
-
-    if "." in value:
-        value = value.split(".")[0]
-
-    return datetime.strptime(
-        value,
-        "%H:%M:%S"
-    ).time()
-
-
-def local_datetime(
-    work_date,
-    local_time
-):
-
-    return datetime.combine(
-        parse_date(work_date),
-        normalize_time(local_time)
-    )
-
-
-def get_slot_range(
-    work_date,
-    slot
-):
-
-    start_dt = local_datetime(
-        work_date,
-        slot["start_time"]
-    )
-
-    end_dt = local_datetime(
-        work_date,
-        slot["end_time"]
-    )
-
-    # Future support for overnight slots.
-    if end_dt <= start_dt:
-        end_dt += timedelta(days=1)
-
-    return (
-        start_dt,
-        end_dt
-    )
-
-
-def ranges_overlap(
-    start_a,
-    end_a,
-    start_b,
-    end_b
-):
-
-    return (
-        start_a < end_b
-        and
-        end_a > start_b
-    )
-
-
-def merge_ranges(ranges):
-
-    if not ranges:
-        return []
-
-    ranges = sorted(
-        ranges,
-        key=lambda item: item[0]
-    )
-
-    merged = [
-        list(ranges[0])
-    ]
-
-    for start, end in ranges[1:]:
-
-        previous = merged[-1]
-
-        if start <= previous[1]:
-
-            if end > previous[1]:
-                previous[1] = end
-
-        else:
-
-            merged.append([
-                start,
-                end
-            ])
-
-    return [
-        tuple(item)
-        for item in merged
-    ]
-
-
-def fully_covered(
-    target_start,
-    target_end,
-    available_ranges
-):
-
-    for start, end in merge_ranges(
-        available_ranges
-    ):
-
-        if (
-            start <= target_start
-            and
-            end >= target_end
-        ):
-            return True
-
-    return False
-
-
 def monday_for(value):
 
-    work_date = parse_date(
-        value
-    )
+    work_date = parse_date(value)
 
-    return (
-        work_date
-        -
-        timedelta(
-            days=work_date.weekday()
-        )
-    )
+    return work_date - timedelta(days=work_date.weekday())
 
 
 def week_bounds(value):
 
-    monday = monday_for(
-        value
-    )
+    monday = monday_for(value)
 
     return (
         monday,
@@ -282,39 +142,120 @@ def serialize_datetime(value):
     return str(value)
 
 
-def load_slot(
-    cursor,
-    slot_id
-):
+def to_minutes(value):
+    """MySQL TIME (timedelta) / time / 'HH:MM[:SS]' -> minutes."""
 
-    cursor.execute(
-        """
-        SELECT
-            sa.slot_id,
-            sa.store_id,
-            sa.slot_no,
-            sa.start_time,
-            sa.end_time,
-            sa.timezone,
-            sa.active,
+    if isinstance(value, timedelta):
+        return int(value.total_seconds()) // 60
 
-            s.store_name,
-            s.short_name
+    if isinstance(value, time):
+        return value.hour * 60 + value.minute
 
-        FROM slots_arrangement sa
+    parts = str(value).strip().split(":")
 
-        JOIN stores s
-            ON s.store_id = sa.store_id
+    if len(parts) < 2:
+        raise ValueError("Invalid time.")
 
-        WHERE sa.slot_id = %s
-        """,
-        (
-            slot_id,
-        )
+    hour = int(parts[0])
+    minute = int(parts[1])
+
+    if not (0 <= hour <= 24 and 0 <= minute < 60) or (hour == 24 and minute):
+        raise ValueError("Invalid time.")
+
+    return hour * 60 + minute
+
+
+def minutes_range(start_value, end_value):
+    """(start, end) in minutes; an end at/before start means next midnight."""
+
+    start = to_minutes(start_value) % DAY_MINUTES
+    end = to_minutes(end_value)
+
+    if end <= start:
+        end += DAY_MINUTES
+
+    return start, end
+
+
+def minutes_to_hhmm(minutes):
+
+    minutes = int(minutes) % DAY_MINUTES
+
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def minutes_to_sql(minutes):
+
+    return minutes_to_hhmm(minutes) + ":00"
+
+
+def parse_shift_times(start_value, end_value):
+    """Whole hours, inside one day, end may be 00:00 / 24:00 (midnight)."""
+
+    try:
+        start, end = minutes_range(start_value, end_value)
+    except (TypeError, ValueError):
+        raise ValueError("Invalid start_time / end_time.")
+
+    if start % 60 or end % 60:
+        raise ValueError("Shifts must start and end on the hour.")
+
+    if end > DAY_MINUTES:
+        raise ValueError("A shift cannot go past midnight.")
+
+    return start, end
+
+
+def ranges_overlap(start_a, end_a, start_b, end_b):
+
+    return start_a < end_b and end_a > start_b
+
+
+def merge_ranges(ranges):
+    """Merge overlapping or touching ranges."""
+
+    merged = []
+
+    for start, end in sorted(ranges):
+
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+
+    return [tuple(item) for item in merged]
+
+
+def fully_covered(target_start, target_end, available_ranges):
+
+    return any(
+        start <= target_start and end >= target_end
+        for start, end in merge_ranges(available_ranges)
     )
 
-    return cursor.fetchone()
 
+def continuous_minutes(shift_start, shift_end, other_ranges):
+    """Length of the continuous run that contains the new shift."""
+
+    for start, end in merge_ranges(
+        list(other_ranges) + [(shift_start, shift_end)]
+    ):
+        if start <= shift_start and end >= shift_end:
+            return end - start
+
+    return shift_end - shift_start
+
+
+def format_hours(minutes):
+
+    hours = minutes / 60
+
+    return f"{hours:g}"
+
+
+# =========================================================
+# Loaders
+# =========================================================
 
 def get_week_status(
     cursor,
@@ -349,214 +290,30 @@ def get_week_status(
         )
     )
 
-    row = (
-        cursor.fetchone()
-        or
-        {}
+    row = cursor.fetchone() or {}
+
+    total_count = int(row.get("total_count") or 0)
+    draft_count = int(row.get("draft_count") or 0)
+
+    status = (
+        "published"
+        if total_count > 0 and draft_count == 0
+        else "draft"
     )
-
-    total_count = int(
-        row.get("total_count")
-        or
-        0
-    )
-
-    draft_count = int(
-        row.get("draft_count")
-        or
-        0
-    )
-
-    if (
-        total_count > 0
-        and
-        draft_count == 0
-    ):
-
-        status = "published"
-
-    else:
-
-        status = "draft"
 
     return {
-        "status":
-            status,
-
-        "total_count":
-            total_count,
-
-        "draft_count":
-            draft_count,
-
-        "published_at":
-            serialize_datetime(
-                row.get(
-                    "published_at"
-                )
-            )
+        "status": status,
+        "total_count": total_count,
+        "draft_count": draft_count,
+        "published_at": serialize_datetime(row.get("published_at"))
     }
 
 
-def get_staff_available_ranges(
-    cursor,
-    staff_id,
-    work_date
-):
-
-    cursor.execute(
-        """
-        SELECT
-            work_date,
-            start_time,
-            end_time
-
-        FROM staff_availability
-
-        WHERE staff_id = %s
-          AND work_date = %s
-          AND is_available = TRUE
-
-        ORDER BY
-            start_time,
-            end_time
-        """,
-        (
-            staff_id,
-            work_date
-        )
-    )
-
-    rows = cursor.fetchall()
-
-    ranges = []
-
-    for row in rows:
-
-        start_dt = local_datetime(
-            row["work_date"],
-            row["start_time"]
-        )
-
-        end_dt = local_datetime(
-            row["work_date"],
-            row["end_time"]
-        )
-
-        if end_dt <= start_dt:
-            end_dt += timedelta(days=1)
-
-        ranges.append(
-            (
-                start_dt,
-                end_dt
-            )
-        )
-
-    return ranges
-
-
-def get_staff_assignments_for_day(
-    cursor,
-    staff_id,
-    work_date,
-    exclude_slot_id=None
-):
+def load_role_staff(cursor, role_type, staff_id=None):
+    """Active staff with this live role."""
 
     sql = """
-        SELECT
-            ss.schedule_id,
-            ss.slot_id,
-            ss.role_type,
-            ss.position_no,
-
-            sa.start_time,
-            sa.end_time,
-            sa.store_id
-
-        FROM staff_schedule ss
-
-        JOIN slots_arrangement sa
-            ON sa.slot_id = ss.slot_id
-
-        WHERE ss.staff_id = %s
-          AND ss.work_date = %s
-    """
-
-    params = [
-        staff_id,
-        work_date
-    ]
-
-    if exclude_slot_id is not None:
-
-        sql += """
-            AND ss.slot_id <> %s
-        """
-
-        params.append(
-            exclude_slot_id
-        )
-
-    cursor.execute(
-        sql,
-        tuple(params)
-    )
-
-    return cursor.fetchall()
-
-
-def get_scheduled_hours(
-    work_date,
-    assignments
-):
-
-    total_seconds = 0
-
-    for assignment in assignments:
-
-        start_dt = local_datetime(
-            work_date,
-            assignment["start_time"]
-        )
-
-        end_dt = local_datetime(
-            work_date,
-            assignment["end_time"]
-        )
-
-        if end_dt <= start_dt:
-            end_dt += timedelta(days=1)
-
-        total_seconds += (
-            end_dt
-            -
-            start_dt
-        ).total_seconds()
-
-    return (
-        total_seconds
-        /
-        3600
-    )
-
-
-def check_staff_eligibility(
-    cursor,
-    staff_id,
-    work_date,
-    slot,
-    role_type
-):
-
-    # -----------------------------------------------------
-    # Staff / role
-    # Hard rule: cannot override.
-    # -----------------------------------------------------
-
-    cursor.execute(
-        """
-        SELECT
+        SELECT DISTINCT
             st.staff_id,
             st.name,
             st.daily_hour_limit
@@ -566,264 +323,345 @@ def check_staff_eligibility(
         JOIN staff_live_roles slr
             ON slr.staff_id = st.staff_id
 
-        WHERE st.staff_id = %s
-          AND st.active = TRUE
+        WHERE st.active = TRUE
           AND slr.role_type = %s
+    """
+
+    params = [role_type]
+
+    if staff_id is not None:
+        sql += " AND st.staff_id = %s"
+        params.append(staff_id)
+
+    sql += " ORDER BY st.staff_id"
+
+    cursor.execute(sql, tuple(params))
+
+    return cursor.fetchall()
+
+
+def load_available_ranges(cursor, staff_ids, work_date):
+    """{staff_id: [(start_min, end_min), ...]}"""
+
+    if not staff_ids:
+        return {}
+
+    placeholders = ", ".join(["%s"] * len(staff_ids))
+
+    cursor.execute(
+        f"""
+        SELECT
+            staff_id,
+            start_time,
+            end_time
+
+        FROM staff_availability
+
+        WHERE work_date = %s
+          AND is_available = TRUE
+          AND staff_id IN ({placeholders})
         """,
+        tuple([work_date] + list(staff_ids))
+    )
+
+    result = {}
+
+    for row in cursor.fetchall():
+        result.setdefault(row["staff_id"], []).append(
+            minutes_range(row["start_time"], row["end_time"])
+        )
+
+    return result
+
+
+def load_day_assignments(
+    cursor,
+    staff_ids,
+    work_date,
+    exclude_schedule_id=None
+):
+    """{staff_id: [assignment dict with start_min / end_min], ...}"""
+
+    if not staff_ids:
+        return {}
+
+    placeholders = ", ".join(["%s"] * len(staff_ids))
+
+    sql = f"""
+        SELECT
+            schedule_id,
+            staff_id,
+            store_id,
+            role_type,
+            position_no,
+            start_time,
+            end_time
+
+        FROM staff_schedule
+
+        WHERE work_date = %s
+          AND staff_id IN ({placeholders})
+    """
+
+    params = [work_date] + list(staff_ids)
+
+    if exclude_schedule_id is not None:
+        sql += " AND schedule_id <> %s"
+        params.append(exclude_schedule_id)
+
+    cursor.execute(sql, tuple(params))
+
+    result = {}
+
+    for row in cursor.fetchall():
+
+        row["start_min"], row["end_min"] = minutes_range(
+            row["start_time"],
+            row["end_time"]
+        )
+
+        result.setdefault(row["staff_id"], []).append(row)
+
+    return result
+
+
+def load_position_rows(cursor, shift, for_update=False):
+    """Every shift in this date / store / role / position."""
+
+    sql = """
+        SELECT
+            ss.schedule_id,
+            ss.staff_id,
+            st.name AS staff_name,
+            ss.start_time,
+            ss.end_time,
+            ss.override_daily_limit,
+            ss.override_consecutive,
+            ss.overridden_at
+
+        FROM staff_schedule ss
+
+        JOIN staff st
+            ON st.staff_id = ss.staff_id
+
+        WHERE ss.work_date = %s
+          AND ss.store_id = %s
+          AND ss.role_type = %s
+          AND ss.position_no = %s
+
+        ORDER BY ss.start_time
+    """
+
+    if for_update:
+        sql += " FOR UPDATE"
+
+    cursor.execute(
+        sql,
         (
-            staff_id,
-            role_type
+            shift["work_date"],
+            shift["store_id"],
+            shift["role_type"],
+            shift["position_no"]
         )
     )
 
-    staff = cursor.fetchone()
+    rows = cursor.fetchall()
 
-    if not staff:
+    for row in rows:
+        row["start_min"], row["end_min"] = minutes_range(
+            row["start_time"],
+            row["end_time"]
+        )
 
+    return rows
+
+
+# =========================================================
+# Rules
+# =========================================================
+
+def evaluate_staff(
+    staff,
+    role_type,
+    shift_start,
+    shift_end,
+    available_ranges,
+    assignments
+):
+    """
+    Hard rules (cannot override):
+        - availability covers the whole shift
+        - no overlap with the staff member's other shifts (any store/role)
+
+    Soft rules (override):
+        - daily hour limit
+        - continuous hours in this role (MAX_CONTINUOUS_HOURS)
+    """
+
+    if not fully_covered(shift_start, shift_end, available_ranges):
         return {
             "eligible": False,
-            "requires_override": False,
-            "violations": [],
-            "violation_messages": [],
-            "reason":
-                "Staff is not active or does not have this role."
+            "reason": "Availability does not fully cover this time."
         }
-
-
-    # -----------------------------------------------------
-    # Target slot
-    # -----------------------------------------------------
-
-    slot_start_dt, slot_end_dt = (
-        get_slot_range(
-            work_date,
-            slot
-        )
-    )
-
-
-    # -----------------------------------------------------
-    # Availability
-    # Hard rule: cannot override.
-    # -----------------------------------------------------
-
-    available_ranges = (
-        get_staff_available_ranges(
-            cursor,
-            staff_id,
-            work_date
-        )
-    )
-
-    if not fully_covered(
-        slot_start_dt,
-        slot_end_dt,
-        available_ranges
-    ):
-
-        return {
-            "eligible": False,
-            "requires_override": False,
-            "violations": [],
-            "violation_messages": [],
-            "reason":
-                "Availability does not fully cover this slot."
-        }
-
-
-    # -----------------------------------------------------
-    # Existing assignments today
-    #
-    # Exclude the target slot so replacing somebody in the
-    # same slot does not count that slot twice.
-    # -----------------------------------------------------
-
-    assignments = (
-        get_staff_assignments_for_day(
-            cursor,
-            staff_id,
-            work_date,
-            exclude_slot_id=
-                slot["slot_id"]
-        )
-    )
-
-
-    violations = []
-
-
-    # -----------------------------------------------------
-    # Assignment conflicts
-    # -----------------------------------------------------
 
     for assignment in assignments:
-
-        assignment_start_dt = local_datetime(
-            work_date,
-            assignment["start_time"]
-        )
-
-        assignment_end_dt = local_datetime(
-            work_date,
-            assignment["end_time"]
-        )
-
-        if (
-            assignment_end_dt
-            <=
-            assignment_start_dt
-        ):
-
-            assignment_end_dt += timedelta(
-                days=1
-            )
-
-
-        # -------------------------------------------------
-        # Hard rule:
-        # No overlapping assignments.
-        # -------------------------------------------------
-
         if ranges_overlap(
-            slot_start_dt,
-            slot_end_dt,
-            assignment_start_dt,
-            assignment_end_dt
+            shift_start,
+            shift_end,
+            assignment["start_min"],
+            assignment["end_min"]
         ):
-
             return {
                 "eligible": False,
-                "requires_override": False,
-                "violations": [],
-                "violation_messages": [],
-                "reason":
-                    "Staff already has an overlapping assignment."
+                "reason": "Staff already has an overlapping assignment."
             }
 
+    violations = []
+    messages = []
 
-        # -------------------------------------------------
-        # Soft rule:
-        # Operator cannot work consecutive slots.
-        #
-        # Store does not matter.
-        # This rule may be overridden.
-        # -------------------------------------------------
-
-        if (
-            role_type == "operator"
-            and
-            assignment["role_type"]
-            == "operator"
-        ):
-
-            consecutive = (
-                assignment_end_dt
-                ==
-                slot_start_dt
-                or
-                assignment_start_dt
-                ==
-                slot_end_dt
-            )
-
-            if (
-                consecutive
-                and
-                OVERRIDE_CONSECUTIVE
-                not in
-                violations
-            ):
-
-                violations.append(
-                    OVERRIDE_CONSECUTIVE
-                )
-
-
-    # -----------------------------------------------------
-    # Soft rule:
-    # Daily hour limit.
-    # This rule may be overridden.
-    # -----------------------------------------------------
-
-    scheduled_hours = (
-        get_scheduled_hours(
-            work_date,
-            assignments
-        )
+    scheduled_minutes = sum(
+        a["end_min"] - a["start_min"]
+        for a in assignments
     )
 
-    slot_hours = (
-        (
-            slot_end_dt
-            -
-            slot_start_dt
-        ).total_seconds()
-        /
-        3600
-    )
+    shift_minutes = shift_end - shift_start
 
-    daily_limit = float(
-        staff["daily_hour_limit"]
-    )
+    daily_limit = float(staff["daily_hour_limit"])
 
-    total_hours_after = (
-        scheduled_hours
-        +
-        slot_hours
-    )
+    total_hours_after = (scheduled_minutes + shift_minutes) / 60
 
-    if (
-        total_hours_after
-        >
-        daily_limit
-    ):
-
-        violations.append(
-            OVERRIDE_DAILY_LIMIT
+    if total_hours_after > daily_limit + 1e-9:
+        violations.append(OVERRIDE_DAILY_LIMIT)
+        messages.append(
+            f"Daily hour limit would be exceeded "
+            f"({total_hours_after:g}h / {daily_limit:g}h)."
         )
 
-
-    violation_messages = [
-        OVERRIDE_MESSAGES[
-            violation
+    run_minutes = continuous_minutes(
+        shift_start,
+        shift_end,
+        [
+            (a["start_min"], a["end_min"])
+            for a in assignments
+            if a["role_type"] == role_type
         ]
-        for violation
-        in violations
-    ]
+    )
 
+    limit = MAX_CONTINUOUS_HOURS.get(role_type)
+
+    if limit is not None and run_minutes > limit * 60:
+        violations.append(OVERRIDE_CONSECUTIVE)
+        messages.append(
+            f"{role_type.title()} would work "
+            f"{format_hours(run_minutes)} hours in a row "
+            f"(limit {limit}h)."
+        )
 
     return {
         "eligible": True,
-
-        "requires_override":
-            bool(
-                violations
-            ),
-
-        "violations":
-            violations,
-
-        "violation_messages":
-            violation_messages,
-
-        "staff_id":
-            staff["staff_id"],
-
-        "name":
-            staff["name"],
-
-        "daily_hour_limit":
-            daily_limit,
-
-        "scheduled_hours":
-            scheduled_hours,
-
-        "slot_hours":
-            slot_hours,
-
-        "total_hours_after":
-            total_hours_after
+        "requires_override": bool(violations),
+        "violations": violations,
+        "violation_messages": messages,
+        "staff_id": staff["staff_id"],
+        "name": staff["name"],
+        "daily_hour_limit": daily_limit,
+        "scheduled_hours": scheduled_minutes / 60,
+        "shift_hours": shift_minutes / 60,
+        "total_hours_after": total_hours_after,
+        "continuous_hours": run_minutes / 60
     }
+
+
+# =========================================================
+# Request parsing (candidates + save)
+# =========================================================
+
+def parse_shift_request(source):
+    """
+    Returns (shift, None) or (None, error_response).
+
+    shift = {
+        work_date, store_id, role_type, position_no,
+        start_min, end_min, schedule_id (None for a new shift)
+    }
+    """
+
+    def error(message):
+        return None, (jsonify({"success": False, "message": message}), 400)
+
+    try:
+        work_date = parse_date(source.get("work_date", ""))
+    except (TypeError, ValueError):
+        return error("Invalid work_date")
+
+    try:
+        store_id = int(source.get("store_id"))
+    except (TypeError, ValueError):
+        return error("Invalid store_id")
+
+    role_type = str(source.get("role_type", "")).strip().lower()
+
+    if role_type not in VALID_ROLES:
+        return error("Invalid role_type")
+
+    try:
+        position_no = int(source.get("position_no", 1))
+    except (TypeError, ValueError):
+        return error("Invalid position_no")
+
+    if not 1 <= position_no <= POSITIONS_PER_ROLE[role_type]:
+        return error("Invalid position_no")
+
+    try:
+        start_min, end_min = parse_shift_times(
+            source.get("start_time"),
+            source.get("end_time")
+        )
+    except ValueError as e:
+        return error(str(e))
+
+    schedule_id = source.get("schedule_id")
+
+    if schedule_id in (None, "", "null"):
+        schedule_id = None
+    else:
+        try:
+            schedule_id = int(schedule_id)
+        except (TypeError, ValueError):
+            return error("Invalid schedule_id")
+
+    return {
+        "work_date": work_date,
+        "store_id": store_id,
+        "role_type": role_type,
+        "position_no": position_no,
+        "start_min": start_min,
+        "end_min": end_min,
+        "schedule_id": schedule_id
+    }, None
+
+
+def published_week_response():
+
+    return jsonify({
+        "success": False,
+        "message":
+            "Published schedule must be changed to Modify mode before editing."
+    }), 409
+
+
+def conflict_payload(rows):
+
+    return [
+        {
+            "schedule_id": row["schedule_id"],
+            "staff_id": row["staff_id"],
+            "staff_name": row["staff_name"],
+            "start_time": minutes_to_hhmm(row["start_min"]),
+            "end_time": minutes_to_hhmm(row["end_min"])
+        }
+        for row in rows
+    ]
 
 
 # =========================================================
@@ -844,10 +682,7 @@ def schedule_page():
 
     try:
 
-        # =====================================================
         # Mark Schedule notification as seen
-        # =====================================================
-
         cursor.execute(
             """
             INSERT INTO staff_schedule_notify
@@ -904,102 +739,56 @@ def schedule_page():
 @login_required
 def get_schedule_week():
 
-    week_start = (
-        request.args.get(
-            "week_start",
-            ""
-        )
-        .strip()
-    )
-
-    if not week_start:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "week_start is required"
-        }), 400
-
-
     try:
-
-        monday = monday_for(
-            week_start
+        monday, week_end = week_bounds(
+            request.args.get("week_start", "")
         )
-
     except ValueError:
-
         return jsonify({
             "success": False,
-            "message":
-                "Invalid week_start"
+            "message": "Invalid week_start"
         }), 400
-
-
-    week_end = (
-        monday
-        +
-        timedelta(days=6)
-    )
-
 
     db = get_db()
-
-    cursor = db.cursor(
-        dictionary=True
-    )
-
+    cursor = db.cursor(dictionary=True)
 
     try:
-
-        # -------------------------------------------------
-        # Slots
-        # -------------------------------------------------
 
         cursor.execute(
             """
             SELECT
-                sa.slot_id,
-                sa.store_id,
-                sa.slot_no,
-                sa.start_time,
-                sa.end_time,
-                sa.timezone,
+                store_id,
+                store_name,
+                short_name
 
-                s.store_name,
-                s.short_name
+            FROM stores
 
-            FROM slots_arrangement sa
-
-            JOIN stores s
-                ON s.store_id = sa.store_id
-
-            WHERE sa.active = TRUE
-
-            ORDER BY
-                sa.store_id,
-                sa.slot_no
+            ORDER BY store_id
             """
         )
 
-        slots = cursor.fetchall()
+        stores = [
+            {
+                "store_id": row["store_id"],
+                "store_name": row["store_name"],
+                "store_code": row["short_name"]
+            }
+            for row in cursor.fetchall()
+        ]
 
-
-        # -------------------------------------------------
-        # Existing assignments
-        # -------------------------------------------------
 
         cursor.execute(
             """
             SELECT
                 ss.schedule_id,
                 ss.work_date,
-                ss.slot_id,
+                ss.store_id,
+                ss.start_time,
+                ss.end_time,
                 ss.staff_id,
                 ss.role_type,
                 ss.position_no,
                 ss.status,
-
                 ss.override_daily_limit,
                 ss.override_consecutive,
                 ss.overridden_at,
@@ -1012,14 +801,14 @@ def get_schedule_week():
             JOIN staff st
                 ON st.staff_id = ss.staff_id
 
-            WHERE ss.work_date
-                BETWEEN %s AND %s
+            WHERE ss.work_date BETWEEN %s AND %s
 
             ORDER BY
                 ss.work_date,
-                ss.slot_id,
+                ss.store_id,
                 ss.role_type,
-                ss.position_no
+                ss.position_no,
+                ss.start_time
             """,
             (
                 monday,
@@ -1027,229 +816,63 @@ def get_schedule_week():
             )
         )
 
-        rows = cursor.fetchall()
+        assignments_by_date = {}
 
+        for row in cursor.fetchall():
 
-        assignment_map = {}
-
-
-        for row in rows:
-
-            key = (
-                row[
-                    "work_date"
-                ].isoformat(),
-                row[
-                    "slot_id"
-                ]
+            start_min, end_min = minutes_range(
+                row["start_time"],
+                row["end_time"]
             )
 
-            assignment_map.setdefault(
-                key,
+            assignments_by_date.setdefault(
+                row["work_date"].isoformat(),
                 []
-            )
-
-            assignment_map[
-                key
-            ].append({
-
-                "schedule_id":
-                    row[
-                        "schedule_id"
-                    ],
-
-                "staff_id":
-                    row[
-                        "staff_id"
-                    ],
-
-                "staff_name":
-                    row[
-                        "staff_name"
-                    ],
-
-                "role_type":
-                    row[
-                        "role_type"
-                    ],
-
-                "position_no":
-                    row[
-                        "position_no"
-                    ],
-
-                "status":
-                    row[
-                        "status"
-                    ],
-
-                "override_daily_limit":
-                    bool(
-                        row[
-                            "override_daily_limit"
-                        ]
-                    ),
-
-                "override_consecutive":
-                    bool(
-                        row[
-                            "override_consecutive"
-                        ]
-                    ),
-
-                "overridden_at":
-                    serialize_datetime(
-                        row[
-                            "overridden_at"
-                        ]
-                    ),
-
-                "published_at":
-                    serialize_datetime(
-                        row[
-                            "published_at"
-                        ]
-                    )
+            ).append({
+                "schedule_id": row["schedule_id"],
+                "store_id": row["store_id"],
+                "staff_id": row["staff_id"],
+                "staff_name": row["staff_name"],
+                "role_type": row["role_type"],
+                "position_no": row["position_no"],
+                "start_time": minutes_to_hhmm(start_min),
+                "end_time": minutes_to_hhmm(end_min),
+                "status": row["status"],
+                "override_daily_limit": bool(row["override_daily_limit"]),
+                "override_consecutive": bool(row["override_consecutive"]),
+                "overridden_at": serialize_datetime(row["overridden_at"]),
+                "published_at": serialize_datetime(row["published_at"])
             })
 
-
-        # -------------------------------------------------
-        # Build seven days
-        # -------------------------------------------------
 
         days = []
 
+        for offset in range(7):
 
-        for day_offset in range(7):
-
-            work_date = (
-                monday
-                +
-                timedelta(
-                    days=day_offset
-                )
-            )
-
-            date_string = (
-                work_date.isoformat()
-            )
-
-            day_slots = []
-
-
-            for slot in slots:
-
-                key = (
-                    date_string,
-                    slot[
-                        "slot_id"
-                    ]
-                )
-
-                day_slots.append({
-
-                    "slot_id":
-                        slot[
-                            "slot_id"
-                        ],
-
-                    "store_id":
-                        slot[
-                            "store_id"
-                        ],
-
-                    "store_name":
-                        slot[
-                            "store_name"
-                        ],
-
-                    "store_code":
-                        slot[
-                            "short_name"
-                        ],
-
-                    "slot_no":
-                        slot[
-                            "slot_no"
-                        ],
-
-                    "start_time":
-                        str(
-                            slot[
-                                "start_time"
-                            ]
-                        ),
-
-                    "end_time":
-                        str(
-                            slot[
-                                "end_time"
-                            ]
-                        ),
-
-                    "timezone":
-                        slot[
-                            "timezone"
-                        ],
-
-                    "assignments":
-                        assignment_map.get(
-                            key,
-                            []
-                        )
-                })
-
+            work_date = monday + timedelta(days=offset)
+            key = work_date.isoformat()
 
             days.append({
-
-                "work_date":
-                    date_string,
-
-                "day_name":
-                    work_date.strftime(
-                        "%A"
-                    ),
-
-                "slots":
-                    day_slots
+                "work_date": key,
+                "day_name": work_date.strftime("%A"),
+                "assignments": assignments_by_date.get(key, [])
             })
 
 
-        week_state = get_week_status(
-            cursor,
-            monday
-        )
-
+        week_state = get_week_status(cursor, monday)
 
         return jsonify({
-
             "success": True,
-
-            "week_start":
-                monday.isoformat(),
-
-            "week_end":
-                week_end.isoformat(),
-
-            "week_status":
-                week_state[
-                    "status"
-                ],
-
-            "published_at":
-                week_state[
-                    "published_at"
-                ],
-
-            "assignment_count":
-                week_state[
-                    "total_count"
-                ],
-
-            "days":
-                days
+            "week_start": monday.isoformat(),
+            "week_end": week_end.isoformat(),
+            "week_status": week_state["status"],
+            "published_at": week_state["published_at"],
+            "assignment_count": week_state["total_count"],
+            "work_hours": load_week_hours(cursor, monday),
+            "stores": stores,
+            "positions": POSITIONS_PER_ROLE,
+            "days": days
         })
-
 
     except Exception as e:
 
@@ -1257,7 +880,6 @@ def get_schedule_week():
             "success": False,
             "message": str(e)
         }), 500
-
 
     finally:
 
@@ -1267,6 +889,11 @@ def get_schedule_week():
 
 # =========================================================
 # Get Candidates
+#
+# GET /api/schedule-candidates
+#     ?work_date=2026-11-09&store_id=1&role_type=operator&position_no=1
+#     &start_time=11:00&end_time=14:00
+#     [&schedule_id=123]   editing an existing shift
 # =========================================================
 
 @schedule_bp.route(
@@ -1276,447 +903,96 @@ def get_schedule_week():
 @login_required
 def get_schedule_candidates():
 
-    work_date = (
-        request.args.get(
-            "work_date",
-            ""
-        )
-        .strip()
-    )
+    shift, error = parse_shift_request(request.args)
 
-    slot_id = request.args.get(
-        "slot_id",
-        type=int
-    )
-
-    role_type = (
-        request.args.get(
-            "role_type",
-            ""
-        )
-        .strip()
-        .lower()
-    )
-
-
-    if not work_date:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "work_date is required"
-        }), 400
-
-
-    if slot_id is None:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "slot_id is required"
-        }), 400
-
-
-    if role_type not in VALID_ROLES:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "Invalid role_type"
-        }), 400
-
-
-    try:
-
-        work_date_obj = parse_date(
-            work_date
-        )
-
-    except ValueError:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "Invalid work_date"
-        }), 400
-
+    if error:
+        return error
 
     db = get_db()
-
-    cursor = db.cursor(
-        dictionary=True
-    )
-
+    cursor = db.cursor(dictionary=True)
 
     try:
 
-        week_state = get_week_status(
-            cursor,
-            work_date
+        if get_week_status(cursor, shift["work_date"])["status"] == "published":
+            return published_week_response()
+
+
+        position_rows = load_position_rows(cursor, shift)
+
+        current = next(
+            (
+                row for row in position_rows
+                if row["schedule_id"] == shift["schedule_id"]
+            ),
+            None
         )
 
-        if (
-            week_state[
-                "status"
-            ]
-            ==
-            "published"
-        ):
-
+        if shift["schedule_id"] is not None and current is None:
             return jsonify({
                 "success": False,
-                "message":
-                    "Published schedule must be changed to Modify mode before editing."
-            }), 409
-
-
-        slot = load_slot(
-            cursor,
-            slot_id
-        )
-
-        if not slot:
-
-            return jsonify({
-                "success": False,
-                "message":
-                    "Slot not found"
+                "message": "This shift no longer exists. Reload the page."
             }), 404
 
-
-        if not slot["active"]:
-
-            return jsonify({
-                "success": False,
-                "message":
-                    "Slot is inactive"
-            }), 400
-
-
-        # -------------------------------------------------
-        # 1) Load every active staff member for this role.
-        #    One query for the whole candidate pool.
-        # -------------------------------------------------
-
-        cursor.execute(
-            """
-            SELECT DISTINCT
-                st.staff_id,
-                st.name,
-                st.daily_hour_limit
-
-            FROM staff st
-
-            JOIN staff_live_roles slr
-                ON slr.staff_id = st.staff_id
-
-            WHERE st.active = TRUE
-              AND slr.role_type = %s
-
-            ORDER BY
-                st.staff_id
-            """,
-            (
-                role_type,
+        conflicts = [
+            row for row in position_rows
+            if row["schedule_id"] != shift["schedule_id"]
+            and ranges_overlap(
+                shift["start_min"], shift["end_min"],
+                row["start_min"], row["end_min"]
             )
-        )
-
-        staff_rows = cursor.fetchall()
-
-        if not staff_rows:
-
-            return jsonify({
-                "success": True,
-                "work_date": work_date,
-                "slot_id": slot_id,
-                "role_type": role_type,
-                "candidates": []
-            })
-
-
-        staff_ids = [
-            row["staff_id"]
-            for row in staff_rows
         ]
 
-        placeholders = ", ".join(
-            ["%s"] * len(staff_ids)
+
+        staff_rows = load_role_staff(cursor, shift["role_type"])
+        staff_ids = [row["staff_id"] for row in staff_rows]
+
+        available_map = load_available_ranges(
+            cursor, staff_ids, shift["work_date"]
         )
 
-
-        # -------------------------------------------------
-        # 2) Load availability for every candidate at once.
-        # -------------------------------------------------
-
-        cursor.execute(
-            f"""
-            SELECT
-                staff_id,
-                work_date,
-                start_time,
-                end_time
-
-            FROM staff_availability
-
-            WHERE work_date = %s
-              AND is_available = TRUE
-              AND staff_id IN ({placeholders})
-
-            ORDER BY
-                staff_id,
-                start_time,
-                end_time
-            """,
-            tuple(
-                [work_date_obj]
-                + staff_ids
-            )
-        )
-
-        availability_rows = cursor.fetchall()
-
-        availability_map = {}
-
-        for row in availability_rows:
-
-            start_dt = local_datetime(
-                row["work_date"],
-                row["start_time"]
-            )
-
-            end_dt = local_datetime(
-                row["work_date"],
-                row["end_time"]
-            )
-
-            if end_dt <= start_dt:
-                end_dt += timedelta(days=1)
-
-            availability_map.setdefault(
-                row["staff_id"],
-                []
-            ).append((
-                start_dt,
-                end_dt
-            ))
-
-
-        # -------------------------------------------------
-        # 3) Load today's assignments for every candidate
-        #    at once. The target slot is excluded later in
-        #    Python, matching check_staff_eligibility().
-        # -------------------------------------------------
-
-        cursor.execute(
-            f"""
-            SELECT
-                ss.staff_id,
-                ss.schedule_id,
-                ss.slot_id,
-                ss.role_type,
-                ss.position_no,
-
-                sa.start_time,
-                sa.end_time,
-                sa.store_id
-
-            FROM staff_schedule ss
-
-            JOIN slots_arrangement sa
-                ON sa.slot_id = ss.slot_id
-
-            WHERE ss.work_date = %s
-              AND ss.staff_id IN ({placeholders})
-
-            ORDER BY
-                ss.staff_id,
-                sa.start_time,
-                sa.end_time
-            """,
-            tuple(
-                [work_date_obj]
-                + staff_ids
-            )
-        )
-
-        assignment_rows = cursor.fetchall()
-
-        assignment_map = {}
-
-        for row in assignment_rows:
-            assignment_map.setdefault(
-                row["staff_id"],
-                []
-            ).append(row)
-
-
-        # -------------------------------------------------
-        # Evaluate candidates entirely in Python.
-        # No per-staff SQL queries below this point.
-        # -------------------------------------------------
-
-        slot_start_dt, slot_end_dt = get_slot_range(
-            work_date_obj,
-            slot
-        )
-
-        slot_hours = (
-            (
-                slot_end_dt
-                -
-                slot_start_dt
-            ).total_seconds()
-            /
-            3600
+        assignment_map = load_day_assignments(
+            cursor, staff_ids, shift["work_date"],
+            exclude_schedule_id=shift["schedule_id"]
         )
 
         candidates = []
 
-
         for staff in staff_rows:
 
-            staff_id = staff["staff_id"]
-
-            available_ranges = availability_map.get(
-                staff_id,
-                []
+            result = evaluate_staff(
+                staff,
+                shift["role_type"],
+                shift["start_min"],
+                shift["end_min"],
+                available_map.get(staff["staff_id"], []),
+                assignment_map.get(staff["staff_id"], [])
             )
 
-            # Hard rule: availability must fully cover slot.
-            if not fully_covered(
-                slot_start_dt,
-                slot_end_dt,
-                available_ranges
-            ):
+            if not result["eligible"]:
                 continue
 
-
-            assignments = [
-                assignment
-                for assignment in assignment_map.get(
-                    staff_id,
-                    []
-                )
-                if assignment["slot_id"] != slot_id
-            ]
-
-            violations = []
-            hard_conflict = False
-
-
-            for assignment in assignments:
-
-                assignment_start_dt = local_datetime(
-                    work_date_obj,
-                    assignment["start_time"]
-                )
-
-                assignment_end_dt = local_datetime(
-                    work_date_obj,
-                    assignment["end_time"]
-                )
-
-                if assignment_end_dt <= assignment_start_dt:
-                    assignment_end_dt += timedelta(days=1)
-
-
-                # Hard rule: no overlapping assignments.
-                if ranges_overlap(
-                    slot_start_dt,
-                    slot_end_dt,
-                    assignment_start_dt,
-                    assignment_end_dt
-                ):
-                    hard_conflict = True
-                    break
-
-
-                # Soft rule: operator cannot work
-                # consecutive operator slots.
-                if (
-                    role_type == "operator"
-                    and
-                    assignment["role_type"] == "operator"
-                ):
-
-                    consecutive = (
-                        assignment_end_dt == slot_start_dt
-                        or
-                        assignment_start_dt == slot_end_dt
-                    )
-
-                    if (
-                        consecutive
-                        and
-                        OVERRIDE_CONSECUTIVE not in violations
-                    ):
-                        violations.append(
-                            OVERRIDE_CONSECUTIVE
-                        )
-
-
-            if hard_conflict:
-                continue
-
-
-            scheduled_hours = get_scheduled_hours(
-                work_date_obj,
-                assignments
+            result["is_current"] = bool(
+                current and current["staff_id"] == staff["staff_id"]
             )
 
-            daily_limit = float(
-                staff["daily_hour_limit"]
-            )
-
-            total_hours_after = (
-                scheduled_hours
-                +
-                slot_hours
-            )
-
-            if total_hours_after > daily_limit:
-                violations.append(
-                    OVERRIDE_DAILY_LIMIT
-                )
-
-
-            violation_messages = [
-                OVERRIDE_MESSAGES[violation]
-                for violation in violations
-            ]
-
-
-            candidates.append({
-                "eligible": True,
-                "requires_override": bool(violations),
-                "violations": violations,
-                "violation_messages": violation_messages,
-                "staff_id": staff_id,
-                "name": staff["name"],
-                "daily_hour_limit": daily_limit,
-                "scheduled_hours": scheduled_hours,
-                "slot_hours": slot_hours,
-                "total_hours_after": total_hours_after
-            })
+            candidates.append(result)
 
 
         candidates.sort(
             key=lambda item: (
+                not item["is_current"],
                 item["requires_override"],
                 item["scheduled_hours"],
                 item["name"].lower()
             )
         )
 
-
         return jsonify({
             "success": True,
-            "work_date": work_date,
-            "slot_id": slot_id,
-            "role_type": role_type,
+            "shift_hours": (shift["end_min"] - shift["start_min"]) / 60,
+            "position_conflicts": conflict_payload(conflicts),
             "candidates": candidates
         })
-
 
     except Exception as e:
 
@@ -1725,14 +1001,26 @@ def get_schedule_candidates():
             "message": str(e)
         }), 500
 
-
     finally:
 
         cursor.close()
         db.close()
 
+
 # =========================================================
-# Save Assignment
+# Save Shift
+#
+# POST /api/staff-schedule
+# {
+#   work_date, store_id, role_type, position_no,
+#   start_time, end_time, staff_id,
+#   schedule_id   (optional: edit this shift)
+#   override      (soft rules confirmed)
+#   replace       (overlapping shifts in this position may be trimmed)
+# }
+#
+# Afterwards, touching shifts of the same staff / store / role /
+# position are merged into one row (14-16 + 16-18 -> 14-18).
 # =========================================================
 
 @schedule_bp.route(
@@ -1742,477 +1030,326 @@ def get_schedule_candidates():
 @login_required
 def save_staff_schedule():
 
-    permission_error = (
-        require_schedule_edit_access()
-    )
+    permission_error = require_schedule_edit_access()
 
     if permission_error:
         return permission_error
 
-    data = (
-        request.get_json(
-            silent=True
-        )
-        or
-        {}
-    )
+    data = request.get_json(silent=True) or {}
 
+    shift, error = parse_shift_request(data)
 
-    work_date = (
-        str(
-            data.get(
-                "work_date",
-                ""
-            )
-        )
-        .strip()
-    )
-
-    slot_id = data.get(
-        "slot_id"
-    )
-
-    staff_id = data.get(
-        "staff_id"
-    )
-
-    role_type = (
-        str(
-            data.get(
-                "role_type",
-                ""
-            )
-        )
-        .strip()
-        .lower()
-    )
-
-    position_no = data.get(
-        "position_no",
-        1
-    )
-
-    override_requested = bool(
-        data.get(
-            "override",
-            False
-        )
-    )
-
-
-    if not work_date:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "work_date is required"
-        }), 400
-
+    if error:
+        return error
 
     try:
-
-        parse_date(
-            work_date
-        )
-
-    except ValueError:
-
+        staff_id = int(data.get("staff_id"))
+    except (TypeError, ValueError):
         return jsonify({
             "success": False,
-            "message":
-                "Invalid work_date"
+            "message": "Invalid staff_id"
         }), 400
 
+    override_requested = bool(data.get("override", False))
+    replace_requested = bool(data.get("replace", False))
 
-    if not slot_id:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "slot_id is required"
-        }), 400
-
-
-    if not staff_id:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "staff_id is required"
-        }), 400
-
-
-    if role_type not in VALID_ROLES:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "Invalid role_type"
-        }), 400
-
-
-    try:
-
-        position_no = int(
-            position_no
-        )
-
-    except (
-        TypeError,
-        ValueError
-    ):
-
-        return jsonify({
-            "success": False,
-            "message":
-                "Invalid position_no"
-        }), 400
-
-
-    if position_no < 1:
-
-        return jsonify({
-            "success": False,
-            "message":
-                "position_no must be at least 1"
-        }), 400
-
+    start_min = shift["start_min"]
+    end_min = shift["end_min"]
+    schedule_id = shift["schedule_id"]
 
     db = get_db()
-
-    cursor = db.cursor(
-        dictionary=True
-    )
-
+    cursor = db.cursor(dictionary=True)
 
     try:
 
-        # -------------------------------------------------
-        # Published week is locked.
-        # -------------------------------------------------
+        if get_week_status(cursor, shift["work_date"])["status"] == "published":
+            return published_week_response()
 
-        week_state = get_week_status(
-            cursor,
-            work_date
-        )
 
-        if (
-            week_state[
-                "status"
-            ]
-            ==
-            "published"
+        staff_rows = load_role_staff(cursor, shift["role_type"], staff_id)
+
+        if not staff_rows:
+            return jsonify({
+                "success": False,
+                "message": "Staff is not active or does not have this role."
+            }), 400
+
+        staff = staff_rows[0]
+
+
+        # Lock this position for the rest of the transaction.
+        position_rows = load_position_rows(cursor, shift, for_update=True)
+
+        if schedule_id is not None and not any(
+            row["schedule_id"] == schedule_id for row in position_rows
         ):
-
+            db.rollback()
             return jsonify({
                 "success": False,
-                "message":
-                    "Published schedule must be changed to Modify mode before editing."
-            }), 409
-
-
-        slot = load_slot(
-            cursor,
-            slot_id
-        )
-
-        if not slot:
-
-            return jsonify({
-                "success": False,
-                "message":
-                    "Slot not found"
+                "message": "This shift no longer exists. Reload the page."
             }), 404
 
 
-        if not slot["active"]:
+        # ---------------------------------------------
+        # Rules
+        # ---------------------------------------------
 
-            return jsonify({
-                "success": False,
-                "message":
-                    "Slot is inactive"
-            }), 400
-
-
-        # -------------------------------------------------
-        # Validate employee.
-        # -------------------------------------------------
-
-        eligibility = (
-            check_staff_eligibility(
-                cursor,
-                staff_id,
-                work_date,
-                slot,
-                role_type
-            )
+        result = evaluate_staff(
+            staff,
+            shift["role_type"],
+            start_min,
+            end_min,
+            load_available_ranges(
+                cursor, [staff_id], shift["work_date"]
+            ).get(staff_id, []),
+            load_day_assignments(
+                cursor, [staff_id], shift["work_date"],
+                exclude_schedule_id=schedule_id
+            ).get(staff_id, [])
         )
 
-        if not eligibility[
-            "eligible"
-        ]:
-
+        if not result["eligible"]:
+            db.rollback()
             return jsonify({
                 "success": False,
-                "message":
-                    eligibility[
-                        "reason"
-                    ]
+                "message": result["reason"]
             }), 400
 
-
-        violations = eligibility[
-            "violations"
-        ]
-
-
-        # -------------------------------------------------
-        # Soft rules require explicit override.
-        # -------------------------------------------------
-
-        if (
-            eligibility[
-                "requires_override"
-            ]
-            and
-            not override_requested
-        ):
-
+        if result["requires_override"] and not override_requested:
+            db.rollback()
             return jsonify({
-
                 "success": False,
-
-                "requires_override":
-                    True,
-
-                "violations":
-                    violations,
-
-                "violation_messages":
-                    eligibility[
-                        "violation_messages"
-                    ],
-
-                "message":
-                    "This assignment requires an override."
+                "requires_override": True,
+                "violations": result["violations"],
+                "violation_messages": result["violation_messages"],
+                "message": "This assignment requires an override."
             }), 409
 
 
-        # -------------------------------------------------
-        # Same employee cannot occupy another role/position
-        # in the same slot.
-        # Hard rule: cannot override.
-        # -------------------------------------------------
+        # ---------------------------------------------
+        # Other shifts in this position that overlap
+        # ---------------------------------------------
 
-        cursor.execute(
-            """
-            SELECT
-                schedule_id,
-                role_type,
-                position_no
-
-            FROM staff_schedule
-
-            WHERE work_date = %s
-              AND slot_id = %s
-              AND staff_id = %s
-            """,
-            (
-                work_date,
-                slot_id,
-                staff_id
+        conflicts = [
+            row for row in position_rows
+            if row["schedule_id"] != schedule_id
+            and ranges_overlap(
+                start_min, end_min,
+                row["start_min"], row["end_min"]
             )
-        )
+        ]
 
-        existing_staff = (
-            cursor.fetchone()
-        )
+        if conflicts and not replace_requested:
+            db.rollback()
+            return jsonify({
+                "success": False,
+                "requires_replace": True,
+                "position_conflicts": conflict_payload(conflicts),
+                "message": "This time overlaps other shifts in this position."
+            }), 409
 
+        for row in conflicts:
 
-        if existing_staff:
+            if row["start_min"] >= start_min and row["end_min"] <= end_min:
 
-            same_position = (
-                existing_staff[
-                    "role_type"
-                ]
-                ==
-                role_type
+                # Fully covered -> remove
+                cursor.execute(
+                    "DELETE FROM staff_schedule WHERE schedule_id = %s",
+                    (row["schedule_id"],)
+                )
 
-                and
+            elif row["start_min"] < start_min and row["end_min"] > end_min:
 
-                existing_staff[
-                    "position_no"
-                ]
-                ==
-                position_no
-            )
+                # New shift sits in the middle -> split into two
+                cursor.execute(
+                    """
+                    UPDATE staff_schedule
+                    SET end_time = %s, status = 'draft'
+                    WHERE schedule_id = %s
+                    """,
+                    (minutes_to_sql(start_min), row["schedule_id"])
+                )
 
-            if not same_position:
-
-                return jsonify({
-                    "success": False,
-                    "message":
-                        "This employee is already assigned "
-                        "to another role in this slot."
-                }), 400
-
-
-        override_daily_limit = (
-            OVERRIDE_DAILY_LIMIT
-            in
-            violations
-        )
-
-        override_consecutive = (
-            OVERRIDE_CONSECUTIVE
-            in
-            violations
-        )
-
-        has_override = (
-            override_daily_limit
-            or
-            override_consecutive
-        )
-
-
-        # -------------------------------------------------
-        # Insert / replace requested position.
-        #
-        # UNIQUE expected:
-        # (
-        #   work_date,
-        #   slot_id,
-        #   role_type,
-        #   position_no
-        # )
-        # -------------------------------------------------
-
-        cursor.execute(
-            """
-            INSERT INTO staff_schedule
-            (
-                work_date,
-                slot_id,
-                staff_id,
-                role_type,
-                position_no,
-                status,
-
-                override_daily_limit,
-                override_consecutive,
-                overridden_at
-            )
-
-            VALUES
-            (
-                %s,
-                %s,
-                %s,
-                %s,
-                %s,
-                'draft',
-
-                %s,
-                %s,
-                %s
-            )
-
-            ON DUPLICATE KEY UPDATE
-
-                staff_id =
-                    VALUES(staff_id),
-
-                status =
-                    'draft',
-
-                override_daily_limit =
-                    VALUES(
-                        override_daily_limit
-                    ),
-
-                override_consecutive =
-                    VALUES(
-                        override_consecutive
-                    ),
-
-                overridden_at =
-                    VALUES(
-                        overridden_at
+                cursor.execute(
+                    """
+                    INSERT INTO staff_schedule
+                    (
+                        work_date, store_id, start_time, end_time,
+                        staff_id, role_type, position_no, status,
+                        override_daily_limit, override_consecutive, overridden_at
                     )
-            """,
-            (
-                work_date,
-                slot_id,
-                staff_id,
-                role_type,
-                position_no,
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s)
+                    """,
+                    (
+                        shift["work_date"], shift["store_id"],
+                        minutes_to_sql(end_min), minutes_to_sql(row["end_min"]),
+                        row["staff_id"], shift["role_type"], shift["position_no"],
+                        int(bool(row["override_daily_limit"])),
+                        int(bool(row["override_consecutive"])),
+                        row["overridden_at"]
+                    )
+                )
 
-                int(
-                    override_daily_limit
-                ),
+            elif row["start_min"] < start_min:
 
-                int(
-                    override_consecutive
-                ),
+                # Overlaps the start -> cut its end
+                cursor.execute(
+                    """
+                    UPDATE staff_schedule
+                    SET end_time = %s, status = 'draft'
+                    WHERE schedule_id = %s
+                    """,
+                    (minutes_to_sql(start_min), row["schedule_id"])
+                )
 
+            else:
+
+                # Overlaps the end -> move its start
+                cursor.execute(
+                    """
+                    UPDATE staff_schedule
+                    SET start_time = %s, status = 'draft'
+                    WHERE schedule_id = %s
+                    """,
+                    (minutes_to_sql(end_min), row["schedule_id"])
+                )
+
+
+        # ---------------------------------------------
+        # Insert / update
+        # ---------------------------------------------
+
+        override_daily = OVERRIDE_DAILY_LIMIT in result["violations"]
+        override_consecutive = OVERRIDE_CONSECUTIVE in result["violations"]
+        overridden_at = (
+            datetime.now()
+            if override_daily or override_consecutive
+            else None
+        )
+
+        if schedule_id is not None:
+
+            cursor.execute(
+                """
+                UPDATE staff_schedule
+                SET
+                    staff_id = %s,
+                    start_time = %s,
+                    end_time = %s,
+                    status = 'draft',
+                    override_daily_limit = %s,
+                    override_consecutive = %s,
+                    overridden_at = %s
+                WHERE schedule_id = %s
+                """,
                 (
-                    datetime.now()
-                    if has_override
-                    else None
+                    staff_id,
+                    minutes_to_sql(start_min),
+                    minutes_to_sql(end_min),
+                    int(override_daily),
+                    int(override_consecutive),
+                    overridden_at,
+                    schedule_id
                 )
             )
-        )
+
+        else:
+
+            cursor.execute(
+                """
+                INSERT INTO staff_schedule
+                (
+                    work_date, store_id, start_time, end_time,
+                    staff_id, role_type, position_no, status,
+                    override_daily_limit, override_consecutive, overridden_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'draft', %s, %s, %s)
+                """,
+                (
+                    shift["work_date"], shift["store_id"],
+                    minutes_to_sql(start_min), minutes_to_sql(end_min),
+                    staff_id, shift["role_type"], shift["position_no"],
+                    int(override_daily), int(override_consecutive),
+                    overridden_at
+                )
+            )
+
+            schedule_id = cursor.lastrowid
+
+
+        # ---------------------------------------------
+        # Merge touching shifts of the same person
+        # ---------------------------------------------
+
+        merged_count = 0
+
+        while True:
+
+            neighbour = next(
+                (
+                    row for row in load_position_rows(cursor, shift)
+                    if row["staff_id"] == staff_id
+                    and row["schedule_id"] != schedule_id
+                    and (
+                        row["end_min"] == start_min
+                        or row["start_min"] == end_min
+                    )
+                ),
+                None
+            )
+
+            if neighbour is None:
+                break
+
+            start_min = min(start_min, neighbour["start_min"])
+            end_min = max(end_min, neighbour["end_min"])
+
+            cursor.execute(
+                """
+                UPDATE staff_schedule
+                SET
+                    start_time = %s,
+                    end_time = %s,
+                    override_daily_limit = override_daily_limit OR %s,
+                    override_consecutive = override_consecutive OR %s,
+                    overridden_at = COALESCE(overridden_at, %s)
+                WHERE schedule_id = %s
+                """,
+                (
+                    minutes_to_sql(start_min),
+                    minutes_to_sql(end_min),
+                    int(bool(neighbour["override_daily_limit"])),
+                    int(bool(neighbour["override_consecutive"])),
+                    neighbour["overridden_at"],
+                    schedule_id
+                )
+            )
+
+            cursor.execute(
+                "DELETE FROM staff_schedule WHERE schedule_id = %s",
+                (neighbour["schedule_id"],)
+            )
+
+            merged_count += 1
 
 
         db.commit()
 
+        has_override = override_daily or override_consecutive
 
         return jsonify({
-
             "success": True,
-
-            "message":
-                (
-                    "Schedule saved with override."
-                    if has_override
-                    else
-                    "Schedule saved."
-                ),
-
-            "assignment": {
-
-                "work_date":
-                    work_date,
-
-                "slot_id":
-                    slot_id,
-
-                "staff_id":
-                    staff_id,
-
-                "staff_name":
-                    eligibility[
-                        "name"
-                    ],
-
-                "role_type":
-                    role_type,
-
-                "position_no":
-                    position_no,
-
-                "status":
-                    "draft",
-
-                "override_daily_limit":
-                    override_daily_limit,
-
-                "override_consecutive":
-                    override_consecutive,
-            }
+            "message": (
+                "Schedule saved with override."
+                if has_override
+                else "Schedule saved."
+            ),
+            "schedule_id": schedule_id,
+            "start_time": minutes_to_hhmm(start_min),
+            "end_time": minutes_to_hhmm(end_min),
+            "replaced": len(conflicts),
+            "merged": merged_count
         })
-
 
     except Exception as e:
 
@@ -2223,7 +1360,6 @@ def save_staff_schedule():
             "message": str(e)
         }), 500
 
-
     finally:
 
         cursor.close()
@@ -2231,7 +1367,9 @@ def save_staff_schedule():
 
 
 # =========================================================
-# Remove Assignment
+# Remove Shift
+#
+# DELETE /api/staff-schedule   {"schedule_id": 123}
 # =========================================================
 
 @schedule_bp.route(
@@ -2241,150 +1379,53 @@ def save_staff_schedule():
 @login_required
 def delete_staff_schedule():
 
-    permission_error = (
-        require_schedule_edit_access()
-    )
+    permission_error = require_schedule_edit_access()
 
     if permission_error:
         return permission_error
 
-    data = (
-        request.get_json(
-            silent=True
-        )
-        or
-        {}
-    )
-
-
-    work_date = (
-        str(
-            data.get(
-                "work_date",
-                ""
-            )
-        )
-        .strip()
-    )
-
-    slot_id = data.get(
-        "slot_id"
-    )
-
-    role_type = (
-        str(
-            data.get(
-                "role_type",
-                ""
-            )
-        )
-        .strip()
-        .lower()
-    )
-
-    position_no = data.get(
-        "position_no"
-    )
-
-
-    if (
-        not work_date
-        or
-        not slot_id
-        or
-        role_type
-        not in
-        VALID_ROLES
-        or
-        position_no is None
-    ):
-
-        return jsonify({
-            "success": False,
-            "message":
-                "Invalid request"
-        }), 400
-
+    data = request.get_json(silent=True) or {}
 
     try:
-
-        parse_date(
-            work_date
-        )
-
-        position_no = int(
-            position_no
-        )
-
-    except (
-        TypeError,
-        ValueError
-    ):
-
+        schedule_id = int(data.get("schedule_id"))
+    except (TypeError, ValueError):
         return jsonify({
             "success": False,
-            "message":
-                "Invalid request"
+            "message": "Invalid request"
         }), 400
-
 
     db = get_db()
-
-    cursor = db.cursor(
-        dictionary=True
-    )
-
+    cursor = db.cursor(dictionary=True)
 
     try:
 
-        week_state = get_week_status(
-            cursor,
-            work_date
+        cursor.execute(
+            "SELECT work_date FROM staff_schedule WHERE schedule_id = %s",
+            (schedule_id,)
         )
 
-        if (
-            week_state[
-                "status"
-            ]
-            ==
-            "published"
-        ):
+        row = cursor.fetchone()
 
+        if not row:
             return jsonify({
                 "success": False,
-                "message":
-                    "Published schedule must be changed to Modify mode before editing."
-            }), 409
+                "message": "This shift no longer exists. Reload the page."
+            }), 404
 
+        if get_week_status(cursor, row["work_date"])["status"] == "published":
+            return published_week_response()
 
         cursor.execute(
-            """
-            DELETE FROM staff_schedule
-
-            WHERE work_date = %s
-              AND slot_id = %s
-              AND role_type = %s
-              AND position_no = %s
-            """,
-            (
-                work_date,
-                slot_id,
-                role_type,
-                position_no
-            )
+            "DELETE FROM staff_schedule WHERE schedule_id = %s",
+            (schedule_id,)
         )
 
         db.commit()
 
-
         return jsonify({
-
             "success": True,
-
-            "message":
-                "Assignment removed."
+            "message": "Assignment removed."
         })
-
 
     except Exception as e:
 
@@ -2394,7 +1435,6 @@ def delete_staff_schedule():
             "success": False,
             "message": str(e)
         }), 500
-
 
     finally:
 
@@ -2413,108 +1453,51 @@ def delete_staff_schedule():
 @login_required
 def confirm_schedule_week():
 
-    permission_error = (
-        require_schedule_edit_access()
-    )
+    permission_error = require_schedule_edit_access()
 
     if permission_error:
         return permission_error
 
-    data = (
-        request.get_json(
-            silent=True
-        )
-        or
-        {}
-    )
+    data = request.get_json(silent=True) or {}
 
-    week_start = (
-        str(
-            data.get(
-                "week_start",
-                ""
-            )
-        )
-        .strip()
-    )
-
+    week_start = str(data.get("week_start", "")).strip()
 
     if not week_start:
-
         return jsonify({
             "success": False,
-            "message":
-                "week_start is required"
+            "message": "week_start is required"
         }), 400
-
 
     try:
-
-        monday, week_end = week_bounds(
-            week_start
-        )
-
+        monday, week_end = week_bounds(week_start)
     except ValueError:
-
         return jsonify({
             "success": False,
-            "message":
-                "Invalid week_start"
+            "message": "Invalid week_start"
         }), 400
-
 
     db = get_db()
-
-    cursor = db.cursor(
-        dictionary=True
-    )
-
+    cursor = db.cursor(dictionary=True)
 
     try:
 
-        week_state = get_week_status(
-            cursor,
-            monday
-        )
+        week_state = get_week_status(cursor, monday)
 
-        if (
-            week_state[
-                "total_count"
-            ]
-            ==
-            0
-        ):
-
+        if week_state["total_count"] == 0:
             return jsonify({
                 "success": False,
-                "message":
-                    "There is no schedule to publish for this week."
+                "message": "There is no schedule to publish for this week."
             }), 400
 
-
-        if (
-            week_state[
-                "status"
-            ]
-            ==
-            "published"
-        ):
-
+        if week_state["status"] == "published":
             return jsonify({
                 "success": True,
-                "message":
-                    "Schedule is already published.",
-                "week_status":
-                    "published",
-                "published_at":
-                    week_state[
-                        "published_at"
-                    ]
+                "message": "Schedule is already published.",
+                "week_status": "published",
+                "published_at": week_state["published_at"]
             })
 
-
         published_at = datetime.now()
-
 
         cursor.execute(
             """
@@ -2534,26 +1517,14 @@ def confirm_schedule_week():
             )
         )
 
-
         db.commit()
 
-
         return jsonify({
-
             "success": True,
-
-            "message":
-                "Schedule published.",
-
-            "week_status":
-                "published",
-
-            "published_at":
-                serialize_datetime(
-                    published_at
-                )
+            "message": "Schedule published.",
+            "week_status": "published",
+            "published_at": serialize_datetime(published_at)
         })
-
 
     except Exception as e:
 
@@ -2563,7 +1534,6 @@ def confirm_schedule_week():
             "success": False,
             "message": str(e)
         }), 500
-
 
     finally:
 
@@ -2582,86 +1552,42 @@ def confirm_schedule_week():
 @login_required
 def modify_schedule_week():
 
-    permission_error = (
-        require_schedule_edit_access()
-    )
+    permission_error = require_schedule_edit_access()
 
     if permission_error:
         return permission_error
 
-    data = (
-        request.get_json(
-            silent=True
-        )
-        or
-        {}
-    )
+    data = request.get_json(silent=True) or {}
 
-    week_start = (
-        str(
-            data.get(
-                "week_start",
-                ""
-            )
-        )
-        .strip()
-    )
-
+    week_start = str(data.get("week_start", "")).strip()
 
     if not week_start:
-
         return jsonify({
             "success": False,
-            "message":
-                "week_start is required"
+            "message": "week_start is required"
         }), 400
-
 
     try:
-
-        monday, week_end = week_bounds(
-            week_start
-        )
-
+        monday, week_end = week_bounds(week_start)
     except ValueError:
-
         return jsonify({
             "success": False,
-            "message":
-                "Invalid week_start"
+            "message": "Invalid week_start"
         }), 400
-
 
     db = get_db()
-
-    cursor = db.cursor(
-        dictionary=True
-    )
-
+    cursor = db.cursor(dictionary=True)
 
     try:
 
-        week_state = get_week_status(
-            cursor,
-            monday
-        )
+        week_state = get_week_status(cursor, monday)
 
-        if (
-            week_state[
-                "total_count"
-            ]
-            ==
-            0
-        ):
-
+        if week_state["total_count"] == 0:
             return jsonify({
                 "success": True,
-                "message":
-                    "Schedule is already in draft mode.",
-                "week_status":
-                    "draft"
+                "message": "Schedule is already in draft mode.",
+                "week_status": "draft"
             })
-
 
         cursor.execute(
             """
@@ -2679,21 +1605,13 @@ def modify_schedule_week():
             )
         )
 
-
         db.commit()
 
-
         return jsonify({
-
             "success": True,
-
-            "message":
-                "Schedule is now editable.",
-
-            "week_status":
-                "draft"
+            "message": "Schedule is now editable.",
+            "week_status": "draft"
         })
-
 
     except Exception as e:
 
@@ -2703,7 +1621,6 @@ def modify_schedule_week():
             "success": False,
             "message": str(e)
         }), 500
-
 
     finally:
 

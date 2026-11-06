@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, render_template, request, url_for
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from db import get_db
 from permissions.permissions import(
@@ -10,6 +10,13 @@ from permissions.permissions import(
 from .availability_guest import (
     generate_guest_availability_token,
     get_guest_link_expire_hours,
+)
+
+from .work_hours import (
+    editable_weeks,
+    load_week_hours,
+    monday_for,
+    validate_range,
 )
 
 availability_management_bp = Blueprint(
@@ -109,6 +116,145 @@ def update_staff_guest():
             "success": True,
             "staff_id": staff_id,
             "guest": bool(guest)
+        })
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+        cursor.close()
+        db.close()
+
+
+# =========================
+# Work Hours - GET
+# =========================
+
+def work_hours_payload(cursor, monday):
+
+    this_monday, next_monday = editable_weeks()
+
+    payload = load_week_hours(cursor, monday)
+
+    payload["editable"] = monday in (this_monday, next_monday)
+
+    return payload
+
+
+@availability_management_bp.route(
+    "/api/availability-management/work-hours",
+    methods=["GET"]
+)
+@login_required
+def get_work_hours():
+
+    try:
+        monday = monday_for(
+            request.args.get("week_start", "")
+        )
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "message": "Invalid week_start"
+        }), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+
+        return jsonify({
+            "success": True,
+            "work_hours": work_hours_payload(cursor, monday)
+        })
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+        cursor.close()
+        db.close()
+
+
+# =========================
+# Work Hours - SAVE
+#
+# Body: {"week_start": "2026-11-09", "start_hour": 10, "end_hour": 22}
+# Only the current week and next week can be changed.
+# =========================
+
+@availability_management_bp.route(
+    "/api/availability-management/work-hours",
+    methods=["POST"]
+)
+@login_required
+def save_work_hours():
+
+    data = request.get_json(silent=True) or {}
+
+    try:
+        monday = monday_for(data.get("week_start", ""))
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "message": "Invalid week_start"
+        }), 400
+
+    if monday not in editable_weeks():
+        return jsonify({
+            "success": False,
+            "message":
+                "Work hours can only be changed for "
+                "this week or next week."
+        }), 400
+
+    try:
+        start_hour, end_hour = validate_range(
+            data.get("start_hour"),
+            data.get("end_hour")
+        )
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 400
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+
+        cursor.execute(
+            """
+            INSERT INTO staff_work_hours
+                (week_start, start_hour, end_hour, updated_by)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                start_hour = VALUES(start_hour),
+                end_hour   = VALUES(end_hour),
+                updated_by = VALUES(updated_by)
+            """,
+            (
+                monday,
+                start_hour,
+                end_hour,
+                getattr(current_user, "id", None)
+            )
+        )
+
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Work hours updated.",
+            "work_hours": work_hours_payload(cursor, monday)
         })
 
     except Exception as e:

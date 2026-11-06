@@ -16,6 +16,12 @@ from itsdangerous import (
 
 from db import get_db
 
+from .work_hours import (
+    load_week_hours,
+    parse_hour_block,
+    time_to_hhmm,
+)
+
 
 availability_guest_bp = Blueprint(
     "availability_guest",
@@ -400,6 +406,13 @@ def guest_availability_page(
             )
         )
 
+        work_hours = load_week_hours(
+            cursor,
+            token_data[
+                "week_start"
+            ]
+        )
+
         return render_template(
             "availability_guest.html",
 
@@ -417,6 +430,9 @@ def guest_availability_page(
                     "week_start"
                 ].isoformat()
             ),
+
+            work_hours=
+                work_hours,
 
             expire_hours=
                 get_guest_link_expire_hours(),
@@ -574,14 +590,14 @@ def get_guest_availability(
                     ].isoformat(),
 
                 "start_time":
-                    str(
+                    time_to_hhmm(
                         row[
                             "start_time"
                         ]
                     ),
 
                 "end_time":
-                    str(
+                    time_to_hhmm(
                         row[
                             "end_time"
                         ]
@@ -617,6 +633,12 @@ def get_guest_availability(
             "week_end":
                 week_end
                 .isoformat(),
+
+            "work_hours":
+                load_week_hours(
+                    cursor,
+                    week_start
+                ),
 
             "availability":
                 availability,
@@ -798,33 +820,22 @@ def save_guest_availability(
                     "link's week.",
             }), 400
 
+        # One-hour block; "23:00" -> "00:00" is valid.
         try:
 
-            datetime.strptime(
-                start_time,
-                "%H:%M",
+            start_time, end_time = (
+                parse_hour_block(
+                    start_time,
+                    end_time,
+                )
             )
 
-            datetime.strptime(
-                end_time,
-                "%H:%M",
-            )
-
-        except ValueError:
+        except ValueError as e:
 
             return jsonify({
                 "success": False,
                 "message":
-                    "Invalid availability time.",
-            }), 400
-
-        if start_time >= end_time:
-
-            return jsonify({
-                "success": False,
-                "message":
-                    "start_time must be "
-                    "earlier than end_time.",
+                    str(e),
             }), 400
 
         normalized_items.append({

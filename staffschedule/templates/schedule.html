@@ -113,8 +113,16 @@
             font-weight: 700;
         }
 
+        /*
+            Space is always reserved so the table never jumps
+            when a message appears or disappears.
+        */
         .status-bar {
-            display: none;
+            display: block;
+
+            visibility: hidden;
+
+            height: 42px;
 
             margin-bottom: 16px;
 
@@ -123,10 +131,15 @@
             border-radius: 8px;
 
             font-size: 14px;
+            line-height: 20px;
+
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .status-bar.visible {
-            display: block;
+            visibility: visible;
         }
 
         .status-bar.success {
@@ -145,6 +158,8 @@
         }
 
         .matrix-wrapper {
+            position: relative;
+
             overflow-x: auto;
 
             background: white;
@@ -161,7 +176,7 @@
         table {
             width: 100%;
 
-            min-width: 2100px;
+            min-width: 2900px;
 
             border-collapse: separate;
             border-spacing: 0;
@@ -269,129 +284,318 @@
             white-space: nowrap;
         }
 
-        .schedule-cell {
-            height: 64px;
+        /* =========================================================
+           Shift grid
+           One column per position (Creator / O1 / O2).
+           A shift is one block spanning its hours (rowspan).
+        ========================================================= */
 
-            padding: 4px;
+        .role-header.position-header {
+            font-size: 11px;
+            color: #646a73;
+        }
+
+        .schedule-cell {
+            position: relative;
+
+            height: 46px;
+
+            padding: 0;
 
             background: #fff;
         }
 
-        .schedule-cell:hover {
-            background: #fafbfc;
+        .schedule-cell.store-start {
+            border-left: 2px solid #c9ced6;
         }
 
-        .assignment-button {
-            width: 100%;
-            height: 100%;
+        .shift-block,
+        .empty-slot {
+            position: absolute;
+            inset: 3px;
 
-            min-height: 48px;
-
-            border: 1px solid #d9dce1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
 
             border-radius: 7px;
 
-            background: #f8f9fb;
+            font-family: inherit;
 
-            color: #1f2329;
+            overflow: hidden;
+        }
 
-            font-size: 12px;
+        .empty-slot {
+            border: 1px dashed transparent;
+
+            background: transparent;
+
+            color: transparent;
+
+            font-size: 16px;
             font-weight: 600;
 
             cursor: pointer;
-
-            white-space: normal;
-
-            line-height: 1.25;
-
-            padding: 5px 6px;
         }
 
-        .assignment-button:hover {
-            border-color: #b9bec7;
+        .empty-slot:hover:not(:disabled) {
+            border-color: #c9ced6;
 
-            background: #f1f3f6;
-        }
+            background: #f7f8fa;
 
-        .assignment-button.assigned {
-            border-color: #cbd4e2;
-        }
-
-        .assignment-button.empty {
             color: #8f959e;
         }
 
-        .assignment-button.creator.assigned {
+        .empty-slot:disabled {
+            cursor: default;
+        }
+
+        .shift-block {
+            border: 1px solid #cbd4e2;
+
             background: #eef3ff;
-        }
-
-        /* Different creators use stable colors based on staff_id */
-        .assignment-button.creator.creator-color-0 { background: #eaf2ff; border-color: #b9cdf3; }
-        .assignment-button.creator.creator-color-1 { background: #eaf8ef; border-color: #b8ddc5; }
-        .assignment-button.creator.creator-color-2 { background: #fff7df; border-color: #ead69a; }
-        .assignment-button.creator.creator-color-3 { background: #f3ecff; border-color: #d4c0f3; }
-        .assignment-button.creator.creator-color-4 { background: #ffeef3; border-color: #e8bfd0; }
-        .assignment-button.creator.creator-color-5 { background: #eaf8f7; border-color: #b7dcda; }
-        .assignment-button.creator.creator-color-6 { background: #fff0e6; border-color: #e7c7ae; }
-        .assignment-button.creator.creator-color-7 { background: #f1f3f5; border-color: #cfd4da; }
-
-        .operator-stack {
-            display: grid;
-
-            grid-template-rows:
-                1fr 1fr;
-
-            gap: 4px;
-
-            height: 100%;
-        }
-
-        .operator-button {
-            width: 100%;
-
-            min-height: 24px;
-
-            border: 1px solid #d9dce1;
-
-            border-radius: 6px;
-
-            background: #f8f9fb;
 
             color: #1f2329;
 
-            font-size: 11px;
-            font-weight: 600;
+            padding: 4px;
 
             cursor: pointer;
 
-            line-height: 1.15;
-
-            padding: 3px 5px;
+            line-height: 1.2;
         }
 
-        .operator-button:hover {
-            border-color: #b9bec7;
-
-            background: #f1f3f6;
+        .shift-block:hover:not(:disabled) {
+            filter: brightness(0.97);
         }
 
-        .operator-button.assigned {
-            background: #f2f7f2;
-
-            border-color: #cbd9cb;
+        .shift-block:disabled {
+            cursor: default;
         }
 
-        .operator-button.empty {
-            color: #9aa0a8;
-        }
-
-        .operator-label {
-            color: #8f959e;
-
-            font-size: 9px;
+        .shift-name {
+            font-size: 11px;
             font-weight: 700;
 
-            margin-right: 4px;
+            max-width: 100%;
+
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .shift-time {
+            font-size: 10px;
+            font-weight: 600;
+
+            color: #646a73;
+        }
+
+        /* =========================================================
+           Drag to resize (top = start, bottom = end)
+        ========================================================= */
+
+        .resize-handle {
+            position: absolute;
+            left: 50%;
+            z-index: 3;
+
+            display: none;
+            align-items: center;
+            justify-content: center;
+
+            width: 30px;
+            height: 14px;
+
+            transform: translateX(-50%);
+
+            border: 1px solid #b9c3d3;
+            border-radius: 7px;
+
+            background: #fff;
+
+            color: #3159a7;
+
+            font-size: 8px;
+            line-height: 1;
+
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+
+            cursor: ns-resize;
+
+            touch-action: none;
+            user-select: none;
+        }
+
+        .resize-top {
+            top: 0;
+        }
+
+        .resize-bottom {
+            bottom: 0;
+        }
+
+        .schedule-cell:hover .resize-handle,
+        .schedule-cell.resizing .resize-handle {
+            display: flex;
+        }
+
+        /* Keep pointer capture, but don't cover the preview label */
+        .schedule-cell.resizing .resize-handle {
+            visibility: hidden;
+        }
+
+        /* Touch screens have no hover: always show */
+        @media (hover: none) {
+            .resize-handle {
+                display: flex;
+            }
+        }
+
+        .schedule-cell.resizing .shift-block {
+            opacity: 0.4;
+        }
+
+        .resize-preview {
+            position: absolute;
+            z-index: 6;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border: 2px dashed #3370ff;
+            border-radius: 8px;
+
+            background: rgba(51, 112, 255, 0.10);
+
+            color: #1f4fbf;
+
+            font-size: 11px;
+            font-weight: 800;
+
+            pointer-events: none;
+        }
+
+        body.resizing-active,
+        body.resizing-active * {
+            cursor: ns-resize !important;
+            user-select: none !important;
+        }
+
+        /* Stable colors by staff_id */
+        .shift-color-0 { background: #eaf2ff; border-color: #b9cdf3; }
+        .shift-color-1 { background: #eaf8ef; border-color: #b8ddc5; }
+        .shift-color-2 { background: #fff7df; border-color: #ead69a; }
+        .shift-color-3 { background: #f3ecff; border-color: #d4c0f3; }
+        .shift-color-4 { background: #ffeef3; border-color: #e8bfd0; }
+        .shift-color-5 { background: #eaf8f7; border-color: #b7dcda; }
+        .shift-color-6 { background: #fff0e6; border-color: #e7c7ae; }
+        .shift-color-7 { background: #f1f3f5; border-color: #cfd4da; }
+
+        /* =========================================================
+           Modal time range / replace warning
+        ========================================================= */
+
+        .shift-time-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+
+            padding: 14px 20px 0 20px;
+
+            color: #646a73;
+
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .shift-time-controls select {
+            padding: 7px 10px;
+
+            border: 1px solid #d9dce1;
+            border-radius: 7px;
+
+            background: white;
+
+            font-size: 13px;
+        }
+
+        .shift-duration {
+            color: #8f959e;
+            font-weight: 500;
+        }
+
+        .replace-warning {
+            display: none;
+
+            margin: 12px 20px 0 20px;
+            padding: 10px 12px;
+
+            border: 1px solid #efc56f;
+            border-radius: 8px;
+
+            background: #fff8e8;
+
+            color: #704b00;
+
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .replace-warning.visible {
+            display: block;
+        }
+
+        .unavailable-section {
+            margin-top: 10px;
+            padding: 10px 14px 4px 14px;
+
+            border-top: 1px solid #eceef1;
+        }
+
+        .unavailable-title {
+            margin-bottom: 6px;
+
+            color: #8f959e;
+
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .unavailable-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+
+            padding: 5px 0;
+
+            color: #8f959e;
+
+            font-size: 13px;
+        }
+
+        .unavailable-name {
+            font-weight: 600;
+        }
+
+        .candidate-current {
+            margin-left: 6px;
+
+            padding: 1px 6px;
+
+            border-radius: 4px;
+
+            background: #edf3ff;
+
+            color: #3159a7;
+
+            font-size: 10px;
+            font-weight: 700;
         }
 
         .modal-backdrop {
@@ -562,11 +766,37 @@
 
         .schedule-actions {
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
             align-items: center;
             gap: 14px;
 
             margin-top: 18px;
+        }
+
+        .actions-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .actions-right {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .overview-button.active {
+            background: #3370ff;
+            color: white;
+        }
+
+        /* Full view: use the whole window width, table scaled to fit */
+        body.overview-mode .page {
+            max-width: none;
+        }
+
+        body.overview-mode .matrix-wrapper {
+            overflow-x: hidden;
         }
 
         .publish-state {
@@ -607,13 +837,14 @@
         }
 
         .assignment-button:disabled,
-        .operator-button:disabled {
+        .operator-button:disabled,
+        .shift-block:disabled {
             cursor: not-allowed;
             opacity: 0.78;
         }
 
         .override-mark {
-            margin-left: 4px;
+            margin-left: 0;
 
             color: #b26a00;
 
@@ -758,7 +989,7 @@
             </h1>
 
             <div class="subtitle">
-                Weekly matrix view. Click Creator or Operator to assign employees.
+                Weekly matrix view. Click an empty hour to add a shift, or a shift to change it.
             </div>
 
         </div>
@@ -823,28 +1054,54 @@
     </div>
 
 
-    {% if can_edit_schedule %}
-
     <div class="schedule-actions">
 
-        <div
-            id="publishState"
-            class="publish-state"
-        >
+        <div class="actions-left">
+
+            <button
+                type="button"
+                id="overviewButton"
+                class="week-button overview-button"
+                onclick="toggleOverview()"
+            >
+                ⤢ Full view
+            </button>
+
+            <button
+                type="button"
+                id="downloadImageButton"
+                class="week-button"
+                onclick="downloadScheduleImage()"
+            >
+                ⤓ Download image
+            </button>
+
         </div>
 
-        <button
-            type="button"
-            id="publishButton"
-            class="publish-button"
-            onclick="handlePublishButton()"
-        >
-            Confirm
-        </button>
+        {% if can_edit_schedule %}
+
+        <div class="actions-right">
+
+            <div
+                id="publishState"
+                class="publish-state"
+            >
+            </div>
+
+            <button
+                type="button"
+                id="publishButton"
+                class="publish-button"
+                onclick="handlePublishButton()"
+            >
+                Confirm
+            </button>
+
+        </div>
+
+        {% endif %}
 
     </div>
-
-    {% endif %}
 
 </div>
 
@@ -887,6 +1144,37 @@
                 ×
             </button>
 
+        </div>
+
+
+        <div class="shift-time-controls">
+
+            <span>From</span>
+
+            <select
+                id="shiftStartSelect"
+                onchange="handleShiftTimeChange('start')"
+            ></select>
+
+            <span>to</span>
+
+            <select
+                id="shiftEndSelect"
+                onchange="handleShiftTimeChange('end')"
+            ></select>
+
+            <span
+                id="shiftDuration"
+                class="shift-duration"
+            ></span>
+
+        </div>
+
+
+        <div
+            id="replaceWarning"
+            class="replace-warning"
+        >
         </div>
 
 
@@ -988,7 +1276,6 @@
 
 
 <script>
-
 /* =========================================================
    Permission
 ========================================================= */
@@ -999,98 +1286,52 @@ const CAN_EDIT_SCHEDULE =
 
 /* =========================================================
    Layout
+   One column per position: Creator, O1, O2 (per store, per day).
 ========================================================= */
-
-const HOUR_ROWS = [
-    ["11:00", "12:00"],
-    ["12:00", "13:00"],
-    ["13:00", "14:00"],
-    ["14:00", "15:00"],
-    ["15:00", "16:00"],
-    ["16:00", "17:00"],
-    ["17:00", "18:00"],
-    ["18:00", "19:00"],
-    ["19:00", "20:00"],
-    ["20:00", "21:00"]
-];
-
 
 const DISPLAY_STORES = [
     "TU",
     "VB"
 ];
 
+const POSITION_COLUMNS = [
+    { role_type: "creator",  position_no: 1, short: "Creator", label: "Creator" },
+    { role_type: "operator", position_no: 1, short: "O1",      label: "Operator 1" },
+    { role_type: "operator", position_no: 2, short: "O2",      label: "Operator 2" }
+];
 
-function creatorColorClass(staffId) {
-
-    const numericId =
-        Number(staffId);
-
-    if (!Number.isFinite(numericId)) {
-        return "creator-color-0";
-    }
-
-    const colorIndex =
-        Math.abs(numericId) % 8;
-
-    return (
-        "creator-color-"
-        + colorIndex
-    );
-}
+const DAY_MINUTES = 24 * 60;
 
 
 let weekStart =
-    getMonday(
-        new Date()
-    );
-
+    getMonday(new Date());
 
 let scheduleData =
     null;
 
-
 let activeSelection =
     null;
-
 
 let pendingOverrideCandidate =
     null;
 
+let candidateRequestId =
+    0;
+
 
 /* =========================================================
-   Date helpers
+   Date / time helpers
 ========================================================= */
 
 function getMonday(date) {
 
-    const d =
-        new Date(date);
+    const d = new Date(date);
 
-    const day =
-        d.getDay();
+    const day = d.getDay();
 
-    const diff =
-        d.getDate()
-        -
-        day
-        +
-        (
-            day === 0
-                ? -6
-                : 1
-        );
+    d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
 
-    d.setDate(
-        diff
-    );
-
-    d.setHours(
-        0,
-        0,
-        0,
-        0
-    );
+    d.setHours(0, 0, 0, 0);
 
     return d;
 }
@@ -1098,108 +1339,139 @@ function getMonday(date) {
 
 function dateToString(date) {
 
-    const year =
-        date.getFullYear();
-
-    const month =
-        String(
-            date.getMonth()
-            +
-            1
-        ).padStart(
-            2,
-            "0"
-        );
-
-    const day =
-        String(
-            date.getDate()
-        ).padStart(
-            2,
-            "0"
-        );
-
     return (
-        year
-        +
-        "-"
-        +
-        month
-        +
-        "-"
-        +
-        day
+        date.getFullYear()
+        + "-" + String(date.getMonth() + 1).padStart(2, "0")
+        + "-" + String(date.getDate()).padStart(2, "0")
     );
 }
 
 
 function displayDateString(value) {
 
-    const parts =
-        String(value)
-        .split("-");
+    const parts = String(value).split("-");
 
-    if (
-        parts.length !== 3
-    ) {
+    if (parts.length !== 3) {
         return value;
     }
 
-    return (
-        Number(parts[1])
-        +
-        "/"
-        +
-        Number(parts[2])
-        +
-        "/"
-        +
-        parts[0]
-    );
+    return Number(parts[1]) + "/" + Number(parts[2]) + "/" + parts[0];
+}
+
+
+function shortDateString(value) {
+
+    const parts = String(value).split("-");
+
+    return Number(parts[1]) + "/" + Number(parts[2]);
+}
+
+
+function pad2(value) {
+
+    return String(value).padStart(2, "0");
+}
+
+
+// "HH:MM" -> minutes. End time 00:00 is handled by shiftRange().
+function timeToMinutes(value) {
+
+    const parts = String(value).split(":");
+
+    return Number(parts[0]) * 60 + Number(parts[1] || 0);
+}
+
+
+// [start, end] in minutes; an end at/before start = midnight.
+function shiftRange(startTime, endTime) {
+
+    const start = timeToMinutes(startTime) % DAY_MINUTES;
+
+    let end = timeToMinutes(endTime);
+
+    if (end <= start) {
+        end += DAY_MINUTES;
+    }
+
+    return [start, end];
+}
+
+
+function minutesToTime(minutes) {
+
+    const value = ((minutes % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
+
+    return pad2(Math.floor(value / 60)) + ":" + pad2(value % 60);
+}
+
+
+// 660 -> "11:00 AM", 1440 -> "12:00 AM"
+function formatMinutes(minutes) {
+
+    const value = minutes % DAY_MINUTES;
+
+    let hour = Math.floor(value / 60);
+
+    const minute = pad2(value % 60);
+
+    const suffix = hour >= 12 ? "PM" : "AM";
+
+    hour = hour % 12;
+
+    if (hour === 0) {
+        hour = 12;
+    }
+
+    return hour + ":" + minute + " " + suffix;
+}
+
+
+// 660 -> "11a", 840 -> "2p", 1440 -> "12a"
+function formatShortMinutes(minutes) {
+
+    const value = minutes % DAY_MINUTES;
+
+    let hour = Math.floor(value / 60);
+
+    const suffix = hour >= 12 ? "p" : "a";
+
+    hour = hour % 12;
+
+    if (hour === 0) {
+        hour = 12;
+    }
+
+    const minute = value % 60;
+
+    return hour + (minute ? ":" + pad2(minute) : "") + suffix;
 }
 
 
 function formatTime(value) {
 
-    const parts =
-        String(value)
-        .split(":");
+    return formatMinutes(timeToMinutes(value));
+}
 
-    let hour =
-        Number(
-            parts[0]
-        );
 
-    const minute =
-        parts[1]
-        ||
-        "00";
+function formatHours(value) {
 
-    const suffix =
-        hour >= 12
-            ? "PM"
-            : "AM";
+    const number = Number(value || 0);
 
-    hour =
-        hour % 12;
+    return Number.isInteger(number)
+        ? String(number)
+        : number.toFixed(1);
+}
 
-    if (
-        hour === 0
-    ) {
-        hour = 12;
+
+function colorClass(staffId) {
+
+    const numericId = Number(staffId);
+
+    if (!Number.isFinite(numericId)) {
+        return "shift-color-0";
     }
 
-    return (
-        hour
-        +
-        ":"
-        +
-        minute
-        +
-        " "
-        +
-        suffix
-    );
+    return "shift-color-" + (Math.abs(numericId) % 8);
 }
 
 
@@ -1209,11 +1481,7 @@ function formatTime(value) {
 
 function changeWeek(days) {
 
-    weekStart.setDate(
-        weekStart.getDate()
-        +
-        days
-    );
+    weekStart.setDate(weekStart.getDate() + days);
 
     loadSchedule();
 }
@@ -1221,10 +1489,7 @@ function changeWeek(days) {
 
 function goCurrentWeek() {
 
-    weekStart =
-        getMonday(
-            new Date()
-        );
+    weekStart = getMonday(new Date());
 
     loadSchedule();
 }
@@ -1236,54 +1501,32 @@ function goCurrentWeek() {
 
 async function loadSchedule() {
 
-    const weekStartString =
-        dateToString(
-            weekStart
-        );
+    const weekStartString = dateToString(weekStart);
 
-    showStatus(
-        "Loading schedule...",
-        "info"
-    );
+    showStatus("Loading schedule...", "info");
 
     try {
 
-        const response =
-            await fetch(
-                "/api/schedule-week"
-                +
-                "?week_start="
-                +
-                encodeURIComponent(
-                    weekStartString
-                ),
-                {
-                    cache: "no-store"
-                }
-            );
+        const response = await fetch(
+            "/api/schedule-week?week_start="
+            + encodeURIComponent(weekStartString),
+            { cache: "no-store" }
+        );
 
-        const data =
-            await response.json();
+        const data = await response.json();
 
-        if (
-            !response.ok
-            ||
-            !data.success
-        ) {
-            throw new Error(
-                data.message
-                ||
-                "Unable to load schedule."
-            );
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Unable to load schedule.");
         }
 
-        scheduleData =
-            data;
+        // Week changed while loading.
+        if (weekStartString !== dateToString(weekStart)) {
+            return;
+        }
 
-        updateWeekTitle(
-            data.week_start,
-            data.week_end
-        );
+        scheduleData = data;
+
+        updateWeekTitle(data.week_start, data.week_end);
 
         renderMatrix();
 
@@ -1291,956 +1534,1038 @@ async function loadSchedule() {
 
         hideStatus();
 
+    } catch (error) {
+
+        console.error(error);
+
+        showStatus(error.message || "Unable to load schedule.", "error");
     }
-
-    catch (error) {
-
-        console.error(
-            error
-        );
-
-        showStatus(
-            error.message
-            ||
-            "Unable to load schedule.",
-            "error"
-        );
-
-    }
-
 }
 
 
-function updateWeekTitle(
-    start,
-    end
-) {
+function updateWeekTitle(start, end) {
 
-    document
-        .getElementById(
-            "weekTitle"
-        )
-        .textContent =
-            displayDateString(
-                start
-            )
-            +
-            " - "
-            +
-            displayDateString(
-                end
-            );
-
+    document.getElementById("weekTitle").textContent =
+        displayDateString(start) + " - " + displayDateString(end);
 }
 
 
 /* =========================================================
-   Matrix
+   Matrix data
+========================================================= */
+
+function displayStores() {
+
+    const stores = (scheduleData && scheduleData.stores) || [];
+
+    return DISPLAY_STORES
+        .map(code => stores.find(store => store.store_code === code))
+        .filter(Boolean);
+}
+
+
+function columnKey(storeId, roleType, positionNo) {
+
+    return storeId + "|" + roleType + "|" + positionNo;
+}
+
+
+// Work hours of the week, widened to include any existing shift
+// so nothing is hidden after the hours are shortened.
+function visibleRange() {
+
+    const hours =
+        (scheduleData && scheduleData.work_hours)
+        || { start_hour: 11, end_hour: 21 };
+
+    let start = Number(hours.start_hour) * 60;
+    let end = Number(hours.end_hour) * 60;
+
+    for (const day of scheduleData.days) {
+        for (const assignment of day.assignments) {
+
+            const [s, e] = shiftRange(assignment.start_time, assignment.end_time);
+
+            start = Math.min(start, Math.floor(s / 60) * 60);
+            end = Math.max(end, Math.ceil(e / 60) * 60);
+        }
+    }
+
+    return [start, end];
+}
+
+
+/*
+   For one day: { columnKey: { hourMinute: cellInfo } }
+   cellInfo = { type: "block", assignment, span, start, end }
+            | { type: "covered" }      (part of a block above, no <td>)
+   Missing hour = empty cell.
+*/
+function buildDayLayout(day, rangeStart, rangeEnd) {
+
+    const layout = {};
+
+    const sorted = [...day.assignments].sort(
+        (a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
+    );
+
+    for (const assignment of sorted) {
+
+        const key = columnKey(
+            assignment.store_id,
+            assignment.role_type,
+            assignment.position_no
+        );
+
+        const column = layout[key] || (layout[key] = {});
+
+        const [start, end] = shiftRange(assignment.start_time, assignment.end_time);
+
+        const firstHour = Math.max(rangeStart, Math.floor(start / 60) * 60);
+        const lastHour = Math.min(rangeEnd, Math.ceil(end / 60) * 60);
+
+        // Never overlap an existing block (should not happen).
+        let clash = false;
+
+        for (let hour = firstHour; hour < lastHour; hour += 60) {
+            if (column[hour]) {
+                clash = true;
+            }
+        }
+
+        if (clash || lastHour <= firstHour) {
+            console.warn("Overlapping shift not shown", assignment);
+            continue;
+        }
+
+        column[firstHour] = {
+            type: "block",
+            assignment: assignment,
+            span: (lastHour - firstHour) / 60,
+            start: start,
+            end: end
+        };
+
+        for (let hour = firstHour + 60; hour < lastHour; hour += 60) {
+            column[hour] = { type: "covered" };
+        }
+    }
+
+    return layout;
+}
+
+
+function isWeekLocked() {
+
+    return (
+        !CAN_EDIT_SCHEDULE
+        ||
+        (scheduleData && scheduleData.week_status === "published")
+    );
+}
+
+
+/* =========================================================
+   Matrix render
 ========================================================= */
 
 function renderMatrix() {
 
-    renderMatrixHeader();
-    renderMatrixBody();
+    const stores = displayStores();
 
+    const columnCount =
+        scheduleData.days.length * stores.length * POSITION_COLUMNS.length;
+
+    document.getElementById("scheduleTable").style.minWidth =
+        (82 + columnCount * 66) + "px";
+
+    renderMatrixHeader(stores);
+
+    renderMatrixBody(stores);
+
+    applyOverviewZoom();
 }
 
 
-function renderMatrixHeader() {
+/* =========================================================
+   Download image (PNG of the whole week)
+   html2canvas is served from /static and loaded on first use.
+========================================================= */
 
-    const head =
-        document.getElementById(
-            "scheduleHead"
-        );
-
-    head.innerHTML =
-        "";
+const HTML2CANVAS_URL =
+    {{ url_for('static', filename='html2canvas.min.js') | tojson }};
 
 
-    const row1 =
-        document.createElement(
-            "tr"
-        );
+function loadScriptOnce(src) {
 
-    const timeHeader =
-        document.createElement(
-            "th"
-        );
+    return new Promise((resolve, reject) => {
 
-    timeHeader.className =
-        "time-header";
+        if (window.html2canvas) {
+            resolve();
+            return;
+        }
 
-    timeHeader.rowSpan =
-        3;
+        const script = document.createElement("script");
 
-    timeHeader.textContent =
-        "Time";
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error("Could not load the image library."));
 
-    row1.appendChild(
-        timeHeader
+        document.head.appendChild(script);
+    });
+}
+
+
+async function downloadScheduleImage() {
+
+    if (!scheduleData) {
+        return;
+    }
+
+    const button = document.getElementById("downloadImageButton");
+
+    button.disabled = true;
+    button.textContent = "Preparing...";
+
+    try {
+
+        await loadScriptOnce(HTML2CANVAS_URL);
+
+        const table = document.getElementById("scheduleTable");
+
+        // Full-size width even when Full view has zoomed it out.
+        const zoom = Number(table.style.zoom || 1);
+        const fullWidth = Math.ceil(table.offsetWidth / (zoom || 1)) + 40;
+
+        const title =
+            "Staff Schedule · "
+            + displayDateString(scheduleData.week_start)
+            + " - "
+            + displayDateString(scheduleData.week_end)
+            + (scheduleData.week_status === "published" ? " · Published" : " · Draft");
+
+        const canvas = await html2canvas(table, {
+            scale: 2,
+            backgroundColor: "#ffffff",
+            logging: false,
+            windowWidth: fullWidth + 200,
+
+            // Adjust only the copy that gets drawn, not the page.
+            onclone: function (doc) {
+
+                doc.body.classList.remove("overview-mode");
+
+                const copy = doc.getElementById("scheduleTable");
+
+                copy.style.zoom = "";
+
+                const wrapper = doc.querySelector(".matrix-wrapper");
+
+                wrapper.style.overflow = "visible";
+
+                doc.querySelectorAll(".resize-handle, .resize-preview")
+                    .forEach(el => el.remove());
+
+                doc.querySelectorAll(".empty-slot")
+                    .forEach(el => { el.textContent = ""; });
+
+                doc.querySelectorAll(".shift-block")
+                    .forEach(el => { el.style.opacity = "1"; });
+
+                doc.querySelectorAll(".time-cell, .time-header")
+                    .forEach(el => { el.style.position = "static"; });
+
+                const caption = doc.createElement("caption");
+
+                caption.textContent = title;
+
+                Object.assign(caption.style, {
+                    captionSide: "top",
+                    textAlign: "left",
+                    padding: "14px 16px",
+                    fontSize: "20px",
+                    fontWeight: "700",
+                    color: "#1f2329",
+                    background: "#ffffff"
+                });
+
+                copy.insertBefore(caption, copy.firstChild);
+            }
+        });
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+
+        const link = document.createElement("a");
+
+        link.href = URL.createObjectURL(blob);
+        link.download = "schedule_" + scheduleData.week_start + ".png";
+
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+
+        showStatus("Image downloaded.", "success");
+
+    } catch (error) {
+
+        console.error(error);
+
+        showStatus(error.message || "Unable to create the image.", "error");
+
+    } finally {
+
+        button.disabled = false;
+        button.textContent = "⤓ Download image";
+    }
+}
+
+
+
+/* =========================================================
+   Full view
+   Scales the whole week to fit the page width (no side scrolling).
+========================================================= */
+
+let overviewMode = false;
+
+
+function toggleOverview() {
+
+    overviewMode = !overviewMode;
+
+    document.body.classList.toggle("overview-mode", overviewMode);
+
+    const button = document.getElementById("overviewButton");
+
+    button.classList.toggle("active", overviewMode);
+
+    button.textContent = overviewMode
+        ? "⤡ Exit full view"
+        : "⤢ Full view";
+
+    applyOverviewZoom();
+
+    if (overviewMode) {
+        document
+            .querySelector(".matrix-wrapper")
+            .scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+}
+
+
+function applyOverviewZoom() {
+
+    const table = document.getElementById("scheduleTable");
+    const wrapper = document.querySelector(".matrix-wrapper");
+
+    table.style.zoom = "";
+
+    if (!overviewMode) {
+        return;
+    }
+
+    const scale = Math.min(
+        1,
+        (wrapper.clientWidth - 2) / table.offsetWidth
     );
 
+    table.style.zoom = String(scale);
+}
 
-    for (
-        const day
-        of scheduleData.days
-    ) {
 
-        const th =
-            document.createElement(
-                "th"
-            );
+window.addEventListener("resize", function () {
 
-        th.className =
-            "day-header";
+    if (overviewMode) {
+        applyOverviewZoom();
+    }
+});
 
-        th.colSpan =
-            4;
 
-        th.innerHTML = `
+function renderMatrixHeader(stores) {
+
+    const head = document.getElementById("scheduleHead");
+
+    head.innerHTML = "";
+
+    const row1 = document.createElement("tr");
+    const row2 = document.createElement("tr");
+    const row3 = document.createElement("tr");
+
+    const timeHeader = document.createElement("th");
+
+    timeHeader.className = "time-header";
+    timeHeader.rowSpan = 3;
+    timeHeader.textContent = "Time";
+
+    row1.appendChild(timeHeader);
+
+
+    for (const day of scheduleData.days) {
+
+        const dayHeader = document.createElement("th");
+
+        dayHeader.className = "day-header";
+        dayHeader.colSpan = stores.length * POSITION_COLUMNS.length;
+
+        dayHeader.innerHTML = `
             ${escapeHtml(day.day_name)}
             <span class="day-date">
-                ${escapeHtml(
-                    displayDateString(
-                        day.work_date
-                    )
-                )}
+                ${escapeHtml(displayDateString(day.work_date))}
             </span>
         `;
 
-        row1.appendChild(
-            th
-        );
-
-    }
+        row1.appendChild(dayHeader);
 
 
-    const row2 =
-        document.createElement(
-            "tr"
-        );
+        for (const store of stores) {
 
+            const storeHeader = document.createElement("th");
 
-    for (
-        const day
-        of scheduleData.days
-    ) {
+            storeHeader.className = "store-header";
+            storeHeader.colSpan = POSITION_COLUMNS.length;
 
-        for (
-            const storeCode
-            of DISPLAY_STORES
-        ) {
-
-            const th =
-                document.createElement(
-                    "th"
-                );
-
-            th.className =
-                "store-header";
-
-            th.colSpan =
-                2;
-
-            th.innerHTML = `
+            storeHeader.innerHTML = `
                 <span class="store-code">
-                    ${escapeHtml(storeCode)}
+                    ${escapeHtml(store.store_code)}
                 </span>
             `;
 
-            row2.appendChild(
-                th
-            );
+            row2.appendChild(storeHeader);
 
+
+            for (const column of POSITION_COLUMNS) {
+
+                const th = document.createElement("th");
+
+                th.className = "role-header position-header";
+                th.textContent = column.short;
+
+                row3.appendChild(th);
+            }
         }
-
     }
 
-
-    const row3 =
-        document.createElement(
-            "tr"
-        );
-
-
-    for (
-        const day
-        of scheduleData.days
-    ) {
-
-        for (
-            const storeCode
-            of DISPLAY_STORES
-        ) {
-
-            const creator =
-                document.createElement(
-                    "th"
-                );
-
-            creator.className =
-                "role-header";
-
-            creator.textContent =
-                "Creator";
-
-
-            const staff =
-                document.createElement(
-                    "th"
-                );
-
-            staff.className =
-                "role-header";
-
-            staff.textContent =
-                "Operator";
-
-
-            row3.appendChild(
-                creator
-            );
-
-            row3.appendChild(
-                staff
-            );
-
-        }
-
-    }
-
-
-    head.appendChild(
-        row1
-    );
-
-    head.appendChild(
-        row2
-    );
-
-    head.appendChild(
-        row3
-    );
-
+    head.appendChild(row1);
+    head.appendChild(row2);
+    head.appendChild(row3);
 }
 
 
-function renderMatrixBody() {
+function renderMatrixBody(stores) {
 
-    const body =
-        document.getElementById(
-            "scheduleBody"
-        );
+    const body = document.getElementById("scheduleBody");
 
-    body.innerHTML =
-        "";
+    body.innerHTML = "";
 
+    const [rangeStart, rangeEnd] = visibleRange();
 
-    for (
-        const hourRange
-        of HOUR_ROWS
-    ) {
+    const layouts = scheduleData.days.map(
+        day => buildDayLayout(day, rangeStart, rangeEnd)
+    );
 
-        const row =
-            document.createElement(
-                "tr"
-            );
+    const locked = isWeekLocked();
 
 
-        const timeCell =
-            document.createElement(
-                "td"
-            );
+    for (let hour = rangeStart; hour < rangeEnd; hour += 60) {
 
-        timeCell.className =
-            "time-cell";
+        const row = document.createElement("tr");
 
+        row.dataset.hour = String(hour);
+
+        const timeCell = document.createElement("td");
+
+        timeCell.className = "time-cell";
         timeCell.textContent =
-            formatTime(
-                hourRange[0]
-            )
-            +
-            " - "
-            +
-            formatTime(
-                hourRange[1]
-            );
+            formatMinutes(hour) + " - " + formatMinutes(hour + 60);
 
-        row.appendChild(
-            timeCell
-        );
+        row.appendChild(timeCell);
 
 
-        for (
-            const day
-            of scheduleData.days
-        ) {
+        scheduleData.days.forEach((day, dayIndex) => {
 
-            for (
-                const storeCode
-                of DISPLAY_STORES
-            ) {
+            for (const store of stores) {
 
-                const slot =
-                    findSlotForHour(
-                        day,
-                        storeCode,
-                        hourRange[0],
-                        hourRange[1]
+                POSITION_COLUMNS.forEach((column, columnIndex) => {
+
+                    const key = columnKey(
+                        store.store_id,
+                        column.role_type,
+                        column.position_no
                     );
 
+                    const info = (layouts[dayIndex][key] || {})[hour];
 
-                const creatorCell =
-                    document.createElement(
-                        "td"
-                    );
+                    if (info && info.type === "covered") {
+                        return;
+                    }
 
-                creatorCell.className =
-                    "schedule-cell";
+                    const cell = document.createElement("td");
 
+                    cell.className =
+                        "schedule-cell"
+                        + (columnIndex === 0 ? " store-start" : "");
 
-                const staffCell =
-                    document.createElement(
-                        "td"
-                    );
+                    const context = {
+                        work_date: day.work_date,
+                        store_id: store.store_id,
+                        store_code: store.store_code,
+                        role_type: column.role_type,
+                        position_no: column.position_no,
+                        position_label: column.label
+                    };
 
-                staffCell.className =
-                    "schedule-cell";
+                    if (info && info.type === "block") {
 
+                        cell.rowSpan = info.span;
 
-                if (
-                    slot
-                ) {
+                        cell.appendChild(
+                            buildShiftBlock(context, info, locked)
+                        );
 
-                    creatorCell.appendChild(
-                        buildCreatorButton(
-                            day,
-                            storeCode,
-                            slot
-                        )
-                    );
+                        if (!locked) {
+                            addResizeHandles(cell, context, info);
+                        }
 
+                    } else {
 
-                    staffCell.appendChild(
-                        buildOperatorStack(
-                            day,
-                            storeCode,
-                            slot
-                        )
-                    );
+                        cell.appendChild(
+                            buildEmptySlot(context, hour, locked)
+                        );
+                    }
 
-                }
-
-
-                row.appendChild(
-                    creatorCell
-                );
-
-                row.appendChild(
-                    staffCell
-                );
-
+                    row.appendChild(cell);
+                });
             }
+        });
 
-        }
-
-
-        body.appendChild(
-            row
-        );
-
+        body.appendChild(row);
     }
-
 }
 
 
-/* =========================================================
-   Buttons
-========================================================= */
+function buildShiftBlock(context, info, locked) {
 
-function buildCreatorButton(
-    day,
-    storeCode,
-    slot
-) {
+    const assignment = info.assignment;
 
-    const assignment =
-        findAssignment(
-            slot.assignments,
-            "creator",
-            1
-        );
+    const button = document.createElement("button");
 
-
-    const button =
-        document.createElement(
-            "button"
-        );
-
-    button.type =
-        "button";
+    button.type = "button";
 
     button.className =
-        "assignment-button creator "
-        +
-        (
-            assignment
-                ? (
-                    "assigned "
-                    + creatorColorClass(
-                        assignment.staff_id
-                    )
-                )
-                : "empty"
-        );
+        "shift-block " + colorClass(assignment.staff_id);
 
-    if (
-        assignment
-    ) {
+    const hasOverride =
+        assignment.override_daily_limit
+        ||
+        assignment.override_consecutive
+        ||
+        assignment.override_availability;
 
-        const hasOverride =
-            assignment.override_daily_limit
-            ||
-            assignment.override_consecutive;
-
-        button.innerHTML =
-            escapeHtml(
-                assignment.staff_name
-            )
-            +
-            (
-                hasOverride
-                    ? '<span class="override-mark">⚠</span>'
-                    : ""
-            );
-
-        if (
-            hasOverride
-        ) {
-            button.title =
-                "Scheduling rule override";
-        }
-
-    } else {
-
-        button.textContent =
-            "—";
-
-    }
-
-
-    button.disabled =
-        (
-            !CAN_EDIT_SCHEDULE
-            ||
-            (
-                scheduleData
-                &&
-                scheduleData.week_status
-                ===
-                "published"
-            )
-        );
-
-
-    attachSelectionData(
-        button,
-        day,
-        storeCode,
-        slot,
-        "creator",
-        1,
-        "Creator",
-        assignment
-    );
-
-
-    button.addEventListener(
-        "click",
-        function () {
-            openCandidateModal(
-                this
-            );
-        }
-    );
-
-
-    return button;
-}
-
-
-function buildOperatorStack(
-    day,
-    storeCode,
-    slot
-) {
-
-    const stack =
-        document.createElement(
-            "div"
-        );
-
-    stack.className =
-        "operator-stack";
-
-
-    const a1 =
-        findAssignment(
-            slot.assignments,
-            "operator",
-            1
-        );
-
-
-    const a2 =
-        findAssignment(
-            slot.assignments,
-            "operator",
-            2
-        );
-
-
-    stack.appendChild(
-        buildOperatorButton(
-            day,
-            storeCode,
-            slot,
-            1,
-            "O1",
-            "Operator 1",
-            a1
-        )
-    );
-
-
-    stack.appendChild(
-        buildOperatorButton(
-            day,
-            storeCode,
-            slot,
-            2,
-            "O2",
-            "Operator 2",
-            a2
-        )
-    );
-
-
-    return stack;
-}
-
-
-function buildOperatorButton(
-    day,
-    storeCode,
-    slot,
-    positionNo,
-    shortLabel,
-    fullLabel,
-    assignment
-) {
-
-    const button =
-        document.createElement(
-            "button"
-        );
-
-    button.type =
-        "button";
-
-    button.className =
-        "operator-button "
-        +
-        (
-            assignment
-                ? "assigned"
-                : "empty"
-        );
-
-
-    if (
-        assignment
-    ) {
-
-        const hasOverride =
-            assignment.override_daily_limit
-            ||
-            assignment.override_consecutive;
-
-        button.innerHTML = `
-            <span class="operator-label">
-                ${escapeHtml(shortLabel)}
-            </span>
+    button.innerHTML = `
+        <span class="shift-name">
             ${escapeHtml(assignment.staff_name)}
-            ${
-                hasOverride
-                    ? '<span class="override-mark">⚠</span>'
-                    : ""
-            }
-        `;
+        </span>
+        <span class="shift-time">
+            ${hasOverride ? '<span class="override-mark">⚠</span> ' : ""}${escapeHtml(formatShortMinutes(info.start))}–${escapeHtml(formatShortMinutes(info.end))}
+        </span>
+    `;
 
-        if (
-            hasOverride
-        ) {
-            button.title =
-                "Scheduling rule override";
-        }
+    button.title =
+        assignment.staff_name
+        + " · " + formatMinutes(info.start)
+        + " - " + formatMinutes(info.end)
+        + (hasOverride ? " · Scheduling rule override" : "");
 
-    } else {
+    button.disabled = locked;
 
-        button.innerHTML = `
-            <span class="operator-label">
-                ${escapeHtml(shortLabel)}
-            </span>
-            —
-        `;
+    button.addEventListener("click", function () {
 
-    }
-
-
-    button.disabled =
-        (
-            !CAN_EDIT_SCHEDULE
-            ||
-            (
-                scheduleData
-                &&
-                scheduleData.week_status
-                ===
-                "published"
-            )
-        );
-
-
-    attachSelectionData(
-        button,
-        day,
-        storeCode,
-        slot,
-        "operator",
-        positionNo,
-        fullLabel,
-        assignment
-    );
-
-
-    button.addEventListener(
-        "click",
-        function () {
-            openCandidateModal(
-                this
-            );
-        }
-    );
-
+        openCandidateModal({
+            ...context,
+            schedule_id: assignment.schedule_id,
+            current_staff_id: assignment.staff_id,
+            current_staff_name: assignment.staff_name,
+            start: info.start,
+            end: info.end
+        });
+    });
 
     return button;
 }
 
 
-function attachSelectionData(
-    button,
-    day,
-    storeCode,
-    slot,
-    roleType,
-    positionNo,
-    positionLabel,
-    assignment
-) {
+function buildEmptySlot(context, hour, locked) {
 
-    button.dataset.workDate =
-        day.work_date;
+    const button = document.createElement("button");
 
-    button.dataset.slotId =
-        String(
-            slot.slot_id
-        );
+    button.type = "button";
 
-    button.dataset.storeCode =
-        storeCode;
+    button.className = "empty-slot";
 
-    button.dataset.slotNo =
-        String(
-            slot.slot_no
-        );
+    button.textContent = "+";
 
-    button.dataset.startTime =
-        slot.start_time;
+    button.disabled = locked;
 
-    button.dataset.endTime =
-        slot.end_time;
+    button.title = locked
+        ? ""
+        : "Add " + context.position_label + " at " + formatMinutes(hour);
 
-    button.dataset.roleType =
-        roleType;
+    button.addEventListener("click", function () {
 
-    button.dataset.positionNo =
-        String(
-            positionNo
-        );
+        openCandidateModal({
+            ...context,
+            schedule_id: null,
+            current_staff_id: "",
+            current_staff_name: "",
+            start: hour,
+            end: hour + 60
+        });
+    });
 
-    button.dataset.positionLabel =
-        positionLabel;
-
-    button.dataset.currentStaffId =
-        assignment
-            ? String(
-                assignment.staff_id
-            )
-            : "";
-
-    button.dataset.currentStaffName =
-        assignment
-            ? assignment.staff_name
-            : "";
+    return button;
 }
 
 
 /* =========================================================
-   Slot lookup
+   Drag to resize
+   ▲ on top changes the start, ▼ at the bottom changes the end.
+   Uses the same checks as the modal (candidates API), then saves.
 ========================================================= */
 
-function findSlotForHour(
-    day,
-    storeCode,
-    hourStart,
-    hourEnd
-) {
+let resizeState = null;
 
-    if (
-        !day
-        ||
-        !day.slots
-    ) {
+
+function addResizeHandles(cell, context, info) {
+
+    for (const edge of ["top", "bottom"]) {
+
+        const handle = document.createElement("div");
+
+        handle.className = "resize-handle resize-" + edge;
+
+        handle.textContent = edge === "top" ? "▲" : "▼";
+
+        handle.title =
+            edge === "top"
+                ? "Drag to change start time"
+                : "Drag to change end time";
+
+        handle.addEventListener("pointerdown", function (event) {
+            startResize(event, edge, cell, context, info);
+        });
+
+        handle.addEventListener("click", function (event) {
+            event.stopPropagation();
+        });
+
+        cell.appendChild(handle);
+    }
+}
+
+
+function hourRowsInBody() {
+
+    return Array.from(
+        document.querySelectorAll("#scheduleBody tr[data-hour]")
+    );
+}
+
+
+// Hour (in minutes) of the row under the pointer.
+function hourAtY(clientY) {
+
+    const rows = hourRowsInBody();
+
+    for (const row of rows) {
+        if (clientY < row.getBoundingClientRect().bottom) {
+            return Number(row.dataset.hour);
+        }
+    }
+
+    return Number(rows[rows.length - 1].dataset.hour);
+}
+
+
+function startResize(event, edge, cell, context, info) {
+
+    if (event.button !== undefined && event.button !== 0) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const handle = event.currentTarget;
+
+    handle.setPointerCapture(event.pointerId);
+
+    const preview = document.createElement("div");
+
+    preview.className = "resize-preview";
+
+    document.querySelector(".matrix-wrapper").appendChild(preview);
+
+    cell.classList.add("resizing");
+
+    document.body.classList.add("resizing-active");
+
+    resizeState = {
+        edge: edge,
+        cell: cell,
+        context: context,
+        info: info,
+        start: info.start,
+        end: info.end,
+        preview: preview,
+        handle: handle
+    };
+
+    handle.addEventListener("pointermove", onResizeMove);
+    handle.addEventListener("pointerup", onResizeEnd);
+    handle.addEventListener("pointercancel", onResizeCancel);
+
+    updateResizePreview();
+}
+
+
+function onResizeMove(event) {
+
+    if (!resizeState) {
+        return;
+    }
+
+    // Scroll the page when dragging near the top / bottom of the window.
+    if (event.clientY < 40) {
+        window.scrollBy(0, -18);
+    } else if (event.clientY > window.innerHeight - 40) {
+        window.scrollBy(0, 18);
+    }
+
+    const hour = hourAtY(event.clientY);
+
+    if (resizeState.edge === "top") {
+
+        resizeState.start = Math.min(hour, resizeState.end - 60);
+
+    } else {
+
+        resizeState.end = Math.min(
+            DAY_MINUTES,
+            Math.max(hour + 60, resizeState.start + 60)
+        );
+    }
+
+    updateResizePreview();
+}
+
+
+function updateResizePreview() {
+
+    const state = resizeState;
+
+    const rows = hourRowsInBody();
+
+    const firstHour = Number(rows[0].dataset.hour);
+    const lastHour = Number(rows[rows.length - 1].dataset.hour);
+
+    const findRow = minute => rows.find(
+        row => Number(row.dataset.hour) === minute
+    );
+
+    // Shifts can start/end outside the visible rows: clamp for drawing.
+    const topRow = findRow(Math.max(firstHour, state.start)) || rows[0];
+    const bottomRow = findRow(Math.min(lastHour, state.end - 60)) || rows[rows.length - 1];
+
+    const wrapper = document.querySelector(".matrix-wrapper");
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const cellRect = state.cell.getBoundingClientRect();
+    const topRect = topRow.getBoundingClientRect();
+    const bottomRect = bottomRow.getBoundingClientRect();
+
+    Object.assign(state.preview.style, {
+        left: (cellRect.left - wrapperRect.left + wrapper.scrollLeft + 2) + "px",
+        width: (cellRect.width - 4) + "px",
+        top: (topRect.top - wrapperRect.top + wrapper.scrollTop + 2) + "px",
+        height: (bottomRect.bottom - topRect.top - 4) + "px"
+    });
+
+    state.preview.textContent =
+        formatShortMinutes(state.start) + "–" + formatShortMinutes(state.end);
+}
+
+
+function finishResize() {
+
+    const state = resizeState;
+
+    resizeState = null;
+
+    if (!state) {
         return null;
     }
 
+    state.handle.removeEventListener("pointermove", onResizeMove);
+    state.handle.removeEventListener("pointerup", onResizeEnd);
+    state.handle.removeEventListener("pointercancel", onResizeCancel);
 
-    for (
-        const slot
-        of day.slots
-    ) {
+    state.preview.remove();
 
-        if (
-            slot.store_code
-            !==
-            storeCode
-        ) {
-            continue;
-        }
+    state.cell.classList.remove("resizing");
 
+    document.body.classList.remove("resizing-active");
 
-        if (
-            timeLessOrEqual(
-                slot.start_time,
-                hourStart
-            )
-            &&
-            timeGreaterOrEqual(
-                slot.end_time,
-                hourEnd
-            )
-        ) {
-            return slot;
-        }
-
-    }
-
-
-    return null;
+    return state;
 }
 
 
-function timeLessOrEqual(
-    a,
-    b
-) {
+function onResizeCancel() {
 
-    return (
-        normalizeTimeString(a)
-        <=
-        normalizeTimeString(b)
-    );
+    finishResize();
 }
 
 
-function timeGreaterOrEqual(
-    a,
-    b
-) {
+function onResizeEnd() {
 
-    return (
-        normalizeTimeString(a)
-        >=
-        normalizeTimeString(b)
-    );
-}
-
-
-function normalizeTimeString(value) {
-
-    const parts =
-        String(value)
-        .split(":");
-
-    return (
-        String(parts[0])
-        .padStart(
-            2,
-            "0"
-        )
-        +
-        ":"
-        +
-        String(
-            parts[1]
-            ||
-            "00"
-        )
-        .padStart(
-            2,
-            "0"
-        )
-    );
-}
-
-
-function findAssignment(
-    assignments,
-    roleType,
-    positionNo
-) {
+    const state = finishResize();
 
     if (
-        !assignments
+        !state
+        ||
+        (state.start === state.info.start && state.end === state.info.end)
     ) {
-        return null;
+        return;
     }
 
-
-    return (
-        assignments.find(
-            item =>
-                item.role_type
-                ===
-                roleType
-                &&
-                Number(
-                    item.position_no
-                )
-                ===
-                Number(
-                    positionNo
-                )
-        )
-        ||
-        null
-    );
+    applyResize(state.context, state.info, state.start, state.end);
 }
+
+
+async function applyResize(context, info, start, end) {
+
+    const assignment = info.assignment;
+
+    activeSelection = {
+        ...context,
+        schedule_id: assignment.schedule_id,
+        current_staff_id: assignment.staff_id,
+        current_staff_name: assignment.staff_name,
+        start: start,
+        end: end,
+        fromDrag: true
+    };
+
+    showStatus(
+        "Checking " + assignment.staff_name + " "
+        + formatMinutes(start) + " - " + formatMinutes(end) + "...",
+        "info"
+    );
+
+    try {
+
+        const response = await fetch(
+            "/api/schedule-candidates?" + candidateQuery(),
+            { cache: "no-store" }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Unable to check this time.");
+        }
+
+        const blocked = (data.unavailable || []).find(
+            item => item.staff_id === assignment.staff_id
+        );
+
+        if (blocked) {
+            throw new Error(assignment.staff_name + ": " + blocked.reason);
+        }
+
+        const candidate = (data.candidates || []).find(
+            item => item.staff_id === assignment.staff_id
+        );
+
+        if (!candidate) {
+            throw new Error(assignment.staff_name + " cannot take this time.");
+        }
+
+        activeSelection.position_conflicts = data.position_conflicts || [];
+
+        if (activeSelection.position_conflicts.length > 0) {
+
+            const lines = activeSelection.position_conflicts.map(item => {
+
+                const [s, e] = shiftRange(item.start_time, item.end_time);
+
+                return "• " + item.staff_name + "  "
+                    + formatMinutes(s) + " - " + formatMinutes(e);
+            });
+
+            const proceed = window.confirm(
+                "This will shorten or replace:\n\n"
+                + lines.join("\n")
+                + "\n\nContinue?"
+            );
+
+            if (!proceed) {
+                activeSelection = null;
+                hideStatus();
+                return;
+            }
+        }
+
+        hideStatus();
+
+        if (candidate.requires_override) {
+            openOverrideModal(candidate);
+            return;
+        }
+
+        await saveCandidateAssignment(candidate, false);
+
+    } catch (error) {
+
+        console.error(error);
+
+        activeSelection = null;
+
+        showStatus(error.message || "Unable to change this shift.", "error");
+    }
+}
+
 
 
 /* =========================================================
    Candidate modal
 ========================================================= */
 
-async function openCandidateModal(
-    button
-) {
+function openCandidateModal(selection) {
 
-    if (!CAN_EDIT_SCHEDULE) {
+    if (isWeekLocked()) {
         return;
     }
 
-    activeSelection = {
-        button:
-            button,
+    activeSelection = selection;
 
-        work_date:
-            button.dataset.workDate,
+    const day = scheduleData.days.find(
+        item => item.work_date === selection.work_date
+    );
 
-        slot_id:
-            Number(
-                button.dataset.slotId
-            ),
+    document.getElementById("modalTitle").textContent =
+        selection.position_label;
 
-        store_code:
-            button.dataset.storeCode,
-
-        slot_no:
-            Number(
-                button.dataset.slotNo
-            ),
-
-        start_time:
-            button.dataset.startTime,
-
-        end_time:
-            button.dataset.endTime,
-
-        role_type:
-            button.dataset.roleType,
-
-        position_no:
-            Number(
-                button.dataset.positionNo
-            ),
-
-        position_label:
-            button.dataset.positionLabel,
-
-        current_staff_id:
-            button.dataset.currentStaffId
-            ||
-            "",
-
-        current_staff_name:
-            button.dataset.currentStaffName
-            ||
-            ""
-    };
-
-
-    document
-        .getElementById(
-            "modalTitle"
-        )
-        .textContent =
-            activeSelection.position_label;
-
-
-    document
-        .getElementById(
-            "modalSubtitle"
-        )
-        .textContent =
-            activeSelection.work_date
-            +
-            " · "
-            +
-            activeSelection.store_code
-            +
-            " Slot "
-            +
-            activeSelection.slot_no
-            +
-            " · "
-            +
-            formatTime(
-                activeSelection.start_time
-            )
-            +
-            " - "
-            +
-            formatTime(
-                activeSelection.end_time
-            );
-
-
-    const list =
-        document.getElementById(
-            "candidateList"
+    document.getElementById("modalSubtitle").textContent =
+        (day ? day.day_name + " " : "")
+        + shortDateString(selection.work_date)
+        + " · " + selection.store_code
+        + (
+            selection.current_staff_name
+                ? " · Current: " + selection.current_staff_name
+                : ""
         );
 
+    document.getElementById("unassignButton").style.display =
+        selection.schedule_id ? "block" : "none";
+
+    renderTimeSelects();
+
+    document
+        .getElementById("candidateModalBackdrop")
+        .classList.add("visible");
+
+    loadCandidates();
+}
+
+
+// Options: the week's visible range (and never past midnight).
+function renderTimeSelects() {
+
+    const [rangeStart, rangeEnd] = visibleRange();
+
+    const minStart = Math.min(rangeStart, activeSelection.start);
+    const maxEnd = Math.min(
+        DAY_MINUTES,
+        Math.max(rangeEnd, activeSelection.end)
+    );
+
+    const startSelect = document.getElementById("shiftStartSelect");
+    const endSelect = document.getElementById("shiftEndSelect");
+
+    startSelect.innerHTML = "";
+    endSelect.innerHTML = "";
+
+    for (let minute = minStart; minute < maxEnd; minute += 60) {
+        startSelect.add(new Option(formatMinutes(minute), String(minute)));
+    }
+
+    for (let minute = activeSelection.start + 60; minute <= maxEnd; minute += 60) {
+        endSelect.add(new Option(formatMinutes(minute), String(minute)));
+    }
+
+    startSelect.value = String(activeSelection.start);
+    endSelect.value = String(activeSelection.end);
+
+    updateDurationLabel();
+}
+
+
+function updateDurationLabel() {
+
+    const hours = (activeSelection.end - activeSelection.start) / 60;
+
+    document.getElementById("shiftDuration").textContent =
+        "(" + formatHours(hours) + (hours === 1 ? " hour)" : " hours)");
+}
+
+
+function handleShiftTimeChange(changed) {
+
+    if (!activeSelection) {
+        return;
+    }
+
+    const start = Number(document.getElementById("shiftStartSelect").value);
+    let end = Number(document.getElementById("shiftEndSelect").value);
+
+    if (changed === "start" && end <= start) {
+        end = start + 60;
+    }
+
+    activeSelection.start = start;
+    activeSelection.end = end;
+
+    renderTimeSelects();
+
+    loadCandidates();
+}
+
+
+function candidateQuery() {
+
+    const params = new URLSearchParams({
+        work_date: activeSelection.work_date,
+        store_id: activeSelection.store_id,
+        role_type: activeSelection.role_type,
+        position_no: activeSelection.position_no,
+        start_time: minutesToTime(activeSelection.start),
+        end_time: minutesToTime(activeSelection.end)
+    });
+
+    if (activeSelection.schedule_id) {
+        params.set("schedule_id", activeSelection.schedule_id);
+    }
+
+    return params.toString();
+}
+
+
+async function loadCandidates() {
+
+    const requestId = ++candidateRequestId;
+
+    const list = document.getElementById("candidateList");
 
     list.innerHTML = `
         <div class="candidate-empty">
@@ -2248,495 +2573,194 @@ async function openCandidateModal(
         </div>
     `;
 
-
-    document
-        .getElementById(
-            "unassignButton"
-        )
-        .style.display =
-            activeSelection.current_staff_id
-                ? "block"
-                : "none";
-
-
-    document
-        .getElementById(
-            "candidateModalBackdrop"
-        )
-        .classList.add(
-            "visible"
-        );
-
+    renderReplaceWarning([]);
 
     try {
 
-        const response =
-            await fetch(
-                "/api/schedule-candidates"
-                +
-                "?work_date="
-                +
-                encodeURIComponent(
-                    activeSelection.work_date
-                )
-                +
-                "&slot_id="
-                +
-                encodeURIComponent(
-                    activeSelection.slot_id
-                )
-                +
-                "&role_type="
-                +
-                encodeURIComponent(
-                    activeSelection.role_type
-                ),
-                {
-                    cache: "no-store"
-                }
-            );
+        const response = await fetch(
+            "/api/schedule-candidates?" + candidateQuery(),
+            { cache: "no-store" }
+        );
 
+        const data = await response.json();
 
-        const data =
-            await response.json();
-
-
-        if (
-            !response.ok
-            ||
-            !data.success
-        ) {
-            throw new Error(
-                data.message
-                ||
-                "Unable to load candidates."
-            );
+        // A newer request (time changed) is in flight.
+        if (requestId !== candidateRequestId) {
+            return;
         }
 
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Unable to load candidates.");
+        }
 
-        renderCandidates(
-            data.candidates
-        );
+        activeSelection.position_conflicts =
+            data.position_conflicts || [];
 
-    }
+        renderReplaceWarning(activeSelection.position_conflicts);
 
-    catch (error) {
+        renderCandidates(data.candidates, data.unavailable || []);
 
-        console.error(
-            error
-        );
+    } catch (error) {
 
+        if (requestId !== candidateRequestId) {
+            return;
+        }
+
+        console.error(error);
 
         list.innerHTML = `
             <div class="candidate-empty">
-                ${escapeHtml(
-                    error.message
-                    ||
-                    "Unable to load candidates."
-                )}
+                ${escapeHtml(error.message || "Unable to load candidates.")}
             </div>
         `;
-
     }
-
 }
 
 
-function renderCandidates(candidates) {
+function renderReplaceWarning(conflicts) {
 
-    const list =
-        document.getElementById(
-            "candidateList"
-        );
+    const box = document.getElementById("replaceWarning");
 
+    if (!conflicts || conflicts.length === 0) {
 
-    list.innerHTML =
-        "";
-
-
-    if (
-        !candidates
-        ||
-        candidates.length === 0
-    ) {
-
-        list.innerHTML = `
-            <div class="candidate-empty">
-                No eligible staff for this slot.
-            </div>
-        `;
+        box.classList.remove("visible");
+        box.innerHTML = "";
 
         return;
     }
 
+    box.innerHTML =
+        "This time overlaps existing shifts. Saving will shorten or replace:"
+        + "<ul style=\"margin: 6px 0 0 18px; padding: 0;\">"
+        + conflicts.map(item => {
 
-    for (
-        const candidate
-        of candidates
-    ) {
+            const [start, end] = shiftRange(item.start_time, item.end_time);
 
-        const button =
-            document.createElement(
-                "button"
+            return (
+                "<li>"
+                + escapeHtml(item.staff_name)
+                + " · " + escapeHtml(formatMinutes(start))
+                + " - " + escapeHtml(formatMinutes(end))
+                + "</li>"
             );
+        }).join("")
+        + "</ul>";
 
-        button.type =
-            "button";
+    box.classList.add("visible");
+}
+
+
+function renderCandidates(candidates, unavailable) {
+
+    const list = document.getElementById("candidateList");
+
+    list.innerHTML = "";
+
+    if (!candidates || candidates.length === 0) {
+
+        list.innerHTML = `
+            <div class="candidate-empty">
+                No staff can take this time.
+            </div>
+        `;
+    }
+
+    renderUnavailableStaff(list, unavailable);
+
+
+    for (const candidate of candidates) {
+
+        const button = document.createElement("button");
+
+        button.type = "button";
 
         button.className =
             "candidate-item"
-            +
-            (
-                candidate.requires_override
-                    ? " requires-override"
-                    : ""
-            );
+            + (candidate.requires_override ? " requires-override" : "");
 
 
-        const left =
-            document.createElement(
-                "div"
-            );
+        const left = document.createElement("div");
 
+        const name = document.createElement("div");
 
-        const name =
-            document.createElement(
-                "div"
-            );
+        name.className = "candidate-name";
+        name.textContent = candidate.name;
 
-        name.className =
-            "candidate-name";
+        if (candidate.is_current) {
 
-        name.textContent =
-            candidate.name;
+            const tag = document.createElement("span");
 
+            tag.className = "candidate-current";
+            tag.textContent = "Current";
 
-        const meta =
-            document.createElement(
-                "div"
-            );
+            name.appendChild(tag);
+        }
 
-        meta.className =
-            "candidate-meta";
+        const meta = document.createElement("div");
 
+        meta.className = "candidate-meta";
         meta.textContent =
-            "Scheduled today: "
-            +
-            formatHours(
-                candidate.scheduled_hours
-            )
-            +
-            "h · This slot: "
-            +
-            formatHours(
-                candidate.slot_hours
-            )
-            +
-            "h";
+            "Other shifts today: " + formatHours(candidate.scheduled_hours) + "h"
+            + " · This shift: " + formatHours(candidate.shift_hours) + "h"
+            + " · Limit: " + formatHours(candidate.daily_hour_limit) + "h";
+
+        left.appendChild(name);
+        left.appendChild(meta);
 
 
-        left.appendChild(
-            name
-        );
+        if (candidate.requires_override) {
 
-        left.appendChild(
-            meta
-        );
+            const warning = document.createElement("div");
 
-
-        if (
-            candidate.requires_override
-        ) {
-
-            const warning =
-                document.createElement(
-                    "div"
-                );
-
-            warning.className =
-                "candidate-warning";
-
+            warning.className = "candidate-warning";
             warning.textContent =
-                "⚠ "
-                +
-                (
-                    candidate.violation_messages
-                    ||
-                    []
-                )
-                .join(
-                    " · "
-                );
+                "⚠ " + (candidate.violation_messages || []).join(" · ");
 
-            left.appendChild(
-                warning
-            );
-
+            left.appendChild(warning);
         }
 
 
-        const arrow =
-            document.createElement(
-                "div"
-            );
+        const arrow = document.createElement("div");
 
-        arrow.className =
-            "candidate-arrow";
+        arrow.className = "candidate-arrow";
+        arrow.textContent = "›";
 
-        arrow.textContent =
-            "›";
+        button.appendChild(left);
+        button.appendChild(arrow);
 
+        button.addEventListener("click", function () {
+            assignCandidate(candidate);
+        });
 
-        button.appendChild(
-            left
+        list.insertBefore(
+            button,
+            list.querySelector(".unavailable-section")
         );
-
-        button.appendChild(
-            arrow
-        );
-
-
-        button.addEventListener(
-            "click",
-            function () {
-                assignCandidate(
-                    candidate
-                );
-            }
-        );
-
-
-        list.appendChild(
-            button
-        );
-
     }
-
 }
 
 
-/* =========================================================
-   Local schedule updates
-========================================================= */
+// Staff with this role who can't take the time, and why.
+function renderUnavailableStaff(list, unavailable) {
 
-function findLocalSlot(
-    workDate,
-    slotId
-) {
-
-    if (
-        !scheduleData
-        ||
-        !scheduleData.days
-    ) {
-        return null;
+    if (!unavailable || unavailable.length === 0) {
+        return;
     }
 
+    const section = document.createElement("div");
 
-    const day =
-        scheduleData.days.find(
-            item =>
-                item.work_date === workDate
-        );
+    section.className = "unavailable-section";
 
+    section.innerHTML =
+        '<div class="unavailable-title">Not selectable</div>'
+        + unavailable.map(item =>
+            '<div class="unavailable-item">'
+            + '<span class="unavailable-name">' + escapeHtml(item.name) + '</span>'
+            + '<span class="unavailable-reason">' + escapeHtml(item.reason) + '</span>'
+            + '</div>'
+        ).join("");
 
-    if (
-        !day
-        ||
-        !day.slots
-    ) {
-        return null;
-    }
-
-
-    return (
-        day.slots.find(
-            item =>
-                Number(item.slot_id)
-                ===
-                Number(slotId)
-        )
-        ||
-        null
-    );
-}
-
-
-function applyAssignmentLocally(
-    assignment
-) {
-
-    const slot =
-        findLocalSlot(
-            assignment.work_date,
-            assignment.slot_id
-        );
-
-
-    if (!slot) {
-        return false;
-    }
-
-
-    if (!slot.assignments) {
-        slot.assignments = [];
-    }
-
-
-    const existingIndex =
-        slot.assignments.findIndex(
-            item =>
-                item.role_type
-                ===
-                assignment.role_type
-                &&
-                Number(item.position_no)
-                ===
-                Number(assignment.position_no)
-        );
-
-
-    const normalizedAssignment = {
-        schedule_id:
-            assignment.schedule_id
-            ??
-            null,
-
-        staff_id:
-            assignment.staff_id,
-
-        staff_name:
-            assignment.staff_name,
-
-        role_type:
-            assignment.role_type,
-
-        position_no:
-            Number(
-                assignment.position_no
-            ),
-
-        status:
-            assignment.status
-            ||
-            "draft",
-
-        override_daily_limit:
-            Boolean(
-                assignment.override_daily_limit
-            ),
-
-        override_consecutive:
-            Boolean(
-                assignment.override_consecutive
-            ),
-
-        overridden_at:
-            assignment.overridden_at
-            ??
-            null,
-
-        published_at:
-            null
-    };
-
-
-    if (existingIndex >= 0) {
-
-        slot.assignments[
-            existingIndex
-        ] = normalizedAssignment;
-
-    } else {
-
-        slot.assignments.push(
-            normalizedAssignment
-        );
-
-        scheduleData.assignment_count =
-            Number(
-                scheduleData.assignment_count
-                ||
-                0
-            )
-            +
-            1;
-    }
-
-
-    scheduleData.week_status =
-        "draft";
-
-    renderMatrixBody();
-    updatePublishControl();
-
-    return true;
-}
-
-
-function removeAssignmentLocally(
-    selection
-) {
-
-    const slot =
-        findLocalSlot(
-            selection.work_date,
-            selection.slot_id
-        );
-
-
-    if (
-        !slot
-        ||
-        !slot.assignments
-    ) {
-        return false;
-    }
-
-
-    const originalLength =
-        slot.assignments.length;
-
-
-    slot.assignments =
-        slot.assignments.filter(
-            item =>
-                !(
-                    item.role_type
-                    ===
-                    selection.role_type
-                    &&
-                    Number(item.position_no)
-                    ===
-                    Number(selection.position_no)
-                )
-        );
-
-
-    if (
-        slot.assignments.length
-        <
-        originalLength
-    ) {
-
-        scheduleData.assignment_count =
-            Math.max(
-                0,
-                Number(
-                    scheduleData.assignment_count
-                    ||
-                    0
-                )
-                -
-                1
-            );
-    }
-
-
-    renderMatrixBody();
-    updatePublishControl();
-
-    return true;
+    list.appendChild(section);
 }
 
 
@@ -2744,263 +2768,156 @@ function removeAssignmentLocally(
    Save / delete
 ========================================================= */
 
-function assignCandidate(
-    candidate
-) {
+function assignCandidate(candidate) {
 
-    if (
-        !activeSelection
-    ) {
+    if (!activeSelection) {
         return;
     }
 
+    if (candidate.requires_override) {
 
-    if (
-        candidate.requires_override
-    ) {
-
-        openOverrideModal(
-            candidate
-        );
+        openOverrideModal(candidate);
 
         return;
     }
 
-
-    saveCandidateAssignment(
-        candidate,
-        false
-    );
+    saveCandidateAssignment(candidate, false);
 }
 
 
-async function saveCandidateAssignment(
-    candidate,
-    overrideRequested
-) {
+async function saveCandidateAssignment(candidate, overrideRequested) {
 
-    if (
-        !activeSelection
-    ) {
+    if (!activeSelection) {
         return;
     }
 
+    const selection = activeSelection;
 
     try {
 
         showStatus(
-            overrideRequested
-                ? "Saving override..."
-                : "Saving schedule...",
+            overrideRequested ? "Saving override..." : "Saving schedule...",
             "info"
         );
 
+        const response = await fetch(
+            "/api/staff-schedule",
+            {
+                method: "POST",
 
-        const response =
-            await fetch(
-                "/api/staff-schedule",
-                {
-                    method:
-                        "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
+                body: JSON.stringify({
+                    work_date: selection.work_date,
+                    store_id: selection.store_id,
+                    role_type: selection.role_type,
+                    position_no: selection.position_no,
+                    start_time: minutesToTime(selection.start),
+                    end_time: minutesToTime(selection.end),
+                    schedule_id: selection.schedule_id || null,
+                    staff_id: candidate.staff_id,
+                    override: overrideRequested,
 
-                    body:
-                        JSON.stringify({
-                            work_date:
-                                activeSelection.work_date,
+                    // The warning box listed what gets replaced.
+                    replace: (selection.position_conflicts || []).length > 0
+                })
+            }
+        );
 
-                            slot_id:
-                                activeSelection.slot_id,
+        const data = await response.json();
 
-                            staff_id:
-                                candidate.staff_id,
+        if (!response.ok || !data.success) {
 
-                            role_type:
-                                activeSelection.role_type,
+            // Someone else changed this position meanwhile.
+            if (data.requires_replace && !selection.fromDrag) {
 
-                            position_no:
-                                activeSelection.position_no,
+                selection.position_conflicts = data.position_conflicts || [];
 
-                            override:
-                                overrideRequested,
-                        })
-                }
-            );
+                renderReplaceWarning(selection.position_conflicts);
 
+                document
+                    .getElementById("candidateModalBackdrop")
+                    .classList.add("visible");
+            }
 
-        const data =
-            await response.json();
-
-
-        if (
-            !response.ok
-            ||
-            !data.success
-        ) {
-            throw new Error(
-                data.message
-                ||
-                "Unable to save assignment."
-            );
+            throw new Error(data.message || "Unable to save assignment.");
         }
-
 
         closeAllAssignmentModals();
 
+        await loadSchedule();
 
-        showStatus(
-            data.message
-            ||
-            "Schedule saved.",
-            "success"
-        );
+        showStatus(data.message || "Schedule saved.", "success");
 
+    } catch (error) {
 
-        applyAssignmentLocally(
-            data.assignment
-        );
+        console.error(error);
 
+        showStatus(error.message || "Unable to save assignment.", "error");
     }
-
-    catch (error) {
-
-        console.error(
-            error
-        );
-
-
-        showStatus(
-            error.message
-            ||
-            "Unable to save assignment.",
-            "error"
-        );
-
-    }
-
 }
 
 
 async function removeCurrentAssignment() {
 
-    if (!CAN_EDIT_SCHEDULE) {
-        return;
-    }
-
     if (
-        !activeSelection
-        ||
-        !activeSelection.current_staff_id
+        !CAN_EDIT_SCHEDULE
+        || !activeSelection
+        || !activeSelection.schedule_id
     ) {
         return;
     }
 
+    const proceed = window.confirm(
+        "Remove " + activeSelection.current_staff_name
+        + " from this whole shift?"
+    );
 
-    const selectionSnapshot = {
-        work_date:
-            activeSelection.work_date,
+    if (!proceed) {
+        return;
+    }
 
-        slot_id:
-            activeSelection.slot_id,
-
-        role_type:
-            activeSelection.role_type,
-
-        position_no:
-            activeSelection.position_no
-    };
-
+    const scheduleId = activeSelection.schedule_id;
 
     try {
 
-        showStatus(
-            "Removing assignment...",
-            "info"
+        showStatus("Removing assignment...", "info");
+
+        const response = await fetch(
+            "/api/staff-schedule",
+            {
+                method: "DELETE",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    schedule_id: scheduleId
+                })
+            }
         );
 
+        const data = await response.json();
 
-        const response =
-            await fetch(
-                "/api/staff-schedule",
-                {
-                    method:
-                        "DELETE",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body:
-                        JSON.stringify({
-                            work_date:
-                                activeSelection.work_date,
-
-                            slot_id:
-                                activeSelection.slot_id,
-
-                            role_type:
-                                activeSelection.role_type,
-
-                            position_no:
-                                activeSelection.position_no
-                        })
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (
-            !response.ok
-            ||
-            !data.success
-        ) {
-            throw new Error(
-                data.message
-                ||
-                "Unable to remove assignment."
-            );
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Unable to remove assignment.");
         }
-
 
         closeCandidateModal();
 
+        await loadSchedule();
 
-        showStatus(
-            "Assignment removed.",
-            "success"
-        );
+        showStatus("Assignment removed.", "success");
 
+    } catch (error) {
 
-        removeAssignmentLocally(
-            selectionSnapshot
-        );
+        console.error(error);
 
+        showStatus(error.message || "Unable to remove assignment.", "error");
     }
-
-    catch (error) {
-
-        console.error(
-            error
-        );
-
-
-        showStatus(
-            error.message
-            ||
-            "Unable to remove assignment.",
-            "error"
-        );
-
-    }
-
 }
 
 
@@ -3010,114 +2927,56 @@ async function removeCurrentAssignment() {
 
 function updatePublishControl() {
 
-    const button =
-        document.getElementById(
-            "publishButton"
-        );
+    const button = document.getElementById("publishButton");
+    const state = document.getElementById("publishState");
 
-    const state =
-        document.getElementById(
-            "publishState"
-        );
-
-
-    if (
-        !scheduleData
-        ||
-        !button
-        ||
-        !state
-    ) {
+    if (!scheduleData || !button || !state) {
         return;
     }
 
+    if (scheduleData.week_status === "published") {
 
-    if (
-        scheduleData.week_status
-        ===
-        "published"
-    ) {
+        button.textContent = "Modify";
+        button.classList.add("modify");
 
-        button.textContent =
-            "Modify";
-
-        button.classList.add(
-            "modify"
-        );
-
-        state.textContent =
-            scheduleData.published_at
-                ? "Published"
-                : "";
+        state.textContent = scheduleData.published_at ? "Published" : "";
 
     } else {
 
-        button.textContent =
-            "Confirm";
+        button.textContent = "Confirm";
+        button.classList.remove("modify");
 
-        button.classList.remove(
-            "modify"
-        );
-
-        state.textContent =
-            "";
-
+        state.textContent = "";
     }
 
-
-    button.disabled =
+    button.disabled = (
+        !CAN_EDIT_SCHEDULE
+        ||
         (
-            !CAN_EDIT_SCHEDULE
-            ||
-            (
-                scheduleData.week_status
-                !==
-                "published"
-                &&
-                Number(
-                    scheduleData.assignment_count
-                    ||
-                    0
-                )
-                ===
-                0
-            )
-        );
+            scheduleData.week_status !== "published"
+            &&
+            Number(scheduleData.assignment_count || 0) === 0
+        )
+    );
 }
 
 
 async function handlePublishButton() {
 
-    if (!CAN_EDIT_SCHEDULE) {
+    if (!CAN_EDIT_SCHEDULE || !scheduleData) {
         return;
     }
 
-    if (
-        !scheduleData
-    ) {
-        return;
-    }
+    if (scheduleData.week_status === "published") {
 
+        const proceed = window.confirm(
+            "Modify this schedule?\n\n"
+            + "The published schedule will return to draft status."
+        );
 
-    if (
-        scheduleData.week_status
-        ===
-        "published"
-    ) {
-
-        const proceed =
-            window.confirm(
-                "Modify this schedule?\\n\\n"
-                +
-                "The published schedule will return to draft status."
-            );
-
-        if (
-            !proceed
-        ) {
+        if (!proceed) {
             return;
         }
-
 
         await changeWeekPublishState(
             "/api/schedule-modify",
@@ -3127,30 +2986,17 @@ async function handlePublishButton() {
         return;
     }
 
+    const proceed = window.confirm(
+        "Confirm and publish the schedule for "
+        + displayDateString(scheduleData.week_start)
+        + " - "
+        + displayDateString(scheduleData.week_end)
+        + "?"
+    );
 
-    const proceed =
-        window.confirm(
-            "Confirm and publish the schedule for "
-            +
-            displayDateString(
-                scheduleData.week_start
-            )
-            +
-            " - "
-            +
-            displayDateString(
-                scheduleData.week_end
-            )
-            +
-            "?"
-        );
-
-    if (
-        !proceed
-    ) {
+    if (!proceed) {
         return;
     }
-
 
     await changeWeekPublishState(
         "/api/schedule-confirm",
@@ -3159,97 +3005,49 @@ async function handlePublishButton() {
 }
 
 
-async function changeWeekPublishState(
-    url,
-    loadingMessage
-) {
+async function changeWeekPublishState(url, loadingMessage) {
 
-    const button =
-        document.getElementById(
-            "publishButton"
-        );
+    const button = document.getElementById("publishButton");
 
-    button.disabled =
-        true;
+    button.disabled = true;
 
-
-    showStatus(
-        loadingMessage,
-        "info"
-    );
-
+    showStatus(loadingMessage, "info");
 
     try {
 
-        const response =
-            await fetch(
-                url,
-                {
-                    method:
-                        "POST",
+        const response = await fetch(
+            url,
+            {
+                method: "POST",
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
+                headers: {
+                    "Content-Type": "application/json"
+                },
 
-                    body:
-                        JSON.stringify({
-                            week_start:
-                                scheduleData.week_start
-                        })
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (
-            !response.ok
-            ||
-            !data.success
-        ) {
-            throw new Error(
-                data.message
-                ||
-                "Unable to update schedule status."
-            );
-        }
-
-
-        showStatus(
-            data.message
-            ||
-            "Schedule updated.",
-            "success"
+                body: JSON.stringify({
+                    week_start: scheduleData.week_start
+                })
+            }
         );
 
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Unable to update schedule status.");
+        }
 
         await loadSchedule();
 
-    }
+        showStatus(data.message || "Schedule updated.", "success");
 
-    catch (error) {
+    } catch (error) {
 
-        console.error(
-            error
-        );
+        console.error(error);
 
-
-        showStatus(
-            error.message
-            ||
-            "Unable to update schedule status.",
-            "error"
-        );
-
+        showStatus(error.message || "Unable to update schedule status.", "error");
 
         updatePublishControl();
-
     }
-
 }
 
 
@@ -3257,158 +3055,78 @@ async function changeWeekPublishState(
    Override modal
 ========================================================= */
 
-function openOverrideModal(
-    candidate
-) {
+function openOverrideModal(candidate) {
 
-    pendingOverrideCandidate =
-        candidate;
-
+    pendingOverrideCandidate = candidate;
 
     document
-        .getElementById(
-            "candidateModalBackdrop"
-        )
-        .classList.remove(
-            "visible"
-        );
+        .getElementById("candidateModalBackdrop")
+        .classList.remove("visible");
 
+    document.getElementById("overrideModalSubtitle").textContent =
+        candidate.name
+        + " · " + activeSelection.position_label
+        + " · " + formatMinutes(activeSelection.start)
+        + " - " + formatMinutes(activeSelection.end);
 
-    document
-        .getElementById(
-            "overrideModalSubtitle"
-        )
-        .textContent =
-            candidate.name
-            +
-            " · "
-            +
-            activeSelection.position_label;
+    const messages = candidate.violation_messages || [];
 
-
-    const messages =
-        candidate.violation_messages
-        ||
-        [];
-
+    document.getElementById("overrideWarnings").innerHTML =
+        "This assignment violates a soft scheduling rule:"
+        + "<ul>"
+        + messages.map(message => "<li>" + escapeHtml(message) + "</li>").join("")
+        + "</ul>";
 
     document
-        .getElementById(
-            "overrideWarnings"
-        )
-        .innerHTML =
-            "This assignment violates a soft scheduling rule:"
-            +
-            "<ul>"
-            +
-            messages
-                .map(
-                    message =>
-                        "<li>"
-                        +
-                        escapeHtml(
-                            message
-                        )
-                        +
-                        "</li>"
-                )
-                .join("")
-            +
-            "</ul>";
-    document
-        .getElementById(
-            "overrideModalBackdrop"
-        )
-        .classList.add(
-            "visible"
-        );
-
+        .getElementById("overrideModalBackdrop")
+        .classList.add("visible");
 }
 
 
-function closeOverrideModal(
-    returnToCandidates
-) {
+function closeOverrideModal(returnToCandidates) {
 
     document
-        .getElementById(
-            "overrideModalBackdrop"
-        )
-        .classList.remove(
-            "visible"
-        );
+        .getElementById("overrideModalBackdrop")
+        .classList.remove("visible");
 
+    pendingOverrideCandidate = null;
 
-    pendingOverrideCandidate =
-        null;
-
-
-    if (
-        returnToCandidates
-        &&
-        activeSelection
-    ) {
-
-        document
-            .getElementById(
-                "candidateModalBackdrop"
-            )
-            .classList.add(
-                "visible"
-            );
-
+    if (activeSelection && activeSelection.fromDrag) {
+        activeSelection = null;
+        return;
     }
 
+    if (returnToCandidates && activeSelection) {
+
+        document
+            .getElementById("candidateModalBackdrop")
+            .classList.add("visible");
+    }
 }
 
 
 async function confirmOverrideAssignment() {
 
-    if (
-        !pendingOverrideCandidate
-        ||
-        !activeSelection
-    ) {
+    if (!pendingOverrideCandidate || !activeSelection) {
         return;
     }
 
-
-    const candidate =
-        pendingOverrideCandidate;
-
+    const candidate = pendingOverrideCandidate;
 
     document
-        .getElementById(
-            "overrideModalBackdrop"
-        )
-        .classList.remove(
-            "visible"
-        );
+        .getElementById("overrideModalBackdrop")
+        .classList.remove("visible");
 
+    pendingOverrideCandidate = null;
 
-    pendingOverrideCandidate =
-        null;
-
-
-    await saveCandidateAssignment(
-        candidate,
-        true
-    );
+    await saveCandidateAssignment(candidate, true);
 }
 
 
-function handleOverrideBackdropClick(
-    event
-) {
+function handleOverrideBackdropClick(event) {
 
-    if (
-        event.target.id
-        ===
-        "overrideModalBackdrop"
-    ) {
-        closeOverrideModal(
-            true
-        );
+    if (event.target.id === "overrideModalBackdrop") {
+        closeOverrideModal(true);
     }
 }
 
@@ -3416,26 +3134,16 @@ function handleOverrideBackdropClick(
 function closeAllAssignmentModals() {
 
     document
-        .getElementById(
-            "candidateModalBackdrop"
-        )
-        .classList.remove(
-            "visible"
-        );
+        .getElementById("candidateModalBackdrop")
+        .classList.remove("visible");
 
     document
-        .getElementById(
-            "overrideModalBackdrop"
-        )
-        .classList.remove(
-            "visible"
-        );
+        .getElementById("overrideModalBackdrop")
+        .classList.remove("visible");
 
-    pendingOverrideCandidate =
-        null;
+    pendingOverrideCandidate = null;
 
-    activeSelection =
-        null;
+    activeSelection = null;
 }
 
 
@@ -3446,116 +3154,71 @@ function closeAllAssignmentModals() {
 function closeCandidateModal() {
 
     document
-        .getElementById(
-            "candidateModalBackdrop"
-        )
-        .classList.remove(
-            "visible"
-        );
+        .getElementById("candidateModalBackdrop")
+        .classList.remove("visible");
 
+    activeSelection = null;
 
-    activeSelection =
-        null;
+    candidateRequestId++;
 }
 
 
 function handleBackdropClick(event) {
 
-    if (
-        event.target.id
-        ===
-        "candidateModalBackdrop"
-    ) {
+    if (event.target.id === "candidateModalBackdrop") {
         closeCandidateModal();
     }
 }
 
 
-document.addEventListener(
-    "keydown",
-    function (event) {
-        if (
-            event.key
-            ===
-            "Escape"
-        ) {
+document.addEventListener("keydown", function (event) {
 
-            const overrideBackdrop =
-                document.getElementById(
-                    "overrideModalBackdrop"
-                );
-
-            if (
-                overrideBackdrop.classList.contains(
-                    "visible"
-                )
-            ) {
-                closeOverrideModal(
-                    true
-                );
-
-                return;
-            }
-
-            closeCandidateModal();
-        }
+    if (event.key !== "Escape") {
+        return;
     }
-);
+
+    const overrideBackdrop =
+        document.getElementById("overrideModalBackdrop");
+
+    if (overrideBackdrop.classList.contains("visible")) {
+
+        closeOverrideModal(true);
+
+        return;
+    }
+
+    closeCandidateModal();
+});
 
 
 /* =========================================================
    Status
 ========================================================= */
 
-function showStatus(
-    message,
-    type
-) {
+function showStatus(message, type) {
 
-    const bar =
-        document.getElementById(
-            "statusBar"
-        );
+    const bar = document.getElementById("statusBar");
 
-    bar.textContent =
-        message;
+    bar.textContent = message;
 
-    bar.className =
-        "status-bar visible "
-        +
-        type;
+    bar.className = "status-bar visible " + type;
 
+    if (type === "success") {
 
-    if (
-        type === "success"
-    ) {
+        setTimeout(function () {
 
-        setTimeout(
-            function () {
-                if (
-                    bar.classList.contains(
-                        "success"
-                    )
-                ) {
-                    hideStatus();
-                }
-            },
-            2200
-        );
+            if (bar.classList.contains("success")) {
+                hideStatus();
+            }
 
+        }, 2200);
     }
-
 }
 
 
 function hideStatus() {
 
-    document
-        .getElementById(
-            "statusBar"
-        )
-        .className =
-            "status-bar";
+    document.getElementById("statusBar").className = "status-bar";
 }
 
 
@@ -3563,63 +3226,14 @@ function hideStatus() {
    Utility
 ========================================================= */
 
-function formatHours(value) {
-
-    const number =
-        Number(
-            value
-            ||
-            0
-        );
-
-    if (
-        Number.isInteger(
-            number
-        )
-    ) {
-        return String(
-            number
-        );
-    }
-
-    return number.toFixed(
-        1
-    );
-}
-
-
 function escapeHtml(value) {
 
-    return String(
-        value
-        ??
-        ""
-    )
-
-    .replace(
-        /&/g,
-        "&amp;"
-    )
-
-    .replace(
-        /</g,
-        "&lt;"
-    )
-
-    .replace(
-        />/g,
-        "&gt;"
-    )
-
-    .replace(
-        /"/g,
-        "&quot;"
-    )
-
-    .replace(
-        /'/g,
-        "&#039;"
-    );
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 
@@ -3627,12 +3241,9 @@ function escapeHtml(value) {
    Start
 ========================================================= */
 
-window.addEventListener(
-    "load",
-    function () {
-        loadSchedule();
-    }
-);
+window.addEventListener("load", function () {
+    loadSchedule();
+});
 
 </script>
 

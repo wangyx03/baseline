@@ -696,6 +696,50 @@
         font-size: 13px;
     }
 
+    /* =========================
+       Work Hours
+    ========================= */
+
+    .work-hours-bar {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px 20px;
+
+        margin-bottom: 18px;
+        padding: 14px 16px;
+
+        border: 1px solid #dfe1e5;
+        border-radius: 9px;
+
+        background: #fafbfc;
+    }
+
+    .work-hours-inputs {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+
+        color: #646a73;
+        font-size: 13px;
+    }
+
+    .hour-select {
+        min-width: 150px;
+    }
+
+    .work-hours-note {
+        color: #646a73;
+        font-size: 13px;
+    }
+
+    .work-hours-note.custom {
+        color: #3159a7;
+        font-weight: 600;
+    }
+
     #copyGuestLinkButton.copied {
         background: #2da44e;
         color: white;
@@ -951,6 +995,54 @@
 
 
         <!-- =========================
+             Work Hours (this week / next week only)
+        ========================= -->
+
+        <div class="work-hours-bar">
+
+            <div class="control-group">
+
+                <label for="workStartSelect">
+                    Work Hours
+                </label>
+
+                <div class="work-hours-inputs">
+
+                    <select
+                        id="workStartSelect"
+                        class="hour-select"
+                    ></select>
+
+                    <span>to</span>
+
+                    <select
+                        id="workEndSelect"
+                        class="hour-select"
+                    ></select>
+
+                    <button
+                        type="button"
+                        id="saveWorkHoursButton"
+                        class="secondary-button"
+                        onclick="saveWorkHours()"
+                    >
+                        Update Hours
+                    </button>
+
+                </div>
+
+            </div>
+
+            <div
+                id="workHoursNote"
+                class="work-hours-note"
+            ></div>
+
+        </div>
+
+
+
+        <!-- =========================
              Availability Table
         ========================= -->
 
@@ -1104,20 +1196,55 @@ const DAYS = [
 ];
 
 
-const TIME_BLOCKS = [
+/* =========================================================
+   Work hours
+   { start_hour, end_hour, is_default, editable }
+   end_hour 24 = midnight. Default 11 - 21.
+========================================================= */
 
-    ["11:00", "12:00"],
-    ["12:00", "13:00"],
-    ["13:00", "14:00"],
-    ["14:00", "15:00"],
-    ["15:00", "16:00"],
-    ["16:00", "17:00"],
-    ["17:00", "18:00"],
-    ["18:00", "19:00"],
-    ["19:00", "20:00"],
-    ["20:00", "21:00"]
+let workHours = {
+    start_hour: 11,
+    end_hour: 21,
+    is_default: true,
+    editable: false
+};
 
-];
+
+function pad2(value) {
+
+    return String(value).padStart(2, "0");
+}
+
+
+function hourRows() {
+
+    // [["11:00", "12:00"], ...]  hour 23 -> ["23:00", "00:00"]
+    const rows = [];
+
+    for (
+        let hour = Number(workHours.start_hour);
+        hour < Number(workHours.end_hour);
+        hour++
+    ) {
+
+        rows.push([
+            pad2(hour) + ":00",
+            pad2((hour + 1) % 24) + ":00"
+        ]);
+    }
+
+    return rows;
+}
+
+
+function hourOptionLabel(hour) {
+
+    if (hour === 24) {
+        return "12:00 AM (midnight)";
+    }
+
+    return formatTime(pad2(hour) + ":00");
+}
 
 
 let weekStart =
@@ -1377,7 +1504,7 @@ function renderBody() {
         "";
 
 
-    TIME_BLOCKS.forEach(
+    hourRows().forEach(
 
         block => {
 
@@ -1715,7 +1842,7 @@ function changeWeek(days) {
     renderTable();
 
 
-    loadAvailability();
+    loadWeek();
 }
 
 
@@ -1742,7 +1869,7 @@ function goCurrentWeek() {
     renderTable();
 
 
-    loadAvailability();
+    loadWeek();
 }
 
 
@@ -2063,9 +2190,6 @@ function restoreSelectedStaff() {
 
     select.value =
         savedStaffId;
-
-
-    loadAvailability();
 }
 
 
@@ -2660,6 +2784,254 @@ document.addEventListener(
 
 
 /* =========================================================
+   Work Hours
+========================================================= */
+
+function renderWorkHoursControls() {
+
+    const startSelect =
+        document.getElementById("workStartSelect");
+
+    const endSelect =
+        document.getElementById("workEndSelect");
+
+    const saveButton =
+        document.getElementById("saveWorkHoursButton");
+
+    const note =
+        document.getElementById("workHoursNote");
+
+
+    if (startSelect.options.length === 0) {
+
+        for (let hour = 0; hour <= 23; hour++) {
+            startSelect.add(
+                new Option(hourOptionLabel(hour), String(hour))
+            );
+        }
+
+        for (let hour = 1; hour <= 24; hour++) {
+            endSelect.add(
+                new Option(hourOptionLabel(hour), String(hour))
+            );
+        }
+    }
+
+
+    startSelect.value =
+        String(workHours.start_hour);
+
+    endSelect.value =
+        String(workHours.end_hour);
+
+
+    const editable =
+        Boolean(workHours.editable);
+
+    startSelect.disabled = !editable;
+    endSelect.disabled = !editable;
+    saveButton.disabled = !editable;
+
+
+    note.className =
+        "work-hours-note"
+        +
+        (workHours.is_default ? "" : " custom");
+
+    note.textContent =
+        (
+            workHours.is_default
+                ? "Default hours"
+                : "Custom hours for this week"
+        )
+        +
+        (
+            editable
+                ? " · Changes are visible to everyone immediately."
+                : " · Only this week and next week can be changed."
+        );
+}
+
+
+async function loadWorkHours() {
+
+    const requestedWeek =
+        dateToString(weekStart);
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/availability-management/work-hours"
+                + "?week_start="
+                + encodeURIComponent(requestedWeek),
+                { cache: "no-store" }
+            );
+
+        const data =
+            await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(
+                data.message || "Unable to load work hours."
+            );
+        }
+
+        // Week changed while loading.
+        if (requestedWeek !== dateToString(weekStart)) {
+            return false;
+        }
+
+        workHours =
+            data.work_hours;
+
+    } catch (error) {
+
+        console.error(error);
+
+        showMessage(
+            error.message || "Unable to load work hours.",
+            false
+        );
+    }
+
+    renderWorkHoursControls();
+
+    renderBody();
+
+    setEditingState(isEditing);
+
+    return true;
+}
+
+
+async function loadWeek() {
+
+    const current =
+        await loadWorkHours();
+
+    if (current) {
+        await loadAvailability();
+    }
+}
+
+
+async function saveWorkHours() {
+
+    if (isEditing) {
+
+        showMessage(
+            "Submit your availability changes before changing work hours.",
+            false
+        );
+
+        return;
+    }
+
+
+    const startHour =
+        Number(document.getElementById("workStartSelect").value);
+
+    const endHour =
+        Number(document.getElementById("workEndSelect").value);
+
+
+    if (endHour <= startHour) {
+
+        showMessage(
+            "End time must be later than start time.",
+            false
+        );
+
+        return;
+    }
+
+
+    const proceed =
+        window.confirm(
+            "Change work hours for "
+            + document.getElementById("weekTitle").textContent
+            + " to "
+            + hourOptionLabel(startHour)
+            + " - "
+            + hourOptionLabel(endHour)
+            + "?"
+        );
+
+    if (!proceed) {
+        return;
+    }
+
+
+    const button =
+        document.getElementById("saveWorkHoursButton");
+
+    button.disabled = true;
+
+    button.textContent = "Updating...";
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/availability-management/work-hours",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        week_start: dateToString(weekStart),
+                        start_hour: startHour,
+                        end_hour: endHour
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(
+                data.message || "Unable to update work hours."
+            );
+        }
+
+        workHours =
+            data.work_hours;
+
+        renderBody();
+
+        setEditingState(false);
+
+        await loadAvailability();
+
+        showMessage(
+            "Work hours updated.",
+            true
+        );
+
+    } catch (error) {
+
+        showMessage(
+            error.message || "Unable to update work hours.",
+            false
+        );
+
+    } finally {
+
+        button.textContent = "Update Hours";
+
+        renderWorkHoursControls();
+    }
+}
+
+
+
+/* =========================================================
    Generate Guest Link
 ========================================================= */
 
@@ -2932,6 +3304,8 @@ setEditingState(
 restoreSelectedStaff();
 
 updateGuestDropdownText();
+
+loadWeek();
 
 
 </script>

@@ -21,6 +21,11 @@ from permissions.permissions import(
 
 from db import get_db
 
+from .work_hours import (
+    load_week_hours,
+    time_to_hhmm,
+)
+
 
 availability_bp = Blueprint(
     "availability",
@@ -66,15 +71,10 @@ def can_access_staff(staff_id):
 
 # =========================
 # Time Blocks
+#
+# No longer fixed. Each week's visible hour range comes from
+# staff_work_hours (work_hours.py), default 11:00 - 21:00.
 # =========================
-
-TIME_BLOCKS = [
-    ("11:00", "14:00"),
-    ("14:00", "16:00"),
-    ("16:00", "17:00"),
-    ("17:00", "18:00"),
-    ("18:00", "21:00"),
-]
 
 
 # =========================
@@ -181,6 +181,22 @@ def get_staff_availability():
         }), 400
 
 
+    try:
+
+        datetime.strptime(
+            week_start,
+            "%Y-%m-%d"
+        )
+
+    except ValueError:
+
+        return jsonify({
+            "success": False,
+            "message":
+                "Invalid week_start"
+        }), 400
+
+
     # =========================
     # Permission Check
     # =========================
@@ -274,14 +290,14 @@ def get_staff_availability():
                     ].isoformat(),
 
                 "start_time":
-                    str(
+                    time_to_hhmm(
                         row[
                             "start_time"
                         ]
                     ),
 
                 "end_time":
-                    str(
+                    time_to_hhmm(
                         row[
                             "end_time"
                         ]
@@ -296,8 +312,15 @@ def get_staff_availability():
             })
 
 
+        work_hours = load_week_hours(
+            cursor,
+            week_start
+        )
+
+
         return jsonify({
             "success": True,
+            "work_hours": work_hours,
             "availability": results,
             "preference": preference
         })

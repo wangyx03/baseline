@@ -935,32 +935,41 @@ const DAYS = [
 
 
 /* =========================================================
-   Hour blocks
+   Work hours
+   Visible hour range for the week, set by Schedule Management.
+   { start_hour: 11, end_hour: 21 }  (end_hour 24 = midnight)
 ========================================================= */
 
-const TIME_BLOCKS = [
+let workHours = {
+    start_hour: 11,
+    end_hour: 21
+};
 
-    ["11:00", "12:00"],
 
-    ["12:00", "13:00"],
+function pad2(value) {
 
-    ["13:00", "14:00"],
+    return String(value).padStart(2, "0");
+}
 
-    ["14:00", "15:00"],
 
-    ["15:00", "16:00"],
+function hourRows() {
 
-    ["16:00", "17:00"],
+    // [["11:00", "12:00"], ...]  hour 23 -> ["23:00", "00:00"]
+    const rows = [];
 
-    ["17:00", "18:00"],
+    const start = Number(workHours.start_hour);
+    const end = Number(workHours.end_hour);
 
-    ["18:00", "19:00"],
+    for (let hour = start; hour < end; hour++) {
 
-    ["19:00", "20:00"],
+        rows.push([
+            pad2(hour) + ":00",
+            pad2((hour + 1) % 24) + ":00"
+        ]);
+    }
 
-    ["20:00", "21:00"]
-
-];
+    return rows;
+}
 
 
 
@@ -1234,7 +1243,7 @@ function renderBody() {
         "";
 
 
-    TIME_BLOCKS.forEach(
+    hourRows().forEach(
 
         block => {
 
@@ -1593,8 +1602,7 @@ function changeWeek(days) {
     );
 
 
-    isSubmitted =
-        false;
+    enableEditing();
 
 
     renderTable();
@@ -1615,8 +1623,7 @@ function goCurrentWeek() {
         );
 
 
-    isSubmitted =
-        false;
+    enableEditing();
 
 
     renderTable();
@@ -2013,6 +2020,19 @@ async function loadAvailability() {
 
 
             return;
+
+        }
+
+
+
+        if (
+            data.work_hours
+        ) {
+
+            workHours =
+                data.work_hours;
+
+            renderBody();
 
         }
 
