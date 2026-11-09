@@ -501,6 +501,30 @@ def set_recording_inventory_source():
     db = get_db()
     cursor = db.cursor(dictionary=True)
     try:
+        # Once a LIVE is locked, its locked quantities already count
+        # against one warehouse. Changing the source would move them.
+        cursor.execute("""
+            SELECT ls.inventory_source
+            FROM live_sessions ls
+            WHERE ls.week_id = %s AND ls.store_id = %s AND ls.live_id = %s
+            LIMIT 1
+        """, (week_id, store_id, live_id))
+        session_row = cursor.fetchone()
+        current_source = session_row["inventory_source"] if session_row else None
+
+        if current_source != source:
+            cursor.execute("""
+                SELECT 1 FROM inventory_locked
+                WHERE week_id = %s AND store_id = %s AND live_id = %s
+                LIMIT 1
+            """, (week_id, store_id, live_id))
+            if cursor.fetchone() is not None:
+                return jsonify(
+                    success=False,
+                    message="This LIVE is already locked. "
+                            "Inventory Source can no longer be changed."
+                ), 409
+
         cursor.execute("""
             INSERT INTO live_sessions
                 (week_id, store_id, live_id, inventory_source, created_at)
@@ -2365,8 +2389,17 @@ def get_recordings():
         ) * page_size
 
 
+        # Each browser sends its own sort direction, so one user's
+        # choice no longer changes the order for everyone else.
+        # Fall back to the global default when no valid value is sent.
+        requested_sort = str(
+            request.args.get("sort", "")
+        ).upper().strip()
+
         sort_direction = (
-            get_recording_sort_direction(cursor)
+            requested_sort
+            if requested_sort in ("ASC", "DESC")
+            else get_recording_sort_direction(cursor)
         )
 
         # sort_direction is restricted to ASC/DESC by the helper above,

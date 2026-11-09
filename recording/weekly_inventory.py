@@ -385,6 +385,9 @@ def get_weekly_inventory():
                     wi.sku
 
             LEFT JOIN (
+                -- Locked quantities of M6 LIVEs.
+                -- The LIVE source comes from live_sessions; locked rows
+                -- without a session row are historical M6 locks.
                 SELECT
                     il.sku,
                     SUM(il.quantity)
@@ -392,8 +395,14 @@ def get_weekly_inventory():
 
                 FROM inventory_locked il
 
+                LEFT JOIN live_sessions ls
+                    ON ls.week_id = il.week_id
+                    AND ls.store_id = il.store_id
+                    AND ls.live_id = il.live_id
+
                 WHERE il.week_id = %s
                   AND il.store_id = %s
+                  AND COALESCE(ls.inventory_source, 'M6') = 'M6'
 
                 GROUP BY
                     il.sku
@@ -510,6 +519,51 @@ def get_weekly_inventory():
         db.close()
 
 
+# =========================================================
+# Wookoo inventory
+#
+# Wookoo stock is per store (not per week).
+# Used = for every WOOKOO LIVE of this store:
+#   - LIVE has rows in inventory_locked -> locked quantities
+#   - otherwise                         -> sku_recording quantities
+# =========================================================
+
+WOOKOO_USED_SQL = """
+    SELECT sku, SUM(qty) AS used
+    FROM (
+        -- Locked WOOKOO LIVEs
+        SELECT il.sku, il.quantity AS qty
+        FROM inventory_locked il
+        INNER JOIN live_sessions ls
+            ON ls.week_id = il.week_id
+           AND ls.store_id = il.store_id
+           AND ls.live_id = il.live_id
+           AND ls.inventory_source = 'WOOKOO'
+        WHERE il.store_id = %s
+
+        UNION ALL
+
+        -- WOOKOO LIVEs not locked yet: use recordings
+        SELECT sr.sku, sr.quantity AS qty
+        FROM sku_recording sr
+        INNER JOIN live_sessions ls
+            ON ls.week_id = sr.week_id
+           AND ls.store_id = sr.store_id
+           AND ls.live_id = sr.live_id
+           AND ls.inventory_source = 'WOOKOO'
+        WHERE sr.store_id = %s
+          AND NOT EXISTS (
+              SELECT 1
+              FROM inventory_locked il2
+              WHERE il2.week_id = sr.week_id
+                AND il2.store_id = sr.store_id
+                AND il2.live_id = sr.live_id
+          )
+    ) wookoo_used
+    GROUP BY sku
+"""
+
+
 @weekly_bp.route("/api/wookoo-inventory", methods=["GET"])
 @login_required
 def get_wookoo_inventory():
@@ -519,27 +573,23 @@ def get_wookoo_inventory():
     db = get_db()
     cursor = db.cursor(dictionary=True)
     try:
-        cursor.execute("""
-            SELECT w.sku, COALESCE(bs.book_title, '') AS title,
+        cursor.execute(f"""
+            SELECT w.sku,
+                   COALESCE(bs.book_title, '') AS title,
                    COALESCE(bs.book_author, '') AS author,
-                   SUM(w.planned_qty) AS planned,
+                   w.planned,
                    COALESCE(u.used, 0) AS used,
-                   SUM(w.planned_qty) - COALESCE(u.used, 0) AS remaining
-            FROM wookoo_inventory w
-            LEFT JOIN book_sku bs ON bs.isbn=w.sku
-            LEFT JOIN (
-                SELECT sr.store_id, sr.sku, SUM(sr.quantity) AS used
-                FROM sku_recording sr
-                INNER JOIN live_sessions ls
-                  ON ls.week_id=sr.week_id AND ls.store_id=sr.store_id
-                 AND ls.live_id=sr.live_id AND ls.inventory_source='WOOKOO'
-                WHERE sr.store_id=%s
-                GROUP BY sr.store_id, sr.sku
-            ) u ON u.store_id=w.store_id AND u.sku=w.sku
-            WHERE w.store_id=%s
-            GROUP BY w.sku, bs.book_title, bs.book_author, u.used
+                   w.planned - COALESCE(u.used, 0) AS remaining
+            FROM (
+                SELECT sku, SUM(planned_qty) AS planned
+                FROM wookoo_inventory
+                WHERE store_id = %s
+                GROUP BY sku
+            ) w
+            LEFT JOIN book_sku bs ON bs.isbn = w.sku
+            LEFT JOIN ({WOOKOO_USED_SQL}) u ON u.sku = w.sku
             ORDER BY used ASC, remaining DESC, w.sku ASC
-        """, (store_id, store_id))
+        """, (store_id, store_id, store_id))
         rows = cursor.fetchall()
         cursor.execute("""
             SELECT COALESCE(MAX(log_id),0) AS version

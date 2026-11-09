@@ -1119,7 +1119,8 @@ async function searchAllRecordings(request = ++recordingSearchRequest) {
     const week = currentWeekId, live = currentLiveId;
     const base = "/api/recordings?week_id=" + encodeURIComponent(week)
         + "&store_id=" + encodeURIComponent(STORE_ID)
-        + "&live_id=" + encodeURIComponent(live) + "&page=";
+        + "&live_id=" + encodeURIComponent(live)
+        + "&sort=" + encodeURIComponent(currentSortDirection) + "&page=";
     recordingSearchStatus.textContent = "Searching all pages...";
     try {
         const firstResponse = await fetch(base + "1", {cache: "no-store"});
@@ -1369,6 +1370,39 @@ const roundSeqSortArrow =
     document.getElementById(
         "roundSeqSortArrow"
     );
+
+// =========================================================
+// Round / Seq sort direction (per browser)
+//
+// Stored in localStorage so each user/computer keeps its own
+// order. It is sent with every list request and is never
+// overwritten by the server.
+// =========================================================
+
+const RECORDING_SORT_KEY =
+    "recordingSortDirection";
+
+function readSavedSortDirection() {
+    try {
+        return localStorage.getItem(RECORDING_SORT_KEY) === "ASC"
+            ? "ASC"
+            : "DESC";
+    } catch (error) {
+        return "DESC";
+    }
+}
+
+let currentSortDirection =
+    readSavedSortDirection();
+
+function updateSortArrow() {
+    roundSeqSortArrow.textContent =
+        currentSortDirection === "ASC"
+        ? "↑"
+        : "↓";
+}
+
+updateSortArrow();
 
 
 const deleteAllButton =
@@ -3333,6 +3367,11 @@ async function loadRecordings(
         + "&page="
         + encodeURIComponent(
             page
+        )
+
+        + "&sort="
+        + encodeURIComponent(
+            currentSortDirection
         );
 
 
@@ -3381,10 +3420,7 @@ async function loadRecordings(
             data.pagination.total_pages;
 
 
-        roundSeqSortArrow.textContent =
-            data.sort_direction === "ASC"
-            ? "↑"
-            : "↓";
+        updateSortArrow();
 
 
         saveRecordingSession();
@@ -4303,49 +4339,33 @@ function showBookInfo(
 
 async function toggleRoundSeqSort() {
 
-    roundSeqSortButton.disabled = true;
+    currentSortDirection =
+        currentSortDirection === "ASC"
+        ? "DESC"
+        : "ASC";
 
     try {
-
-        const response = await fetch(
-            "/api/recordings/sort-direction",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            }
+        localStorage.setItem(
+            RECORDING_SORT_KEY,
+            currentSortDirection
         );
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-            showMessage(
-                data.message || "Could not change sort order.",
-                "error"
-            );
-            return;
-        }
-
-        roundSeqSortArrow.textContent =
-            data.sort_direction === "ASC"
-            ? "↑"
-            : "↓";
-
-        currentPage = 1;
-        await loadRecordings(1);
-
+    } catch (error) {
+        // Storage unavailable: keep the choice for this page only.
     }
-    catch (error) {
-        console.error(error);
-        showMessage(
-            "Could not change sort order.",
-            "error"
-        );
+
+    updateSortArrow();
+
+    if (!currentWeekId || !currentLiveId) {
+        return;
     }
-    finally {
-        roundSeqSortButton.disabled = false;
+
+    if (recordingSearchInput.value.trim()) {
+        searchAllRecordings();
+        return;
     }
+
+    currentPage = 1;
+    await loadRecordings(1);
 }
 
 
