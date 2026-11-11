@@ -1,6 +1,7 @@
 """Read-only TikTok orders search Blueprint for the Baseline Flask application."""
 from datetime import datetime, timedelta, timezone
 import csv
+import re
 import io
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -18,6 +19,9 @@ TIME_ZONES = {
     'America/Los_Angeles': 'PT',
     'UTC': 'UTC',
 }
+
+LIVE_ID_RE = re.compile(r'^[0-9A-Za-z_-]{1,64}$')
+
 
 def _selected_timezone(params):
     name = params.get('tz', 'America/New_York')
@@ -221,6 +225,21 @@ def _filters(params, omit=None):
             parts.append('(' + ' OR '.join('(o.store_id=%s AND o.warehouse_id=%s)' for _ in pairs) + ')')
             for pair in pairs:
                 args.extend(pair)
+    lives = list(dict.fromkeys(v for v in params.getlist('live')
+                               if v and v != 'all' and (v == '__null__' or LIVE_ID_RE.match(v))))
+    if 'live' not in omit and lives:
+        named_lives = [v for v in lives if v != '__null__']
+        conditions = []
+        if named_lives:
+            conditions.append('EXISTS (SELECT 1 FROM tkorders_items live_filter '
+                              'WHERE live_filter.store_id=o.store_id AND live_filter.order_id=o.order_id '
+                              'AND live_filter.room_id IN (' + ','.join(['%s'] * len(named_lives)) + '))')
+            args.extend(named_lives)
+        if '__null__' in lives:
+            conditions.append("EXISTS (SELECT 1 FROM tkorders_items live_filter "
+                              "WHERE live_filter.store_id=o.store_id AND live_filter.order_id=o.order_id "
+                              "AND (live_filter.room_id IS NULL OR live_filter.room_id = ''))")
+        parts.append('(' + ' OR '.join(conditions) + ')')
     sku_rule = params.get('sku_rule', 'all')
     sku_match = ("EXISTS (SELECT 1 FROM tkorders_items sku_filter "
                  "WHERE sku_filter.store_id=o.store_id "
@@ -355,6 +374,31 @@ def page():
         counts = {(x['store_id'], x['warehouse_id']): x['n'] for x in warehouses}
         for w in all_warehouses:
             w['n'] = counts.get((w['store_id'], w['warehouse_id']), 0)
+        # Live Room ID facet: orders per live room under all other active filters.
+        # An order counts once per live it has items from; '' = items not tied to a live.
+        live_where, live_args = _filters(params, {'live'})
+        live_rows = _rows(cur, '''
+            SELECT COALESCE(i.room_id, '') AS value,
+                   MIN(o.store_id) AS store_id,
+                   MIN(o.create_time) AS first_time,
+                   COUNT(DISTINCT o.store_id, o.order_id) AS n
+            FROM tkorders o
+            JOIN tkorders_items i ON i.store_id=o.store_id AND i.order_id=o.order_id
+            ''' + live_where + '''
+            GROUP BY COALESCE(i.room_id, '')
+            ORDER BY first_time DESC''', live_args)
+        lives, no_live_count = [], 0
+        for r in live_rows:
+            if not r['value']:
+                no_live_count = r['n']
+                continue
+            r['first_local'] = (r['first_time'].replace(tzinfo=timezone.utc).astimezone(display_tz)
+                                .strftime('%m/%d %I:%M %p')) if r['first_time'] else ''
+            lives.append(r)
+        known_lives = {r['value'] for r in lives}
+        for selected in params.getlist('live'):
+            if selected not in ('', 'all', '__null__') and selected not in known_lives and LIVE_ID_RE.match(selected):
+                lives.append({'value': selected, 'store_id': None, 'first_local': '', 'n': 0})
     finally:
         cur.close()
         conn.close()
@@ -366,6 +410,8 @@ def page():
                            selected_statuses=params.getlist('status'),
                            selected_order_types=params.getlist('order_type'),
                            selected_warehouses=params.getlist('warehouse'),
+                           lives=lives, no_live_count=no_live_count,
+                           selected_lives=params.getlist('live'),
                            params=params, sort_dir=sort_dir, selected_tz=tz_name, tz_label=TIME_ZONES[tz_name], time_zones=TIME_ZONES,
                            export_groups=EXPORT_GROUPS,
                            export_fields=[{k: f[k] for k in ('key', 'label', 'group')} for f in EXPORT_FIELDS.values()],
