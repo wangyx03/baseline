@@ -412,6 +412,7 @@ def get_recording_download_lives():
                 s.short_name AS store_code,
                 s.store_name,
                 sr.live_id,
+                ls.inventory_source,
 
                 COUNT(*) AS total_items,
 
@@ -432,6 +433,11 @@ def get_recording_download_lives():
                 ON s.store_id =
                     sr.store_id
 
+            LEFT JOIN live_sessions ls
+                ON ls.week_id = sr.week_id
+               AND ls.store_id = sr.store_id
+               AND ls.live_id = sr.live_id
+
             WHERE sr.recorded_at >= %s
               AND sr.recorded_at < %s
         """
@@ -441,9 +447,11 @@ def get_recording_download_lives():
             utc_end,
         ]
 
+        store_sql = ""
+
         if store_id is not None:
 
-            sql += """
+            store_sql = """
               AND sr.store_id = %s
             """
 
@@ -451,13 +459,16 @@ def get_recording_download_lives():
                 store_id
             )
 
+        sql += store_sql
+
         sql += """
             GROUP BY
                 sr.week_id,
                 sr.store_id,
                 s.short_name,
                 s.store_name,
-                sr.live_id
+                sr.live_id,
+                ls.inventory_source
 
             ORDER BY
                 started_at DESC,
@@ -534,6 +545,12 @@ def get_recording_download_lives():
                         )
                         or 1
                     ),
+
+                "inventory_source":
+                    row.get(
+                        "inventory_source"
+                    )
+                    or "",
 
                 "started_at":
                     format_et(
@@ -634,6 +651,7 @@ def download_recording_csv():
                 bs.book_title,
                 sr.remark,
                 sr.quantity,
+                ls.inventory_source,
                 sr.recorded_at
 
             FROM sku_recording sr
@@ -644,6 +662,11 @@ def download_recording_csv():
 
             LEFT JOIN book_sku bs
                 ON bs.isbn = sr.sku
+
+            LEFT JOIN live_sessions ls
+                ON ls.week_id = sr.week_id
+               AND ls.store_id = sr.store_id
+               AND ls.live_id = sr.live_id
 
             WHERE {where_sql}
 
@@ -686,6 +709,7 @@ def download_recording_csv():
             "Title",
             "Remark",
             "Quantity",
+            "Inventory",
             "Recorded At ET",
         ])
 
@@ -739,6 +763,11 @@ def download_recording_csv():
                     "quantity"
                 )
                 or 0,
+
+                row.get(
+                    "inventory_source"
+                )
+                or "",
 
                 format_et(
                     row.get(
