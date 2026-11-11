@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 import csv
 import io
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 from flask import Blueprint, render_template, request, Response, stream_with_context
 from flask_login import login_required
@@ -24,6 +25,143 @@ def _selected_timezone(params):
 
 SEARCH_FIELDS = {'order_id': 'o.order_id', 'product_id': 'i.product_id',
                  'product_name': 'i.product_name', 'seller_sku': 'i.seller_sku'}
+
+# ---------------------------------------------------------------------------
+# CSV export field catalog (whitelist). Only keys listed here can reach SQL.
+# (key, label, group, column, kind)  kind: text | time | bool | store | warehouse
+#   group 'item' columns live on tkorders_items, everything else on tkorders.
+# ---------------------------------------------------------------------------
+EXPORT_GROUPS = [
+    ('order', 'Order Info'),
+    ('buyer', 'Buyer & Recipient'),
+    ('amount', 'Order Amounts'),
+    ('item', 'Line Items'),
+]
+_EXPORT_FIELD_DEFS = [
+    # Order info
+    ('store', 'Store', 'order', 'store_id', 'store'),
+    ('order_id', 'Order ID', 'order', 'order_id', 'text'),
+    ('status', 'Status', 'order', 'status', 'text'),
+    ('order_type', 'Order Type', 'order', 'order_type', 'text'),
+    ('create_time', 'Created Time', 'order', 'create_time', 'time'),
+    ('paid_time', 'Paid Time', 'order', 'paid_time', 'time'),
+    ('update_time', 'Updated Time', 'order', 'update_time', 'time'),
+    ('rts_sla_time', 'RTS SLA Time', 'order', 'rts_sla_time', 'time'),
+    ('shipping_due_time', 'Shipping Due Time', 'order', 'shipping_due_time', 'time'),
+    ('delivery_sla_time', 'Delivery SLA Time', 'order', 'delivery_sla_time', 'time'),
+    ('cancel_order_sla_time', 'Cancel SLA Time', 'order', 'cancel_order_sla_time', 'time'),
+    ('warehouse', 'Warehouse', 'order', 'warehouse_id', 'warehouse'),
+    ('warehouse_id', 'Warehouse ID', 'order', 'warehouse_id', 'text'),
+    ('fulfillment_type', 'Fulfillment Type', 'order', 'fulfillment_type', 'text'),
+    ('delivery_type', 'Delivery Type', 'order', 'delivery_type', 'text'),
+    ('shipping_type', 'Shipping Type', 'order', 'shipping_type', 'text'),
+    ('delivery_option_name', 'Delivery Option', 'order', 'delivery_option_name', 'text'),
+    ('payment_method_name', 'Payment Method', 'order', 'payment_method_name', 'text'),
+    ('currency', 'Currency', 'order', 'currency', 'text'),
+    ('auto_combine_group_id', 'Combine Group ID', 'order', 'auto_combine_group_id', 'text'),
+    ('is_cod', 'COD', 'order', 'is_cod', 'bool'),
+    ('is_on_hold_order', 'On Hold', 'order', 'is_on_hold_order', 'bool'),
+    ('is_exchange_order', 'Exchange Order', 'order', 'is_exchange_order', 'bool'),
+    ('is_replacement_order', 'Replacement Order', 'order', 'is_replacement_order', 'bool'),
+    ('is_sample_order', 'Sample Order', 'order', 'is_sample_order', 'bool'),
+    ('is_subscription_order', 'Subscription Order', 'order', 'is_subscription_order', 'bool'),
+    # Buyer & recipient
+    ('buyer_user_id', 'Buyer User ID', 'buyer', 'buyer_user_id', 'text'),
+    ('buyer_nickname', 'Buyer Nickname', 'buyer', 'buyer_nickname', 'text'),
+    ('buyer_email', 'Buyer Email', 'buyer', 'buyer_email', 'text'),
+    ('buyer_message', 'Buyer Message', 'buyer', 'buyer_message', 'text'),
+    ('recipient_name', 'Recipient Name', 'buyer', 'recipient_name', 'text'),
+    ('recipient_phone', 'Recipient Phone', 'buyer', 'recipient_phone', 'text'),
+    ('recipient_country', 'Recipient Country', 'buyer', 'recipient_country', 'text'),
+    ('recipient_state', 'Recipient State', 'buyer', 'recipient_state', 'text'),
+    ('recipient_county', 'Recipient County', 'buyer', 'recipient_county', 'text'),
+    ('recipient_city', 'Recipient City', 'buyer', 'recipient_city', 'text'),
+    ('recipient_postal_code', 'Recipient Post Code', 'buyer', 'recipient_postal_code', 'text'),
+    ('recipient_address_line1', 'Recipient Address Line 1', 'buyer', 'recipient_address_line1', 'text'),
+    ('recipient_address_line2', 'Recipient Address Line 2', 'buyer', 'recipient_address_line2', 'text'),
+    ('recipient_full_address', 'Recipient Full Address', 'buyer', 'recipient_full_address', 'text'),
+    ('delivery_instruction', 'Delivery Instruction', 'buyer', 'delivery_instruction', 'text'),
+    # Order amounts
+    ('original_total_product_price', 'Original Product Total', 'amount', 'original_total_product_price', 'text'),
+    ('original_shipping_fee', 'Original Shipping Fee', 'amount', 'original_shipping_fee', 'text'),
+    ('order_platform_discount', 'Platform Discount', 'amount', 'platform_discount', 'text'),
+    ('order_seller_discount', 'Seller Discount', 'amount', 'seller_discount', 'text'),
+    ('shipping_fee', 'Shipping Fee', 'amount', 'shipping_fee', 'text'),
+    ('shipping_fee_cofunded_discount', 'Shipping Co-funded Discount', 'amount', 'shipping_fee_cofunded_discount', 'text'),
+    ('shipping_fee_platform_discount', 'Shipping Platform Discount', 'amount', 'shipping_fee_platform_discount', 'text'),
+    ('shipping_fee_seller_discount', 'Shipping Seller Discount', 'amount', 'shipping_fee_seller_discount', 'text'),
+    ('product_tax', 'Product Tax', 'amount', 'product_tax', 'text'),
+    ('shipping_fee_tax', 'Shipping Fee Tax', 'amount', 'shipping_fee_tax', 'text'),
+    ('tax', 'Tax', 'amount', 'tax', 'text'),
+    ('sub_total', 'Subtotal', 'amount', 'sub_total', 'text'),
+    ('total_amount', 'Total Amount', 'amount', 'total_amount', 'text'),
+    # Line items
+    ('line_item_id', 'Line Item ID', 'item', 'line_item_id', 'text'),
+    ('product_id', 'Product ID', 'item', 'product_id', 'text'),
+    ('seller_sku', 'Seller SKU', 'item', 'seller_sku', 'text'),
+    ('product_name', 'Product Name', 'item', 'product_name', 'text'),
+    ('quantity', 'Qty', 'item', 'quantity', 'text'),
+    ('sku_id', 'SKU ID', 'item', 'sku_id', 'text'),
+    ('sku_name', 'SKU Name', 'item', 'sku_name', 'text'),
+    ('sku_type', 'SKU Type', 'item', 'sku_type', 'text'),
+    ('item_original_price', 'Item Original Price', 'item', 'original_price', 'text'),
+    ('item_sale_price', 'Item Sale Price', 'item', 'sale_price', 'text'),
+    ('item_platform_discount', 'Item Platform Discount', 'item', 'platform_discount', 'text'),
+    ('item_seller_discount', 'Item Seller Discount', 'item', 'seller_discount', 'text'),
+    ('sales_tax_amount', 'Item Sales Tax', 'item', 'sales_tax_amount', 'text'),
+    ('sales_tax_rate', 'Item Sales Tax Rate', 'item', 'sales_tax_rate', 'text'),
+    ('display_status', 'Item Status', 'item', 'display_status', 'text'),
+    ('is_gift', 'Gift', 'item', 'is_gift', 'bool'),
+    ('is_dangerous_good', 'Dangerous Good', 'item', 'is_dangerous_good', 'bool'),
+    ('is_pod_customized', 'POD Customized', 'item', 'is_pod_customized', 'bool'),
+    ('room_id', 'Live Room ID', 'item', 'room_id', 'text'),
+    ('tracking_number', 'Tracking', 'item', 'tracking_number', 'text'),
+]
+EXPORT_FIELDS = {f[0]: {'key': f[0], 'label': f[1], 'group': f[2], 'col': f[3], 'kind': f[4]}
+                 for f in _EXPORT_FIELD_DEFS}
+# Same columns/order as the previous fixed export.
+DEFAULT_EXPORT_FIELDS = [
+    'store', 'order_id', 'status', 'order_type', 'create_time',
+    'product_id', 'seller_sku', 'product_name', 'quantity',
+    'buyer_user_id', 'buyer_nickname', 'recipient_name', 'recipient_phone',
+    'recipient_country', 'recipient_state', 'recipient_county', 'recipient_city',
+    'recipient_postal_code', 'recipient_address_line1', 'recipient_address_line2',
+    'delivery_instruction', 'warehouse', 'tracking_number',
+]
+LOCKED_EXPORT_FIELDS = ['order_id']
+STORE_NAMES = {1: 'TruthUnfolds', 2: 'VesperBooks'}
+
+
+def _export_selection(params):
+    """Validated, de-duplicated, ordered field keys plus row mode ('item' | 'order')."""
+    keys = [k for k in dict.fromkeys(params.getlist('fields')) if k in EXPORT_FIELDS]
+    if not keys:
+        keys = list(DEFAULT_EXPORT_FIELDS)
+    for locked in reversed(LOCKED_EXPORT_FIELDS):
+        if locked not in keys:
+            keys.insert(0, locked)
+    rows = 'order' if params.get('rows') == 'order' else 'item'
+    return keys, rows
+
+
+def _export_select_expr(field, rows):
+    """SQL expression for one whitelisted export field."""
+    col, kind = field['col'], field['kind']
+    if field['group'] != 'item':
+        if kind == 'warehouse':
+            return 'COALESCE(w.warehouse, o.warehouse_id)'
+        return 'o.' + col
+    if rows == 'item':
+        return 'i.' + col
+    # One row per order: fold all line items of the order into one cell.
+    if col == 'quantity':
+        agg = 'SUM(COALESCE(x.quantity, 0))'
+    else:
+        inner = ("IF(x.{c} IS NULL, '', IF(x.{c}, 'Yes', 'No'))" if kind == 'bool'
+                 else "COALESCE(x.{c}, '')").format(c=col)
+        agg = f"GROUP_CONCAT({inner} ORDER BY x.id SEPARATOR ' | ')"
+    return (f'(SELECT {agg} FROM tkorders_items x '
+            'WHERE x.store_id=o.store_id AND x.order_id=o.order_id)')
 
 
 def _effective_params(params):
@@ -141,6 +279,13 @@ def page():
             ), 0) AS n
             FROM tkorders o
         """ + where, args)[0]['n']
+        # Distinct non-empty tracking numbers across all matching orders (not just this page).
+        tracking_where = where + (' AND ' if where else ' WHERE ') + "TRIM(i.tracking_number) <> ''"
+        unique_tracking = _rows(cur, """
+            SELECT COUNT(DISTINCT TRIM(i.tracking_number)) AS n
+            FROM tkorders o
+            JOIN tkorders_items i ON i.store_id = o.store_id AND i.order_id = o.order_id
+        """ + tracking_where, args)[0]['n']
         orders = _rows(cur, '''
             SELECT o.store_id, o.order_id, o.status, o.order_type, o.create_time,
                    o.update_time, o.warehouse_id,
@@ -213,7 +358,7 @@ def page():
     finally:
         cur.close()
         conn.close()
-    return render_template('orders.html', orders=orders, total=total, total_products=total_products, page=page_number,
+    return render_template('orders.html', orders=orders, total=total, total_products=total_products, unique_tracking=unique_tracking, page=page_number,
                            pages=max(1, (total + per_page - 1) // per_page),
                            statuses=statuses, order_types=order_types, warehouses=all_warehouses,
                            store_counts=store_counts, unspecified_type_count=unspecified_type_count,
@@ -221,49 +366,72 @@ def page():
                            selected_statuses=params.getlist('status'),
                            selected_order_types=params.getlist('order_type'),
                            selected_warehouses=params.getlist('warehouse'),
-                           params=params, sort_dir=sort_dir, selected_tz=tz_name, tz_label=TIME_ZONES[tz_name], time_zones=TIME_ZONES)
+                           params=params, sort_dir=sort_dir, selected_tz=tz_name, tz_label=TIME_ZONES[tz_name], time_zones=TIME_ZONES,
+                           export_groups=EXPORT_GROUPS,
+                           export_fields=[{k: f[k] for k in ('key', 'label', 'group')} for f in EXPORT_FIELDS.values()],
+                           default_export_fields=DEFAULT_EXPORT_FIELDS,
+                           locked_export_fields=LOCKED_EXPORT_FIELDS)
 
 
 @orders_bp.route('/export.csv', methods=['GET'])
 @module_required(MODULE_TIKTOK_ORDERS)
 def export_csv():
-    """Export all matching orders, one CSV row per line item (not one per order)."""
+    """Export all matching orders with user-selected fields.
+
+    ?fields=<key>&fields=<key>...  ordered column list (whitelisted via EXPORT_FIELDS)
+    ?rows=item   one CSV row per line item (default)
+    ?rows=order  one CSV row per order; line-item fields are joined with " | ", Qty is summed
+    """
     params = _effective_params(request.args)
     tz_name = _selected_timezone(params)
     display_tz = ZoneInfo(tz_name)
     where, args = _filters(params)
     sort_dir = "ASC" if request.args.get('sort') == 'asc' else "DESC"
-    headers = [
-        'Store', 'Order ID', 'Status', 'Tag', 'Created Time',
-        'Product ID', 'Seller SKU', 'Product Name', 'Qty',
-        'Buyer User ID', 'Buyer Nickname', 'Recipient Name', 'Recipient Phone',
-        'Recipient Country', 'Recipient State', 'Recipient County',
-        'Recipient City', 'Recipient Post Code', 'Recipient Address Line 1',
-        'Recipient Address Line 2', 'Delivery Instruction', 'Warehouse', 'Tracking',
-    ]
-    sql = """
-        SELECT o.store_id, o.order_id, o.status, o.order_type, o.create_time,
-               i.product_id, i.seller_sku, i.product_name, i.quantity,
-               o.buyer_user_id, o.buyer_nickname, o.recipient_name, o.recipient_phone,
-               o.recipient_country, o.recipient_state, o.recipient_county,
-               o.recipient_city, o.recipient_postal_code,
-               o.recipient_address_line1, o.recipient_address_line2,
-               o.delivery_instruction, COALESCE(w.warehouse, o.warehouse_id) AS warehouse,
-               i.tracking_number
+    keys, rows = _export_selection(request.args)
+    fields = [EXPORT_FIELDS[k] for k in keys]
+    headers = [f['label'] for f in fields]
+    select_list = ',\n               '.join(
+        f"{_export_select_expr(f, rows)} AS `f_{f['key']}`" for f in fields)
+    if rows == 'item':
+        from_sql = """
         FROM tkorders o
         LEFT JOIN tkorders_items i
           ON i.store_id=o.store_id AND i.order_id=o.order_id
         LEFT JOIN warehouses w
           ON w.store_id=o.store_id AND w.warehouse_id=o.warehouse_id
-    """ + where + f" ORDER BY o.create_time {sort_dir}, o.order_id {sort_dir}, i.id ASC"
+        """
+        order_sql = f" ORDER BY o.create_time {sort_dir}, o.order_id {sort_dir}, i.id ASC"
+    else:
+        from_sql = """
+        FROM tkorders o
+        LEFT JOIN warehouses w
+          ON w.store_id=o.store_id AND w.warehouse_id=o.warehouse_id
+        """
+        order_sql = f" ORDER BY o.create_time {sort_dir}, o.order_id {sort_dir}"
+    sql = 'SELECT ' + select_list + from_sql + where + order_sql
 
     def safe_cell(value):
         if value is None:
             return ''
+        # Numbers (incl. negative discounts) are never formulas; keep them numeric.
+        if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+            return str(value)
         value = str(value)
         # Prevent spreadsheet formula execution for untrusted user/shop text.
         if value.lstrip().startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '\n')):
             return "'" + value
+        return value
+
+    def format_value(field, value):
+        kind = field['kind']
+        if value is None:
+            return None
+        if kind == 'time' and isinstance(value, datetime):
+            return value.replace(tzinfo=timezone.utc).astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')
+        if kind == 'store':
+            return STORE_NAMES.get(value, value)
+        if kind == 'bool' and not isinstance(value, str):
+            return 'Yes' if value else 'No'
         return value
 
     def generate():
@@ -273,6 +441,9 @@ def export_csv():
         writer = csv.writer(output)
         try:
             cur = conn.cursor(dictionary=True)
+            if rows == 'order':
+                # Long multi-item orders must not be truncated at the 1024-char default.
+                cur.execute('SET SESSION group_concat_max_len = 1000000')
             cur.execute(sql, args)
             yield '\ufeff'
             writer.writerow(headers)
@@ -284,21 +455,7 @@ def export_csv():
                 if not batch:
                     break
                 for r in batch:
-                    created = r['create_time']
-                    local_time = (created.replace(tzinfo=timezone.utc)
-                                  .astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')) if created else ''
-                    values = [
-                        'TruthUnfolds' if r['store_id'] == 1 else 'VesperBooks' if r['store_id'] == 2 else r['store_id'],
-                        r['order_id'], r['status'], r['order_type'], local_time,
-                        r['product_id'], r['seller_sku'], r['product_name'],
-                        r['quantity'] if r['quantity'] is not None else '',
-                        r['buyer_user_id'], r['buyer_nickname'], r['recipient_name'],
-                        r['recipient_phone'], r['recipient_country'], r['recipient_state'],
-                        r['recipient_county'], r['recipient_city'], r['recipient_postal_code'],
-                        r['recipient_address_line1'], r['recipient_address_line2'],
-                        r['delivery_instruction'], r['warehouse'], r['tracking_number'],
-                    ]
-                    writer.writerow([safe_cell(v) for v in values])
+                    writer.writerow([safe_cell(format_value(f, r['f_' + f['key']])) for f in fields])
                 yield output.getvalue()
                 output.seek(0)
                 output.truncate(0)

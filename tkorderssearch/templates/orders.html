@@ -164,8 +164,42 @@
 .results .table-scroll::-webkit-scrollbar{display:none}
 .order-bottom-scroll{position:fixed;bottom:10px;left:0;width:100px;z-index:1050;overflow-x:scroll;overflow-y:hidden;height:20px;background:#f1f3f6;border:1px solid #d9dee7;border-radius:6px;scrollbar-width:auto;box-sizing:border-box;display:none}
 .order-bottom-scroll-inner{height:1px}
-.actions .download-csv-btn{margin-left:auto;background:#c9efd4;color:#185b32;border:1px solid #9edbb2;font-weight:600;white-space:nowrap}.actions .download-csv-btn:hover{background:#afe5c0}
+.actions .export-fields-btn{margin-left:auto;background:#fff;color:#344054;border:1px solid #d5dbe3;white-space:nowrap}.actions .export-fields-btn:hover{background:#f2f6fa}.export-count{color:#667085;font-size:12px}.actions .download-csv-btn{background:#c9efd4;color:#185b32;border:1px solid #9edbb2;font-weight:600;white-space:nowrap}.actions .download-csv-btn:hover{background:#afe5c0}
 
+/* Export field picker */
+.xf-backdrop{position:fixed;inset:0;background:#0f172a66;z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px}
+.xf-backdrop[hidden]{display:none}
+.xf-dialog{background:#fff;border-radius:12px;width:min(1100px,100%);max-height:calc(100vh - 40px);display:flex;flex-direction:column;box-shadow:0 20px 50px #0004}
+.xf-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid #e5e7eb}
+.xf-head h3{margin:0;font-size:18px}
+.xf-link{border:0;background:none;color:#1f5fbf;cursor:pointer;font:inherit;font-size:14px;padding:2px 4px}
+.xf-link:hover{text-decoration:underline}
+.xf-close{margin-left:auto;border:0;background:none;font-size:24px;line-height:1;cursor:pointer;color:#667085}
+.xf-body{display:flex;min-height:0;flex:1}
+.xf-left{flex:1;overflow:auto;padding:16px 20px}
+.xf-search{width:100%;padding:9px 11px;border:1px solid #d5dbe3;border-radius:7px;font:inherit;margin-bottom:6px}
+.xf-group{margin-top:14px}
+.xf-group-head{display:flex;align-items:center;gap:10px;font-size:14px;color:#344054;margin-bottom:6px}
+.xf-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 14px}
+.xf-grid label{display:flex;align-items:center;gap:7px;padding:6px 2px;font-size:13px;cursor:pointer;color:#202735}
+.xf-grid label.locked{color:#98a2b3;cursor:default}
+.xf-grid label[hidden],.xf-group[hidden]{display:none}
+.xf-right{width:290px;flex-shrink:0;background:#f8fafc;border-left:1px solid #e5e7eb;overflow:auto;padding:16px}
+.xf-right-head{font-weight:600;font-size:14px;margin-bottom:10px}
+.xf-selected{list-style:none;margin:0;padding:0}
+.xf-selected li{display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:3px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;cursor:grab;user-select:none}
+.xf-selected li.dragging{opacity:.4}
+.xf-selected li.drop-before{box-shadow:0 -2px 0 #1769aa}
+.xf-selected li.drop-after{box-shadow:0 2px 0 #1769aa}
+.xf-handle{color:#98a2b3;letter-spacing:-2px}
+.xf-tag{margin-left:auto;font-size:11px;color:#98a2b3;white-space:nowrap}
+.xf-remove{border:0;background:none;color:#98a2b3;cursor:pointer;font-size:16px;line-height:1;padding:0 2px}
+.xf-remove:hover{color:#b42318}
+.xf-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid #e5e7eb}
+.xf-rows{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:13px}
+.xf-rows label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.xf-actions{display:flex;gap:8px}
+.xf-actions .download-csv-btn{background:#c9efd4;color:#185b32;border:1px solid #9edbb2;font-weight:600}
 /* Align option counts to the right in all multi-select filters. */
 .multi-panel label:not(:has(.select-all)){display:flex;align-items:center;gap:7px}
 .multi-panel label .facet-count{margin-left:auto;flex-shrink:0;color:#667085;font-size:12px;font-variant-numeric:tabular-nums;padding-left:10px}
@@ -276,8 +310,31 @@
 <input type="hidden" name="from" id="ordersFrom" value="{{ params.get('from','') }}">
 <input type="hidden" name="to" id="ordersTo" value="{{ params.get('to','') }}">
 <div class="field orders-search-row"><label>Search</label><input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Order ID, Product ID, Product Name, Seller SKU, Tracking"></div>
-</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn download-csv-btn" type="submit" formaction="{{ url_for('orders.export_csv') }}" formmethod="get">Download CSV</button></div>
+</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn export-fields-btn" type="button" id="openExportFields" title="Choose which columns the CSV contains">⚙ Export Fields <span id="exportFieldCount" class="export-count"></span></button><button class="btn download-csv-btn" type="button" onclick="downloadCsv()">Download CSV</button></div>
 </form>
+<!-- Export field picker. Kept outside the filter form so its checkboxes never reach the search URL. -->
+<div class="xf-backdrop" id="exportFieldsModal" hidden>
+ <div class="xf-dialog" role="dialog" aria-modal="true" aria-labelledby="xfTitle">
+  <div class="xf-head"><h3 id="xfTitle">Export Fields</h3><button type="button" class="xf-link" id="xfSelectAll">Select all</button><button type="button" class="xf-link" id="xfClearAll">Clear</button><button type="button" class="xf-close" id="xfClose" aria-label="Close">×</button></div>
+  <div class="xf-body">
+   <div class="xf-left">
+    <input type="search" class="xf-search" id="xfSearch" placeholder="Search fields">
+    <div id="xfGroups"></div>
+   </div>
+   <div class="xf-right">
+    <div class="xf-right-head">Selected (<span id="xfSelectedCount">0</span>) <span class="small">drag to reorder</span></div>
+    <ul class="xf-selected" id="xfSelected"></ul>
+   </div>
+  </div>
+  <div class="xf-foot">
+   <div class="xf-rows"><span class="small">Rows:</span>
+    <label><input type="radio" name="xfRows" value="item" checked> One row per line item</label>
+    <label><input type="radio" name="xfRows" value="order"> One row per order <span class="small">(items joined with " | ", Qty summed)</span></label>
+   </div>
+   <div class="xf-actions"><button type="button" class="btn secondary" id="xfReset">Restore default</button><button type="button" class="btn secondary" id="xfCancel">Cancel</button><button type="button" class="btn" id="xfSave">Save</button><button type="button" class="btn download-csv-btn" id="xfDownload">Save &amp; Download</button></div>
+  </div>
+ </div>
+</div>
 <style>
 .order-main-row td { vertical-align: middle; }
 .order-summary { display:block; max-width:270px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -287,8 +344,15 @@
 .order-details-table { width:100%; border-collapse:collapse; font-size:13px; }
 .order-details-table th,.order-details-table td { padding:8px 10px; border-bottom:1px solid #e5e7eb; }
 .order-details-table th { background:#eef2f7; }
+.pager { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.pg-btn { min-width:36px; padding:7px 10px; border:1px solid #d5dbe3; background:#fff; color:#344054; border-radius:7px; cursor:pointer; font:inherit; font-size:13px; }
+.pg-btn:hover:not(:disabled) { background:#eef5fc; border-color:#9cc3e6; }
+.pg-btn.active { background:#1769aa; border-color:#1769aa; color:#fff; cursor:default; font-weight:600; }
+.pg-gap { color:#98a2b3; padding:0 2px; }
+.pg-jump { display:flex; align-items:center; gap:6px; margin-left:10px; font-size:13px; color:#596273; }
+.pg-jump input { width:72px; padding:7px 8px; border:1px solid #d5dbe3; border-radius:7px; font:inherit; font-size:13px; }
 </style>
-<section class="results"><h2>{{ total }} matching orders · {{ total_products }} total products (Qty)</h2><div class="table-scroll"><table><thead><tr><th>Store</th><th>Order ID</th><th>Status</th><th>Order Type</th><th><button type="button" class="created-sort" onclick="toggleCreatedSort()" title="Toggle created time sorting">Created ({{ tz_label }}) <span aria-hidden="true">{{ "↑" if sort_dir == "asc" else "↓" }}</span></button></th><th>Warehouse</th><th>Seller SKUs</th><th>Products</th><th>Qty</th><th>Tracking</th></tr></thead><tbody>{% for o in orders %}
+<section class="results"><h2>{{ total }} matching orders · {{ total_products }} total products (Qty) · {{ unique_tracking }} total packages</h2><div class="table-scroll"><table><thead><tr><th>Store</th><th>Order ID</th><th>Status</th><th>Order Type</th><th><button type="button" class="created-sort" onclick="toggleCreatedSort()" title="Toggle created time sorting">Created ({{ tz_label }}) <span aria-hidden="true">{{ "↑" if sort_dir == "asc" else "↓" }}</span></button></th><th>Warehouse</th><th>Seller SKUs</th><th>Products</th><th>Qty</th><th>Tracking</th></tr></thead><tbody>{% for o in orders %}
 <tr class="order-main-row">
 <td>{{ 'TU' if o.store_id==1 else 'VB' }}</td>
 <td class="mono nowrap">{{ o.order_id }}</td>
@@ -314,7 +378,16 @@
 {% endif %}
 {% else %}<tr><td colspan="10">No matching orders.</td></tr>{% endfor %}</tbody></table></div>
 <div class="order-bottom-scroll" id="orderBottomScroll" aria-label="Horizontal order table scrollbar" tabindex="0"><div class="order-bottom-scroll-inner" id="orderBottomScrollInner"></div></div>
-<div class="paging"><span class="small">Page {{ page }} of {{ pages }}</span><div>{% if page>1 %}<button class="btn secondary" type="button" onclick="goPage({{ page-1 }})">Previous</button>{% endif %} {% if page<pages %}<button class="btn secondary" type="button" onclick="goPage({{ page+1 }})">Next</button>{% endif %}</div></div></section></div>
+<div class="paging"><span class="small">Page {{ page }} of {{ pages }}</span>
+<div class="pager">
+{% if page>1 %}<button class="pg-btn" type="button" onclick="goPage(1)" title="First page">«</button><button class="pg-btn" type="button" onclick="goPage({{ page-1 }})">‹ Prev</button>{% endif %}
+{% set win_start = [1, page-2]|max %}{% set win_end = [pages, page+2]|min %}
+{% if win_start > 1 %}<button class="pg-btn" type="button" onclick="goPage(1)">1</button>{% if win_start > 2 %}<span class="pg-gap">…</span>{% endif %}{% endif %}
+{% for n in range(win_start, win_end + 1) %}<button class="pg-btn{% if n == page %} active{% endif %}" type="button" {% if n == page %}aria-current="page" disabled{% else %}onclick="goPage({{ n }})"{% endif %}>{{ n }}</button>{% endfor %}
+{% if win_end < pages %}{% if win_end < pages - 1 %}<span class="pg-gap">…</span>{% endif %}<button class="pg-btn" type="button" onclick="goPage({{ pages }})">{{ pages }}</button>{% endif %}
+{% if page<pages %}<button class="pg-btn" type="button" onclick="goPage({{ page+1 }})">Next ›</button><button class="pg-btn" type="button" onclick="goPage({{ pages }})" title="Last page">»</button>{% endif %}
+{% if pages > 1 %}<span class="pg-jump">Go to <input type="number" id="pageJump" min="1" max="{{ pages }}" value="{{ page }}" onkeydown="if(event.key==='Enter'){event.preventDefault();jumpPage();}"> <button class="pg-btn" type="button" onclick="jumpPage()">Go</button></span>{% endif %}
+</div></div></section></div>
 {% endblock %}
 {% block scripts %}<script>
 const dateRangeButton =
@@ -859,11 +932,12 @@ function syncMulti(id) {
  const boxes=[...panel.querySelectorAll('input[type=checkbox]:not(.select-all)')];
  const count=boxes.filter(x=>x.checked).length;
  const all=panel.querySelector('.select-all');
- all.checked=count===0 || count===boxes.length;
- all.indeterminate=false;
+ // All checked only when every option is checked; partial selection shows "-" (indeterminate).
+ all.checked=boxes.length>0 && count===boxes.length;
+ all.indeterminate=count>0 && count<boxes.length;
  const label={stores:'Store',statuses:'Order Status',orderTypes:'Order Type',warehouses:'Warehouse'}[id];
  document.querySelector('[data-toggle="'+id+'"]').textContent =
-  label+': '+(all.checked?'All':count+' selected')+' ▾';
+  label+': '+((count===0 || count===boxes.length)?'All':count+' selected')+' ▾';
 }
 Object.keys(multiConfig).forEach(id=>{
  const panel=document.getElementById(id);
@@ -911,6 +985,13 @@ function toggleOrderItems(button) {
  button.textContent=opening ? 'Hide items ▴' : `Show ${count} items ▾`;
 }
 function goPage(n){let u=new URL(location.href);u.searchParams.set('page',n);location.href=u.toString()}
+function jumpPage(){
+ const input=document.getElementById('pageJump');
+ const max=Number(input.max)||1;
+ let n=parseInt(input.value,10);
+ if(!Number.isFinite(n))return;
+ goPage(Math.min(Math.max(n,1),max));
+}
 // Floating scrollbar: show only while the table extends below the viewport.
 (function () {
  const tableScroll=document.querySelector('.results .table-scroll');
@@ -942,5 +1023,180 @@ function goPage(n){let u=new URL(location.href);u.searchParams.set('page',n);loc
  if(window.ResizeObserver){new ResizeObserver(refresh).observe(tableScroll);}
  refresh();
 })();
+// ---- Export field picker -------------------------------------------------
+const XF_GROUPS = {{ export_groups | tojson }};
+const XF_FIELDS = {{ export_fields | tojson }};
+const XF_DEFAULT = {{ default_export_fields | tojson }};
+const XF_LOCKED = {{ locked_export_fields | tojson }};
+const XF_STORAGE_KEY = 'tkorders.exportFields.v1';
+const XF_BY_KEY = Object.fromEntries(XF_FIELDS.map(f => [f.key, f]));
+const XF_GROUP_LABEL = Object.fromEntries(XF_GROUPS);
+
+function xfNormalize(keys) {
+ const out = [...new Set((keys || []).filter(k => XF_BY_KEY[k]))];
+ XF_LOCKED.slice().reverse().forEach(k => { if (!out.includes(k)) out.unshift(k); });
+ return out;
+}
+function xfLoad() {
+ try {
+  const saved = JSON.parse(localStorage.getItem(XF_STORAGE_KEY) || 'null');
+  if (saved && Array.isArray(saved.fields) && saved.fields.length) {
+   return {fields: xfNormalize(saved.fields), rows: saved.rows === 'order' ? 'order' : 'item'};
+  }
+ } catch (e) {}
+ return {fields: xfNormalize(XF_DEFAULT), rows: 'item'};
+}
+function xfStore(state) {
+ try { localStorage.setItem(XF_STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+let xfSaved = xfLoad();          // what Download CSV uses
+let xfDraft = null;              // working copy while the dialog is open
+
+function xfUpdateButton() {
+ document.getElementById('exportFieldCount').textContent =
+  '(' + xfSaved.fields.length + (xfSaved.rows === 'order' ? ' · per order' : '') + ')';
+}
+
+function xfRenderGroups() {
+ const box = document.getElementById('xfGroups');
+ box.innerHTML = '';
+ XF_GROUPS.forEach(([gid, glabel]) => {
+  const group = document.createElement('div');
+  group.className = 'xf-group'; group.dataset.group = gid;
+  const head = document.createElement('div'); head.className = 'xf-group-head';
+  const title = document.createElement('span'); title.textContent = glabel;
+  const all = document.createElement('button'); all.type = 'button'; all.className = 'xf-link';
+  all.dataset.groupToggle = gid;
+  all.addEventListener('click', () => {
+   const keys = XF_FIELDS.filter(f => f.group === gid).map(f => f.key);
+   const allOn = keys.every(k => xfDraft.fields.includes(k));
+   if (allOn) xfDraft.fields = xfDraft.fields.filter(k => !keys.includes(k) || XF_LOCKED.includes(k));
+   else keys.forEach(k => { if (!xfDraft.fields.includes(k)) xfDraft.fields.push(k); });
+   xfRefresh();
+  });
+  head.append(title, all);
+  const grid = document.createElement('div'); grid.className = 'xf-grid';
+  XF_FIELDS.filter(f => f.group === gid).forEach(f => {
+   const label = document.createElement('label');
+   label.dataset.search = (f.label + ' ' + f.key).toLowerCase();
+   const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = f.key;
+   if (XF_LOCKED.includes(f.key)) { cb.disabled = true; label.classList.add('locked'); label.title = 'Always included'; }
+   cb.addEventListener('change', () => {
+    if (cb.checked) { if (!xfDraft.fields.includes(f.key)) xfDraft.fields.push(f.key); }
+    else xfDraft.fields = xfDraft.fields.filter(k => k !== f.key);
+    xfRefresh();
+   });
+   label.append(cb, document.createTextNode(' ' + f.label));
+   grid.appendChild(label);
+  });
+  group.append(head, grid);
+  box.appendChild(group);
+ });
+}
+
+let xfDragKey = null;
+function xfRenderSelected() {
+ const list = document.getElementById('xfSelected');
+ list.innerHTML = '';
+ xfDraft.fields.forEach(key => {
+  const f = XF_BY_KEY[key];
+  const li = document.createElement('li'); li.draggable = true; li.dataset.key = key;
+  const handle = document.createElement('span'); handle.className = 'xf-handle'; handle.textContent = '⋮⋮';
+  const name = document.createElement('span'); name.textContent = f.label;
+  const tag = document.createElement('span'); tag.className = 'xf-tag'; tag.textContent = XF_GROUP_LABEL[f.group];
+  li.append(handle, name, tag);
+  if (!XF_LOCKED.includes(key)) {
+   const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'xf-remove';
+   rm.textContent = '×'; rm.title = 'Remove';
+   rm.addEventListener('click', () => { xfDraft.fields = xfDraft.fields.filter(k => k !== key); xfRefresh(); });
+   li.appendChild(rm);
+  }
+  li.addEventListener('dragstart', e => { xfDragKey = key; li.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', key); } catch (_) {} });
+  li.addEventListener('dragend', () => { xfDragKey = null; list.querySelectorAll('li').forEach(x => x.classList.remove('dragging','drop-before','drop-after')); });
+  li.addEventListener('dragover', e => {
+   if (!xfDragKey || xfDragKey === key) return;
+   e.preventDefault();
+   const r = li.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2;
+   li.classList.toggle('drop-after', after); li.classList.toggle('drop-before', !after);
+  });
+  li.addEventListener('dragleave', () => li.classList.remove('drop-before','drop-after'));
+  li.addEventListener('drop', e => {
+   e.preventDefault();
+   if (!xfDragKey || xfDragKey === key) return;
+   const r = li.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2;
+   const arr = xfDraft.fields.filter(k => k !== xfDragKey);
+   arr.splice(arr.indexOf(key) + (after ? 1 : 0), 0, xfDragKey);
+   xfDraft.fields = arr; xfRefresh();
+  });
+  list.appendChild(li);
+ });
+ document.getElementById('xfSelectedCount').textContent = xfDraft.fields.length;
+}
+
+function xfRefresh() {
+ document.querySelectorAll('#xfGroups input[type=checkbox]').forEach(cb => { cb.checked = xfDraft.fields.includes(cb.value); });
+ document.querySelectorAll('[data-group-toggle]').forEach(btn => {
+  const keys = XF_FIELDS.filter(f => f.group === btn.dataset.groupToggle).map(f => f.key);
+  btn.textContent = keys.every(k => xfDraft.fields.includes(k)) ? 'Clear group' : 'Select all';
+ });
+ document.querySelectorAll('input[name=xfRows]').forEach(r => { r.checked = r.value === xfDraft.rows; });
+ xfRenderSelected();
+}
+function xfFilter() {
+ const q = document.getElementById('xfSearch').value.trim().toLowerCase();
+ document.querySelectorAll('#xfGroups .xf-group').forEach(g => {
+  let any = false;
+  g.querySelectorAll('label').forEach(l => { const show = !q || l.dataset.search.includes(q); l.hidden = !show; any = any || show; });
+  g.hidden = !any;
+ });
+}
+function xfOpen() {
+ xfDraft = {fields: xfSaved.fields.slice(), rows: xfSaved.rows};
+ document.getElementById('xfSearch').value = ''; xfFilter();
+ xfRefresh();
+ document.getElementById('exportFieldsModal').hidden = false;
+ document.getElementById('xfSearch').focus();
+}
+function xfClose() { document.getElementById('exportFieldsModal').hidden = true; xfDraft = null; }
+function xfCommit() {
+ xfSaved = {fields: xfNormalize(xfDraft.fields), rows: xfDraft.rows};
+ xfStore(xfSaved); xfUpdateButton(); xfClose();
+}
+
+// Build the export URL from the current (possibly unsubmitted) filters + saved field choice.
+function downloadCsv() {
+ const form = document.getElementById('filters');
+ const data = new FormData(form);
+ const params = new URLSearchParams();
+ const skip = new Set();
+ Object.entries(multiConfig).forEach(([id, name]) => {
+  const boxes = [...document.getElementById(id).querySelectorAll('input[type=checkbox]:not(.select-all)')];
+  const count = boxes.filter(x => x.checked).length;
+  if (count === 0 || count === boxes.length) skip.add(name);   // All / none = no restriction
+ });
+ for (const [k, v] of data.entries()) { if (!skip.has(k)) params.append(k, v); }
+ const sort = new URLSearchParams(location.search).get('sort');
+ if (sort) params.set('sort', sort);
+ xfSaved.fields.forEach(k => params.append('fields', k));
+ params.set('rows', xfSaved.rows);
+ window.location.href = {{ url_for('orders.export_csv') | tojson }} + '?' + params.toString();
+}
+
+xfRenderGroups();
+xfUpdateButton();
+document.getElementById('openExportFields').addEventListener('click', xfOpen);
+document.getElementById('xfClose').addEventListener('click', xfClose);
+document.getElementById('xfCancel').addEventListener('click', xfClose);
+document.getElementById('xfSave').addEventListener('click', xfCommit);
+document.getElementById('xfDownload').addEventListener('click', () => { xfCommit(); downloadCsv(); });
+document.getElementById('xfSearch').addEventListener('input', xfFilter);
+document.getElementById('xfSelectAll').addEventListener('click', () => {
+ XF_FIELDS.forEach(f => { if (!xfDraft.fields.includes(f.key)) xfDraft.fields.push(f.key); }); xfRefresh();
+});
+document.getElementById('xfClearAll').addEventListener('click', () => { xfDraft.fields = xfNormalize([]); xfRefresh(); });
+document.getElementById('xfReset').addEventListener('click', () => { xfDraft = {fields: xfNormalize(XF_DEFAULT), rows: 'item'}; xfRefresh(); });
+document.querySelectorAll('input[name=xfRows]').forEach(r => r.addEventListener('change', () => { if (r.checked) xfDraft.rows = r.value; }));
+document.getElementById('exportFieldsModal').addEventListener('click', e => { if (e.target.id === 'exportFieldsModal') xfClose(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.getElementById('exportFieldsModal').hidden) xfClose(); });
 // Preserve the dropdown while checking multiple options; submit only on Search Orders.
 </script>{% endblock %}
