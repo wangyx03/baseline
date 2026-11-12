@@ -1111,6 +1111,9 @@ def claim_webhook(conn):
     """Claim one event with MySQL 8 SKIP LOCKED for concurrent workers."""
     cur = conn.cursor(dictionary=True)
     try:
+        if conn.in_transaction:
+            conn.rollback()
+
         conn.start_transaction()
         cur.execute('''SELECT id, store_id, payload, attempts FROM tkorders_webhook_inbox
             WHERE (status IN ('PENDING','FAILED') AND next_attempt_at <= UTC_TIMESTAMP())
