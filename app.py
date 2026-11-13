@@ -61,7 +61,7 @@ from bookselection.book_selection_generate import (
 from bookselection.weekly_book_modify import weekly_book_modify_bp
 
 from db import get_db
-from tkorderssearch.orders import orders_bp
+from tkorders.orders_search import orders_bp
 
 
 BASE_DIR = Path(

@@ -1,16 +1,25 @@
 #!/usr/bin/env python3
 """Sync TikTok Shop product catalog for TU/VB without touching order services.
 
-Run: python tkproducts.py --store ALL
-     python tkproducts.py --store TU
-     python tkproducts.py --store VB
+Run (from the baseline root):
+     python tkproducts/tkproducts.py --store ALL
+     python tkproducts/tkproducts.py --store TU
+     python tkproducts/tkproducts.py --store VB
+     python tkproducts/tkproducts.py --webhook-worker
+  or python -m tkproducts.tkproducts ...
 """
 import argparse
 import json
-import os
+import sys
 import time
-import tiktokorders as api
-import tkproducts_db as db
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from tkapi import client as api
+from tkproducts import tkproducts_db as db
 
 SEARCH_PATH = '/product/202502/products/search'
 

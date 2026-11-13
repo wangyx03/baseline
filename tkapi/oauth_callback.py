@@ -12,6 +12,10 @@ Callback URL:
     /tiktok/tu/callback
     /tiktok/vb/callback
 
+Run (from the baseline root):
+    python tkapi/oauth_callback.py
+    or: gunicorn -b 127.0.0.1:8504 tkapi.oauth_callback:app
+
 流程：
     1. TikTok 回调 code
     2. code -> access_token / refresh_token
@@ -36,8 +40,7 @@ Callback URL:
 import hashlib
 import hmac
 import html
-import os
-import tempfile
+import sys
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -53,7 +56,9 @@ from flask import Flask, request
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-ENV_FILE = BASE_DIR / ".env"
+
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 TOKEN_URL = "https://auth.tiktok-shops.com/api/v2/token/get"
 
@@ -83,153 +88,10 @@ STORE_CONFIG = {
 
 
 # ============================================================
-# .env reader
+# .env read / write: shared with tkapi.client (tkapi/envfile.py)
 # ============================================================
 
-def read_env_file() -> dict:
-    """
-    读取项目根目录 .env。
-
-    不依赖 python-dotenv。
-    """
-    if not ENV_FILE.exists():
-        raise RuntimeError(
-            f".env file not found: {ENV_FILE}"
-        )
-
-    values = {}
-
-    lines = ENV_FILE.read_text(
-        encoding="utf-8"
-    ).splitlines()
-
-    for raw_line in lines:
-        line = raw_line.strip()
-
-        if not line:
-            continue
-
-        if line.startswith("#"):
-            continue
-
-        if "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-
-        key = key.strip()
-        value = value.strip()
-
-        # 支持：
-        # KEY="value"
-        # KEY='value'
-        if (
-            len(value) >= 2
-            and value[0] == value[-1]
-            and value[0] in ("'", '"')
-        ):
-            value = value[1:-1]
-
-        values[key] = value
-
-    return values
-
-
-# ============================================================
-# .env writer
-# ============================================================
-
-def update_env_values(updates: dict):
-    """
-    仅更新传入的环境变量。
-
-    不会删除：
-        注释
-        空行
-        其他变量
-
-    使用临时文件 + os.replace 原子替换。
-    """
-
-    if not ENV_FILE.exists():
-        raise RuntimeError(
-            f".env file not found: {ENV_FILE}"
-        )
-
-    original_text = ENV_FILE.read_text(
-        encoding="utf-8"
-    )
-
-    lines = original_text.splitlines()
-
-    remaining = dict(updates)
-
-    new_lines = []
-
-    for original_line in lines:
-
-        stripped = original_line.strip()
-
-        if (
-            stripped
-            and not stripped.startswith("#")
-            and "=" in stripped
-        ):
-
-            key = stripped.split("=", 1)[0].strip()
-
-            if key in remaining:
-
-                value = remaining.pop(key)
-
-                new_lines.append(
-                    f"{key}={value}"
-                )
-
-                continue
-
-        new_lines.append(original_line)
-
-    # 如果 .env 原来没有对应变量，就追加
-    if remaining:
-
-        if new_lines and new_lines[-1] != "":
-            new_lines.append("")
-
-        for key, value in remaining.items():
-            new_lines.append(
-                f"{key}={value}"
-            )
-
-    new_text = "\n".join(new_lines) + "\n"
-
-    # 创建临时文件
-    fd, temp_path = tempfile.mkstemp(
-        prefix=".env.tmp.",
-        dir=str(ENV_FILE.parent),
-        text=True,
-    )
-
-    try:
-
-        with os.fdopen(
-            fd,
-            "w",
-            encoding="utf-8",
-        ) as f:
-
-            f.write(new_text)
-
-        # Linux / Windows 均可
-        os.replace(
-            temp_path,
-            ENV_FILE,
-        )
-
-    finally:
-
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+from tkapi.envfile import ENV_FILE, read_env_file, update_env_values
 
 
 # ============================================================

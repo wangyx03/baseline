@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
 """TikTok Shop webhook receiver; persist first, acknowledge promptly.
-Run with: gunicorn -w 2 -b 127.0.0.1:8505 tiktok_webhook:app
-Worker: python tiktokorders.py --webhook-worker
+
+Shared ingress for both stores: product events (TTS_PRODUCT_WEBHOOK_TYPES)
+go to tkproducts_webhook_inbox, everything else to tkorders_webhook_inbox.
+
+Run with (from the baseline root):
+    gunicorn -w 2 -b 127.0.0.1:8505 tkapi.tiktok_webhook:app
+Workers:
+    python tkorders/tiktokorders.py --webhook-worker
+    python tkproducts/tkproducts.py --webhook-worker
 """
 import hashlib
 import hmac
 import json
-import logging
+import os
 import sys
 from pathlib import Path
 from flask import Flask, request, jsonify
-from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env')
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import tiktokorders as sync
-import tkorders_db as db
-import tkproducts_db as products_db
-import os
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from tkapi import client as api          # loads .env
+from tkorders import tkorders_db as db
+from tkproducts import tkproducts_db as products_db
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
@@ -32,7 +38,7 @@ def verify(shop, raw, signature):
 
 
 def accept(store):
-    shop = sync.resolve_shop(store)
+    shop = api.resolve_shop(store)
     raw = request.get_data(cache=True)
     if not verify(shop, raw, request.headers.get('Authorization', '')):
         return jsonify(error='Invalid signature'), 401
