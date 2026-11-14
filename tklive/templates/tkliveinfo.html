@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+{% block title %}TikTok LIVE Info{% endblock %}
+{% block styles %}
+.live-page{max-width:1600px;margin:25px auto;padding:0 22px}.filters,.results{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;margin-bottom:16px}.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.field label{display:block;font-size:12px;color:#596273;margin-bottom:6px}.small{color:#667085;font-size:12px}.actions{display:flex;gap:10px;align-items:center;margin-top:15px}.btn{padding:10px 15px;background:#1769aa;color:white;border:0;border-radius:7px;cursor:pointer;text-decoration:none;font:inherit}.btn.secondary{background:#edf1f5;color:#344054}.btn:disabled{opacity:.55;cursor:wait}.table-scroll{overflow-x:auto;scrollbar-width:thin}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:11px 9px;border-bottom:1px solid #e9edf2;text-align:left;vertical-align:top}th{white-space:nowrap;background:#f8fafc}.mono{font-family:ui-monospace,monospace}.nowrap{white-space:nowrap}
+.calendar-range-field {
+    position: relative;
+    min-width: 310px;
+}
+
+.date-range-button {
+    width: 310px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 12px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    background: white;
+    color: #111;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.date-range-button:hover { background: #f7f7f7; }
+
+/* Two-month range picker */
+.calendar-popover {
+    display: none;
+    position: absolute;
+    z-index: 1200;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 640px;
+    max-width: calc(100vw - 40px);
+    border: 1px solid #d9dce1;
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+}
+.calendar-popover.show { display: block; }
+.calendar-months { display: grid; grid-template-columns: 1fr 1fr; }
+.calendar-month { padding: 14px 16px 10px; }
+.calendar-month + .calendar-month { border-left: 1px solid #eceef1; }
+.calendar-header {
+    display: grid;
+    grid-template-columns: 28px 28px 1fr 28px 28px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.calendar-month-title { text-align: center; font-size: 16px; font-weight: 600; color: #1f2937; }
+.calendar-nav {
+    width: 28px; height: 28px; padding: 0;
+    border: 0; border-radius: 6px;
+    background: transparent; color: #8a919c;
+    font-size: 18px; line-height: 1; cursor: pointer;
+}
+.calendar-nav:hover:not(:disabled) { background: #f3f4f6; color: #111; }
+.calendar-nav:disabled { color: #d3d7de; cursor: not-allowed; }
+.calendar-nav.placeholder { visibility: hidden; }
+.calendar-weekdays, .calendar-days { display: grid; grid-template-columns: repeat(7, 1fr); }
+.calendar-weekdays {
+    padding-bottom: 6px; margin-bottom: 4px;
+    border-bottom: 1px solid #f0f1f3;
+    color: #5f6670; font-size: 12px; font-weight: 600; text-align: center;
+}
+.calendar-weekdays span { padding: 5px 0; }
+.calendar-day {
+    position: relative;
+    height: 38px;
+    border: 0; border-radius: 0;
+    background: transparent;
+    color: #111; font-size: 14px; font-weight: 500;
+    padding: 0; cursor: pointer;
+}
+.calendar-day span {
+    position: relative; z-index: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 50%;
+}
+.calendar-day:hover:not(:disabled) span { background: #eef2f7; }
+.calendar-day.outside-month { color: #c3c8cf; cursor: default; }
+.calendar-day.outside-month:hover span { background: transparent; }
+.calendar-day:disabled { color: #d3d7de; cursor: not-allowed; }
+.calendar-day.today span { background: #eaf2ff; color: #1f5fbf; }
+.calendar-day.in-range, .calendar-day.preview-range { background: #eaf2ff; }
+.calendar-day.range-start { background: linear-gradient(to right, transparent 50%, #eaf2ff 50%); }
+.calendar-day.range-end { background: linear-gradient(to left, transparent 50%, #eaf2ff 50%); }
+.calendar-day.range-start.range-end { background: transparent; }
+.calendar-day.range-start span, .calendar-day.range-end span,
+.calendar-day.range-start:hover span, .calendar-day.range-end:hover span { background: #2f6bff; color: white; }
+.calendar-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 14px; border-top: 1px solid #eceef1;
+}
+.calendar-hint { font-size: 12px; color: #8a919c; }
+.calendar-text-button {
+    padding: 5px 7px; border: 0; background: transparent;
+    color: #1f5fbf; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.calendar-text-button:hover { background: #f3f6fb; }
+
+
+.calendar-range-field{min-width:310px;max-width:360px}.date-range-button{width:100%}
+.refresh-btn{margin-left:auto;background:#fff;color:#344054;border:1px solid #d5dbe3;white-space:nowrap}.refresh-btn:hover{background:#f2f6fa}
+.sync-status{font-size:12px;color:#667085;white-space:pre-line}.sync-status.ok{color:#248a3d}.sync-status.err{color:#b42318}
+{% endblock %}
+{% block content %}
+<div class="live-page"><h1>TikTok LIVE Info</h1><p class="small">TU / VB LIVE sessions · Times shown in Eastern Time · Data refreshes from TikTok when the page opens</p>
+<form method="get" id="filters" class="filters">
+<div class="filter-grid">
+<div class="field calendar-range-field">
+ <label>Start Date Range (ET)</label>
+ <button id="dateRangeButton" type="button" class="date-range-button"><span id="dateRangeText">Select dates</span><span>📅</span></button>
+ <div id="calendarPopover" class="calendar-popover">
+  <div class="calendar-months">
+   <div class="calendar-month">
+    <div class="calendar-header">
+     <button id="prevYearBtn" type="button" class="calendar-nav" title="Previous year">«</button>
+     <button id="prevMonthBtn" type="button" class="calendar-nav" title="Previous month">‹</button>
+     <div id="calendarMonthTitleLeft" class="calendar-month-title"></div>
+     <span class="calendar-nav placeholder"></span><span class="calendar-nav placeholder"></span>
+    </div>
+    <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+    <div id="calendarDaysLeft" class="calendar-days"></div>
+   </div>
+   <div class="calendar-month">
+    <div class="calendar-header">
+     <span class="calendar-nav placeholder"></span><span class="calendar-nav placeholder"></span>
+     <div id="calendarMonthTitleRight" class="calendar-month-title"></div>
+     <button id="nextMonthBtn" type="button" class="calendar-nav" title="Next month">›</button>
+     <button id="nextYearBtn" type="button" class="calendar-nav" title="Next year">»</button>
+    </div>
+    <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+    <div id="calendarDaysRight" class="calendar-days"></div>
+   </div>
+  </div>
+  <div class="calendar-footer">
+   <button id="clearDateRangeBtn" type="button" class="calendar-text-button">Clear</button>
+   <span class="calendar-hint" id="calendarHint">Pick a start date</span>
+   <button id="todayDateRangeBtn" type="button" class="calendar-text-button">Today</button>
+  </div>
+ </div>
+</div>
+<input type="hidden" name="from" id="ordersFrom" value="{{ params.get('from','') }}">
+<input type="hidden" name="to" id="ordersTo" value="{{ params.get('to','') }}">
+</div>
+<div class="actions"><button class="btn" type="submit">Search</button><a class="btn secondary" href="{{ url_for('tkliveinfo.page') }}">Reset</a><span class="sync-status" id="syncStatus"></span><button class="btn refresh-btn" type="button" id="refreshButton">⟳ Refresh from TikTok</button></div>
+</form>
+<section class="results" id="results">
+<h2>{{ rows|length }} LIVE sessions</h2>
+<div class="table-scroll">
+<table>
+<thead>
+<tr>
+<th>store_id</th>
+<th>live_id</th>
+<th>live_title</th>
+<th>creator_username</th>
+<th>start_time (ET)</th>
+<th>end_time (ET)</th>
+</tr>
+</thead>
+<tbody>
+{% for r in rows %}
+<tr>
+<td>{{ r.store }}</td>
+<td class="mono nowrap">{{ r.live_id }}</td>
+<td>{{ r.live_title or '—' }}</td>
+<td class="nowrap">{{ r.creator_username or '—' }}</td>
+<td class="nowrap">{{ r.start_local or '—' }}</td>
+<td class="nowrap">{{ r.end_local or '—' }}</td>
+</tr>
+{% else %}
+<tr><td colspan="6">No LIVE sessions in this range.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</section>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+// ---- Two-month order date range picker ------------------------------------
+const dateRangeButton = document.getElementById("dateRangeButton");
+const dateRangeText = document.getElementById("dateRangeText");
+const calendarPopover = document.getElementById("calendarPopover");
+const calendarHint = document.getElementById("calendarHint");
+const prevYearBtn = document.getElementById("prevYearBtn");
+const prevMonthBtn = document.getElementById("prevMonthBtn");
+const nextMonthBtn = document.getElementById("nextMonthBtn");
+const nextYearBtn = document.getElementById("nextYearBtn");
+
+let liveStartDateValue = document.getElementById("ordersFrom").value;
+let liveEndDateValue = document.getElementById("ordersTo").value;
+
+function toISODate(date) {
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+}
+function fromISODate(value) {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const p = value.split("-").map(Number);
+    return new Date(p[0], p[1] - 1, p[2], 12);
+}
+function displayDate(date) {
+    return date.toLocaleDateString("en-US", {month: "short", day: "numeric", year: "numeric"});
+}
+// "Today" follows the Time Zone filter, matching how the server interprets dates.
+function todayISO() {
+    try {
+        return new Intl.DateTimeFormat("en-CA", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
+    } catch (e) {
+        return toISODate(new Date());
+    }
+}
+function monthIndex(d) { return d.getFullYear() * 12 + d.getMonth(); }
+function monthFromIndex(i) { return new Date(Math.floor(i / 12), i % 12, 1, 12); }
+
+// calendarViewDate = left month. The right month (left + 1) never goes past the current month.
+function clampView(d) {
+    const maxLeft = monthIndex(fromISODate(todayISO())) - 1;
+    return monthFromIndex(Math.min(monthIndex(d), maxLeft));
+}
+let calendarViewDate = clampView(fromISODate(liveStartDateValue) || new Date());
+
+function updateDateRangeText() {
+    document.getElementById("ordersFrom").value = liveStartDateValue;
+    document.getElementById("ordersTo").value = liveEndDateValue;
+    const start = fromISODate(liveStartDateValue);
+    const end = fromISODate(liveEndDateValue);
+    if (start && end) dateRangeText.textContent = displayDate(start) + " → " + displayDate(end);
+    else if (start) dateRangeText.textContent = displayDate(start) + " → Select end";
+    else dateRangeText.textContent = "Select dates";
+    calendarHint.textContent = (start && !end) ? "Pick an end date" : "Pick a start date";
+}
+
+function renderMonth(viewDate, titleEl, daysEl, maxISO) {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    titleEl.textContent = viewDate.toLocaleDateString("en-US", {month: "long", year: "numeric"});
+    daysEl.innerHTML = "";
+    const first = new Date(year, month, 1, 12);
+    const gridStart = new Date(year, month, 1 - first.getDay(), 12);
+    for (let i = 0; i < 42; i++) {
+        const date = new Date(gridStart);
+        date.setDate(gridStart.getDate() + i);
+        const iso = toISODate(date);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "calendar-day";
+        const span = document.createElement("span");
+        span.textContent = date.getDate();
+        button.appendChild(span);
+        if (date.getMonth() !== month) {
+            // Neighbouring-month days are shown greyed for orientation but are not selectable.
+            button.classList.add("outside-month");
+            button.tabIndex = -1;
+        } else {
+            button.dataset.date = iso;
+            if (iso > maxISO) {
+                button.disabled = true;
+                button.title = "Future dates are not allowed";
+            }
+            if (iso === maxISO) button.classList.add("today");
+            button.addEventListener("click", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                pickDate(iso);
+            });
+            button.addEventListener("mouseenter", function () { previewRange(iso); });
+        }
+        daysEl.appendChild(button);
+    }
+}
+
+function paintRange(hoverISO) {
+    const s = liveStartDateValue;
+    let e = liveEndDateValue;
+    let preview = false;
+    if (s && !e && hoverISO) { e = hoverISO; preview = true; }
+    const lo = s && e ? (s < e ? s : e) : s;
+    const hi = s && e ? (s < e ? e : s) : s;
+    document.querySelectorAll("#calendarPopover .calendar-day[data-date]").forEach(function (btn) {
+        const d = btn.dataset.date;
+        btn.classList.remove("in-range", "preview-range", "range-start", "range-end");
+        if (!lo) return;
+        if (d === lo) btn.classList.add("range-start");
+        if (d === hi) btn.classList.add("range-end");
+        if (d > lo && d < hi) btn.classList.add(preview ? "preview-range" : "in-range");
+    });
+}
+function previewRange(iso) { if (liveStartDateValue && !liveEndDateValue) paintRange(iso); }
+
+function pickDate(iso) {
+    if (!liveStartDateValue || liveEndDateValue) {
+        liveStartDateValue = iso;
+        liveEndDateValue = "";
+        updateDateRangeText();
+        paintRange();
+        return;
+    }
+    if (iso < liveStartDateValue) {
+        liveEndDateValue = liveStartDateValue;
+        liveStartDateValue = iso;
+    } else {
+        liveEndDateValue = iso;
+    }
+    updateDateRangeText();
+    paintRange();
+    calendarPopover.classList.remove("show");
+}
+
+function renderCalendar() {
+    const maxISO = todayISO();
+    calendarViewDate = clampView(calendarViewDate);
+    const right = monthFromIndex(monthIndex(calendarViewDate) + 1);
+    renderMonth(calendarViewDate, document.getElementById("calendarMonthTitleLeft"), document.getElementById("calendarDaysLeft"), maxISO);
+    renderMonth(right, document.getElementById("calendarMonthTitleRight"), document.getElementById("calendarDaysRight"), maxISO);
+    const maxLeft = monthIndex(fromISODate(maxISO)) - 1;
+    nextMonthBtn.disabled = monthIndex(calendarViewDate) >= maxLeft;
+    nextYearBtn.disabled = nextMonthBtn.disabled;
+    paintRange();
+}
+
+function shiftView(months) {
+    calendarViewDate = clampView(monthFromIndex(monthIndex(calendarViewDate) + months));
+    renderCalendar();
+}
+
+dateRangeButton.addEventListener("click", function (event) {
+    event.stopPropagation();
+    const opening = !calendarPopover.classList.contains("show");
+    if (opening) calendarViewDate = clampView(fromISODate(liveStartDateValue) || new Date());
+    calendarPopover.classList.toggle("show");
+    renderCalendar();
+});
+prevYearBtn.addEventListener("click", function () { shiftView(-12); });
+prevMonthBtn.addEventListener("click", function () { shiftView(-1); });
+nextMonthBtn.addEventListener("click", function () { shiftView(1); });
+nextYearBtn.addEventListener("click", function () { shiftView(12); });
+document.getElementById("calendarDaysLeft").addEventListener("mouseleave", function () { paintRange(); });
+document.getElementById("calendarDaysRight").addEventListener("mouseleave", function () { paintRange(); });
+
+document.getElementById("clearDateRangeBtn").addEventListener("click", function () {
+    liveStartDateValue = "";
+    liveEndDateValue = "";
+    updateDateRangeText();
+    paintRange();
+});
+document.getElementById("todayDateRangeBtn").addEventListener("click", function () {
+    const t = todayISO();
+    liveStartDateValue = t;
+    liveEndDateValue = t;
+    updateDateRangeText();
+    calendarViewDate = clampView(fromISODate(t));
+    renderCalendar();
+    calendarPopover.classList.remove("show");
+});
+document.addEventListener("click", function (event) {
+    if (!event.target.closest(".calendar-range-field")) calendarPopover.classList.remove("show");
+});
+
+updateDateRangeText();
+renderCalendar();
+
+// ---- TikTok API refresh: once on page open, again on button click ---------
+(function () {
+ const button = document.getElementById("refreshButton");
+ const status = document.getElementById("syncStatus");
+ const results = document.getElementById("results");
+
+ function setStatus(text, kind) {
+  status.textContent = text;
+  status.className = "sync-status" + (kind ? " " + kind : "");
+ }
+
+ async function reloadTable() {
+  const resp = await fetch(location.href);
+  if (!resp.ok) return;
+  const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+  const fresh = doc.getElementById("results");
+  if (fresh) results.innerHTML = fresh.innerHTML;
+ }
+
+ async function refresh(force) {
+  button.disabled = true;
+  setStatus("Calling TikTok API…");
+  try {
+   const url = {{ url_for('tkliveinfo.refresh') | tojson }} + (force ? "?force=1" : "");
+   const resp = await fetch(url, {method: "POST"});
+   const data = await resp.json();
+   if (data.status === "ok") setStatus(data.message, "ok");
+   else if (data.status === "recent") setStatus(data.message);
+   else setStatus(data.message || data.status, "err");
+   if (data.status === "ok") await reloadTable();
+  } catch (e) {
+   setStatus("Refresh failed: " + e, "err");
+  } finally {
+   button.disabled = false;
+  }
+ }
+
+ button.addEventListener("click", function () { refresh(true); });
+ refresh(false);
+})();
+</script>{% endblock %}

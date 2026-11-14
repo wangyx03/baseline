@@ -1,0 +1,9 @@
+[Unit]
+Description=TikTok Shop LIVE info sync (one-shot)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/baseline
+ExecStart=/opt/baseline/venv/bin/python tklive/tkliveinfo.py --days 7 --source timer

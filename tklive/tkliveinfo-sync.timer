@@ -1,0 +1,9 @@
+[Unit]
+Description=Run TikTok Shop LIVE info sync daily at 7:00 Eastern
+
+[Timer]
+OnCalendar=*-*-* 07:00:00 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -30,6 +30,8 @@ MODULE_BOOK_SELECTION = 7
 
 MODULE_TIKTOK_ORDERS = 8
 
+MODULE_TIKTOK_LIVE = 9
+
 
 # =========================
 # Feature Permission Keys

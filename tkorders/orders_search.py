@@ -7,6 +7,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 from flask import Blueprint, render_template, request, Response, stream_with_context
 from flask_login import login_required
+import mysql.connector
 from permissions.permissions import module_required, MODULE_TIKTOK_ORDERS
 from db import get_db
 
@@ -274,6 +275,19 @@ def _rows(cursor, sql, args=()):
     return cursor.fetchall()
 
 
+def _live_titles(cursor, live_ids):
+    """{live_id: {live_title, creator_username}} from tkliveinfo; empty if the table is missing."""
+    ids = [v for v in dict.fromkeys(live_ids) if v]
+    if not ids:
+        return {}
+    try:
+        rows = _rows(cursor, 'SELECT live_id, live_title, creator_username FROM tkliveinfo '
+                             'WHERE live_id IN (' + ','.join(['%s'] * len(ids)) + ')', ids)
+    except mysql.connector.errors.ProgrammingError:
+        return {}  # tkliveinfo not created yet (sync has never run)
+    return {str(r['live_id']): r for r in rows}
+
+
 @orders_bp.route('/', methods=['GET'])
 @module_required(MODULE_TIKTOK_ORDERS)
 def page():
@@ -395,10 +409,17 @@ def page():
             r['first_local'] = (r['first_time'].replace(tzinfo=timezone.utc).astimezone(display_tz)
                                 .strftime('%m/%d %I:%M %p')) if r['first_time'] else ''
             lives.append(r)
+        # LIVE titles from tkliveinfo (filled by tklive/tkliveinfo.py); room_id == live_id.
+        live_info = _live_titles(cur, [r['value'] for r in lives])
+        for r in lives:
+            info = live_info.get(r['value']) or {}
+            r['title'] = info.get('live_title') or ''
+            r['creator'] = info.get('creator_username') or ''
         known_lives = {r['value'] for r in lives}
         for selected in params.getlist('live'):
             if selected not in ('', 'all', '__null__') and selected not in known_lives and LIVE_ID_RE.match(selected):
-                lives.append({'value': selected, 'store_id': None, 'first_local': '', 'n': 0})
+                lives.append({'value': selected, 'store_id': None, 'first_local': '', 'n': 0,
+                              'title': '', 'creator': ''})
     finally:
         cur.close()
         conn.close()
