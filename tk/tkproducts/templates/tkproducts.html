@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}TikTok Products{% endblock %}
+{% block styles %}
+.prod-page{max-width:1600px;margin:25px auto;padding:0 22px}
+.panel{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;margin-bottom:16px}
+.small{color:#667085;font-size:12px}
+.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.field label{display:block;font-size:12px;color:#596273;margin-bottom:6px}
+.field input,.field select{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #bbb;border-radius:6px;font:inherit;background:#fff}
+.field.wide{grid-column:span 2}
+.actions{display:flex;gap:10px;align-items:center;margin-top:15px;flex-wrap:wrap}
+.btn{padding:10px 15px;background:#1769aa;color:#fff;border:0;border-radius:7px;cursor:pointer;text-decoration:none;font:inherit}
+.btn.secondary{background:#edf1f5;color:#344054}
+.btn.outline{background:#fff;color:#344054;border:1px solid #d5dbe3}
+.btn.outline:hover{background:#f2f6fa}
+.btn:disabled{opacity:.55;cursor:wait}
+.sync-bar{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.sync-store{font-size:13px;color:#344054}
+.sync-store b{font-weight:600}
+.sync-controls{margin-left:auto;display:flex;gap:8px;align-items:center}
+.sync-controls select{padding:9px 10px;border:1px solid #d5dbe3;border-radius:7px;font:inherit;background:#fff}
+.sync-status{font-size:12px;color:#667085;white-space:pre-line;margin-top:10px}
+.sync-status.ok{color:#248a3d}.sync-status.err{color:#b42318}.sync-status.run{color:#1769aa}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.chip{display:inline-block;padding:3px 9px;border-radius:999px;background:#f2f4f7;color:#344054;font-size:12px;white-space:nowrap}
+.chip.store{background:#1f2937;color:#fff}
+.chip.warn{background:#fef3f2;color:#b42318}
+.status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#f2f4f7;color:#344054;white-space:nowrap}
+.status.ACTIVATE{background:#ecfdf3;color:#027a48}
+.status.DRAFT,.status.PENDING{background:#eff8ff;color:#175cd3}
+.status.FAILED,.status.PLATFORM_DEACTIVATED,.status.FREEZE{background:#fef3f2;color:#b42318}
+.status.SELLER_DEACTIVATED,.status.DELETED{background:#f2f4f7;color:#667085}
+.table-scroll{overflow-x:auto;scrollbar-width:thin}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:9px;border-bottom:1px solid #e9edf2;text-align:left;vertical-align:middle}
+th{white-space:nowrap;background:#f8fafc}
+td.num,th.num{text-align:right}
+.mono{font-family:ui-monospace,monospace;font-size:12px}
+.nowrap{white-space:nowrap}
+.thumb{width:44px;height:44px;object-fit:cover;border-radius:6px;background:#f2f4f7;display:block}
+.name{max-width:520px}
+.zero{color:#b42318;font-weight:600}
+.pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:14px;font-size:13px}
+.pager a,.pager span.disabled{padding:6px 11px;border:1px solid #d5dbe3;border-radius:6px;text-decoration:none;color:#344054}
+.pager span.disabled{color:#c3c8cf}
+.results-head{display:flex;align-items:baseline;gap:12px}
+.results-head h2{margin:0 0 12px}
+{% endblock %}
+{% block content %}
+<div class="prod-page">
+<h1>TikTok Products</h1>
+<p class="small">TU / VB product catalog · one row per SKU · times shown in Eastern Time · updates arrive through the product webhook; use Sync to pull the full catalog</p>
+
+<section class="panel">
+ <div class="sync-bar">
+  {% for s in sync_state %}
+  <div class="sync-store"><b>{{ s.store }}</b> · last full sync {{ s.last_full_sync }} · {{ s.products }} products / {{ s.skus }} SKUs</div>
+  {% endfor %}
+  <div class="sync-controls">
+   <select id="syncStore">
+    <option value="ALL">All stores</option>
+    {% for s in stores %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+   </select>
+   <button class="btn outline" type="button" id="syncButton">⟳ Sync from TikTok</button>
+  </div>
+ </div>
+ <div class="sync-status" id="syncStatus">
+  {%- if sync_running -%}Sync running…
+  {%- elif last_log -%}Last sync ({{ last_log.source }}, {{ last_log.started }}): {% if last_log.ok is none %}did not finish{% elif last_log.ok %}OK{% else %}failed{% endif %}
+{{ last_log.message }}
+  {%- endif -%}
+ </div>
+ <div class="chips">
+  {% for store, items in summary.items() %}
+   <span class="chip store">{{ store }}</span>
+   {% for r in items %}<span class="chip">{{ r.status }} {{ r.n }}</span>{% endfor %}
+  {% endfor %}
+  {% if inbox.get('PENDING') or inbox.get('PROCESSING') %}<span class="chip">webhook queue {{ (inbox.get('PENDING') or 0) + (inbox.get('PROCESSING') or 0) }}</span>{% endif %}
+  {% if inbox.get('FAILED') %}<span class="chip warn">webhook failed {{ inbox.get('FAILED') }}</span>{% endif %}
+ </div>
+</section>
+
+<form method="get" class="panel">
+ <div class="filter-grid">
+  <div class="field wide">
+   <label>Search (name / seller SKU / product ID / SKU ID)</label>
+   <input type="text" name="q" value="{{ params.get('q','') }}" placeholder="e.g. 9781234567890">
+  </div>
+  <div class="field">
+   <label>Store</label>
+   <select name="store">
+    <option value="">All</option>
+    {% for s in stores %}<option value="{{ s }}" {% if params.get('store') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+   </select>
+  </div>
+  <div class="field">
+   <label>Status</label>
+   <select name="status">
+    <option value="">All</option>
+    <option value="_not_deleted" {% if params.get('status') == '_not_deleted' %}selected{% endif %}>All except DELETED</option>
+    {% for st in statuses %}<option value="{{ st }}" {% if params.get('status') == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+   </select>
+  </div>
+  <div class="field">
+   <label>Stock</label>
+   <select name="stock">
+    <option value="">All</option>
+    <option value="in" {% if params.get('stock') == 'in' %}selected{% endif %}>In stock</option>
+    <option value="out" {% if params.get('stock') == 'out' %}selected{% endif %}>Out of stock</option>
+   </select>
+  </div>
+  <div class="field">
+   <label>Sort</label>
+   <select name="sort">
+    {% for value, label in [('updated','Recently updated'),('created','Recently created'),('name','Name'),('stock_desc','Stock high → low'),('stock_asc','Stock low → high'),('price_desc','Price high → low'),('price_asc','Price low → high')] %}
+    <option value="{{ value }}" {% if sort == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+   </select>
+  </div>
+ </div>
+ <div class="actions">
+  <button class="btn" type="submit">Search</button>
+  <a class="btn secondary" href="{{ url_for('tkproducts.page') }}">Reset</a>
+ </div>
+</form>
+
+<section class="panel">
+ <div class="results-head">
+  <h2>{{ total }} SKUs</h2>
+  <span class="small">{{ product_total }} products{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}</span>
+ </div>
+ <div class="table-scroll">
+ <table>
+  <thead>
+   <tr>
+    <th></th>
+    <th>Store</th>
+    <th>Product</th>
+    <th>Status</th>
+    <th>Seller SKU</th>
+    <th>SKU name</th>
+    <th class="num">Price</th>
+    <th class="num">Stock</th>
+    <th>Product ID</th>
+    <th>SKU ID</th>
+    <th>Updated (ET)</th>
+   </tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+   <tr>
+    <td>{% if r.image_url %}<img class="thumb" src="{{ r.image_url }}" loading="lazy" alt="">{% else %}<span class="thumb"></span>{% endif %}</td>
+    <td>{{ r.store }}</td>
+    <td class="name">{{ r.product_name or '—' }}</td>
+    <td><span class="status {{ r.status or '' }}">{{ r.status or '—' }}</span></td>
+    <td class="mono nowrap">{{ r.seller_sku or '—' }}</td>
+    <td>{{ r.sku_name or '' }}</td>
+    <td class="num nowrap">{% if r.retail_price is not none %}{{ '%.2f'|format(r.retail_price) }}{% if r.currency and r.currency != 'USD' %} {{ r.currency }}{% endif %}{% else %}—{% endif %}</td>
+    <td class="num {% if not r.stock %}zero{% endif %}">{{ r.stock if r.stock is not none else '—' }}</td>
+    <td class="mono nowrap">{{ r.product_id }}</td>
+    <td class="mono nowrap">{{ r.sku_id }}</td>
+    <td class="nowrap">{{ r.updated_local or '—' }}</td>
+   </tr>
+  {% else %}
+   <tr><td colspan="11">No products match these filters.{% if not sync_state or sync_state[0].last_full_sync == 'never' %} Run a sync to load the catalog.{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+ </table>
+ </div>
+ {% if pages > 1 %}
+ <div class="pager">
+  {% if page > 1 %}<a href="{{ url_for('tkproducts.page', page=page-1, **query) }}">‹ Prev</a>{% else %}<span class="disabled">‹ Prev</span>{% endif %}
+  <span>{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a href="{{ url_for('tkproducts.page', page=page+1, **query) }}">Next ›</a>{% else %}<span class="disabled">Next ›</span>{% endif %}
+ </div>
+ {% endif %}
+</section>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+(function () {
+ const button = document.getElementById("syncButton");
+ const storeSelect = document.getElementById("syncStore");
+ const status = document.getElementById("syncStatus");
+ const statusUrl = {{ url_for('tkproducts.sync_status') | tojson }};
+ const syncUrl = {{ url_for('tkproducts.sync') | tojson }};
+ let polling = null;
+
+ function setStatus(text, kind) {
+  status.textContent = text;
+  status.className = "sync-status" + (kind ? " " + kind : "");
+ }
+
+ async function poll() {
+  try {
+   const resp = await fetch(statusUrl);
+   const data = await resp.json();
+   if (data.running) {
+    setStatus("Sync running… (large catalogs take a few minutes; you can leave this page)", "run");
+    return;
+   }
+   clearInterval(polling);
+   polling = null;
+   button.disabled = false;
+   const last = data.last;
+   if (last && last.ok) {
+    setStatus("Sync finished\n" + last.message, "ok");
+    setTimeout(function () { location.reload(); }, 1200);
+   } else if (last) {
+    setStatus("Sync failed\n" + last.message, "err");
+   }
+  } catch (e) {
+   setStatus("Could not read sync status: " + e, "err");
+  }
+ }
+
+ function startPolling() {
+  button.disabled = true;
+  if (!polling) polling = setInterval(poll, 3000);
+ }
+
+ button.addEventListener("click", async function () {
+  const store = storeSelect.value;
+  if (!confirm("Pull the full product catalog for " + (store === "ALL" ? "all stores" : store) + " from TikTok?")) return;
+  button.disabled = true;
+  setStatus("Starting sync…", "run");
+  try {
+   const resp = await fetch(syncUrl, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({store: store})
+   });
+   const data = await resp.json();
+   if (resp.status === 202 || resp.status === 409) {
+    setStatus(data.message, "run");
+    startPolling();
+   } else {
+    setStatus(data.message || "Sync could not start", "err");
+    button.disabled = false;
+   }
+  } catch (e) {
+   setStatus("Sync could not start: " + e, "err");
+   button.disabled = false;
+  }
+ });
+
+ {% if sync_running %}startPolling();{% endif %}
+})();
+</script>{% endblock %}

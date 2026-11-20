@@ -27,7 +27,8 @@ from permissions.permissions import (
     MODULE_PERMISSION_MANAGEMENT,
     MODULE_BOOK_SELECTION,
     MODULE_TIKTOK_ORDERS,
-    MODULE_TIKTOK_LIVE
+    MODULE_TIKTOK_LIVE,
+    MODULE_TIKTOK_PRODUCTS
 )
 
 from recording.recording import recording_bp
@@ -64,6 +65,7 @@ from bookselection.weekly_book_modify import weekly_book_modify_bp
 from db import get_db
 from tk.tkorders.orders_search import orders_bp
 from tk.tklive.tkliveinfo_web import bp as tkliveinfo_bp
+from tk.tkproducts.tkproducts_web import bp as tkproducts_bp
 
 
 BASE_DIR = Path(
@@ -165,6 +167,8 @@ app.register_blueprint(
 app.register_blueprint(orders_bp)
 
 app.register_blueprint(tkliveinfo_bp)
+
+app.register_blueprint(tkproducts_bp)
 
 
 # =========================
@@ -363,7 +367,10 @@ def index():
             MODULE_TIKTOK_ORDERS,
 
         MODULE_TIKTOK_LIVE=
-            MODULE_TIKTOK_LIVE
+            MODULE_TIKTOK_LIVE,
+
+        MODULE_TIKTOK_PRODUCTS=
+            MODULE_TIKTOK_PRODUCTS
     )
 
 

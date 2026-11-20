@@ -32,6 +32,8 @@ MODULE_TIKTOK_ORDERS = 8
 
 MODULE_TIKTOK_LIVE = 9
 
+MODULE_TIKTOK_PRODUCTS = 10
+
 
 # =========================
 # Feature Permission Keys

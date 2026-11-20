@@ -78,6 +78,16 @@ SCHEMA = [
  KEY idx_tkproducts_ready (status,next_attempt_at),
  CONSTRAINT fk_tkproducts_webhook_store FOREIGN KEY (store_id) REFERENCES stores(store_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4''',
+'''CREATE TABLE IF NOT EXISTS tkproducts_sync_log (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ source VARCHAR(32) NOT NULL,
+ stores VARCHAR(32) NOT NULL,
+ started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ finished_at DATETIME NULL,
+ ok TINYINT(1) NULL,
+ message VARCHAR(1000) NULL,
+ KEY idx_tkproducts_sync_log_started (started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4''',
 # Local staging list for new listings. A row lives here only until it is
 # created as a TikTok draft; on success the row is deleted (the product is
 # then in tkproducts / tkproducts_skus). Rows never hold TikTok-side truth.

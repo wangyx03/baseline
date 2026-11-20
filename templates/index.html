@@ -666,6 +666,8 @@ Operations Dashboard
         current_user.has_access(MODULE_TIKTOK_ORDERS)
         or
         current_user.has_access(MODULE_TIKTOK_LIVE)
+        or
+        current_user.has_access(MODULE_TIKTOK_PRODUCTS)
     ) %}
     <div class="section">
       <div class="section-title">TikTok Shop</div>
@@ -675,6 +677,13 @@ Operations Dashboard
           <div class="card-icon">🛒</div>
           <div class="card-title">Orders</div>
           <div class="card-description">Search TU / VB orders with combined filters.</div>
+        </a>
+        {% endif %}
+        {% if current_user.has_access(MODULE_TIKTOK_PRODUCTS) %}
+        <a class="card" href="{{ url_for('tkproducts.page') }}">
+          <div class="card-icon">📦</div>
+          <div class="card-title">Products</div>
+          <div class="card-description">TU / VB product catalog, SKUs, prices and stock.</div>
         </a>
         {% endif %}
         {% if current_user.has_access(MODULE_TIKTOK_LIVE) %}
