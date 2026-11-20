@@ -241,7 +241,11 @@
 .bundle-tag { display:inline-block; padding:1px 7px; border-radius:999px; background:#f4ebff; color:#6941c6; font-size:11px; font-weight:600; }
 .bundle-toggle { border:1px solid #d5dbe3; background:#fff; border-radius:6px; padding:1px 7px; cursor:pointer; font:inherit; font-size:12px; color:#1769aa; }
 .bundle-toggle:hover { background:#eef5fc; }
-.bundle-list { margin-top:5px; padding-left:8px; border-left:2px solid #e9d7fe; font-size:12px; line-height:1.6; }
+.bundle-row td { padding-top:0; padding-bottom:10px; }
+.order-main-row:has(+ .bundle-row:not([hidden])) td { border-bottom-color:transparent; }
+.bundle-list { padding-left:8px; border-left:2px solid #e9d7fe; font-size:12px; }
+/* Same fixed line height in both columns so each SKU sits beside its product. */
+.bundle-line { height:22px; line-height:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:420px; }
 .bundle-sub { font-size:12px; color:#596273; padding-left:8px; border-left:2px solid #e9d7fe; }
 .order-details-row td { background:#f8fafc; padding:12px 18px; }
 .order-details-table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -316,18 +320,24 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
 <td>{{ o.warehouse_name or o.warehouse_id or '—' }}</td>
 {% set fb = o.first_item.components if o.first_item else [] %}
 <td>
-  {% if fb %}<span class="bundle-tag">Bundle</span> <button class="bundle-toggle" type="button" aria-expanded="false" onclick="toggleBundle(this)" title="Show bundle contents">{{ fb|length }} SKUs ▾</button>
-  <div class="bundle-list" hidden>{% for c in fb %}<div class="mono">{{ c.component_seller_sku or c.component_sku_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}</div>
+  {% if fb %}<span class="bundle-tag">Bundle</span> <button class="bundle-toggle" type="button" aria-expanded="false" aria-controls="bundle-{{ loop.index }}" onclick="toggleBundle(this)" title="Show bundle contents">{{ fb|length }} SKUs ▾</button>
   {% else %}<span class="order-summary" title="{{ o.first_item.seller_sku if o.first_item else '' }}">{{ (o.first_item.seller_sku or '—') if o.first_item else '—' }}</span>{% endif %}
   {% if o.item_count > 1 %}<button class="order-expand" type="button" aria-expanded="false" aria-controls="order-items-{{ loop.index }}" onclick="toggleOrderItems(this)">Show {{ o.item_count }} items ▾</button>{% endif %}
 </td>
 <td><span class="order-summary" title="{{ o.first_item.product_name if o.first_item else '' }}">{{ (o.first_item.product_name or '—') if o.first_item else '—' }}</span>
-  {% if fb %} <button class="bundle-toggle" type="button" aria-expanded="false" onclick="toggleBundle(this)" title="Show bundle contents">▾</button>
-  <div class="bundle-list" hidden>{% for c in fb %}<div title="{{ c.component_title or '' }}">{{ c.component_title or c.component_product_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}</div>{% endif %}
+  {% if fb %} <button class="bundle-toggle" type="button" aria-expanded="false" aria-controls="bundle-{{ loop.index }}" onclick="toggleBundle(this)" title="Show bundle contents">▾</button>{% endif %}
 </td>
 <td>{{ o.total_qty }}</td>
 <td class="nowrap">{{ o.tracking or '—' }}</td>
 </tr>
+{% if fb %}
+<tr id="bundle-{{ loop.index }}" class="bundle-row" hidden>
+<td colspan="6"></td>
+<td><div class="bundle-list">{% for c in fb %}<div class="bundle-line mono">{{ c.component_seller_sku or c.component_sku_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}</div></td>
+<td><div class="bundle-list">{% for c in fb %}<div class="bundle-line" title="{{ c.component_title or '' }}">{{ c.component_title or c.component_product_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}</div></td>
+<td colspan="2"></td>
+</tr>
+{% endif %}
 {% if o.item_count > 1 %}
 <tr id="order-items-{{ loop.index }}" class="order-details-row" hidden>
 <td colspan="10">
@@ -586,11 +596,12 @@ function toggleCreatedSort(){
  u.searchParams.set('page','1');
  location.href=u.toString();
 }
-// Bundle line: one click opens the component list in both Seller SKUs and Products cells.
+// Bundle line: either arrow opens one sub-row whose SKU and product lines are aligned.
 function toggleBundle(button) {
  const row = button.closest('tr');
- const opening = button.getAttribute('aria-expanded') !== 'true';
- row.querySelectorAll('.bundle-list').forEach(list => list.hidden = !opening);
+ const detail = document.getElementById(button.getAttribute('aria-controls'));
+ const opening = detail.hidden;
+ detail.hidden = !opening;
  row.querySelectorAll('.bundle-toggle').forEach(b => {
   b.setAttribute('aria-expanded', String(opening));
   b.textContent = b.textContent.replace(opening ? '▾' : '▴', opening ? '▴' : '▾');
