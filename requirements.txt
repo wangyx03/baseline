@@ -3,3 +3,5 @@ Flask-Login==0.6.3
 gunicorn==26.0.0
 mysql-connector-python==26.7.0
 python-dotenv==1.2.2
+openpyxl
+requests

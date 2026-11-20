@@ -1,8 +1,8 @@
 [Unit]
-Description=Run TikTok Shop LIVE info sync daily at 7:00 Eastern
+Description=Run TikTok Shop LIVE info sync daily at 8:00 Eastern
 
 [Timer]
-OnCalendar=*-*-* 07:00:00 America/New_York
+OnCalendar=*-*-* 08:00:00 America/New_York
 Persistent=true
 
 [Install]

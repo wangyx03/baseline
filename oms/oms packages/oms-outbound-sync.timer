@@ -1,0 +1,9 @@
+[Unit]
+Description=Run OMS parcel outbound sync daily at 8:00 Eastern
+
+[Timer]
+OnCalendar=*-*-* 08:00:00 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target
