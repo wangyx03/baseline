@@ -44,6 +44,8 @@ td.num,th.num{text-align:right}
 .nowrap{white-space:nowrap}
 .name{max-width:520px}
 .zero{color:#b42318;font-weight:600}
+.bundle-tag{display:inline-block;padding:1px 7px;border-radius:999px;background:#f4ebff;color:#6941c6;font-size:11px;font-weight:600;font-family:inherit;margin-bottom:3px}
+.bundle-item{line-height:1.5}
 .pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:14px;font-size:13px}
 .pager a,.pager span.disabled{padding:6px 11px;border:1px solid #d5dbe3;border-radius:6px;text-decoration:none;color:#344054}
 .pager span.disabled{color:#c3c8cf}
@@ -101,6 +103,14 @@ td.num,th.num{text-align:right}
    </div>
   </div>
   <div class="field">
+   <label>Type</label>
+   <select name="type">
+    <option value="">All</option>
+    <option value="single" {% if params.get('type') == 'single' %}selected{% endif %}>Single SKU</option>
+    <option value="bundle" {% if params.get('type') == 'bundle' %}selected{% endif %}>Bundle</option>
+   </select>
+  </div>
+  <div class="field">
    <label>Stock</label>
    <select name="stock">
     <option value="">All</option>
@@ -118,7 +128,7 @@ td.num,th.num{text-align:right}
   </div>
   <div class="field search-row">
    <label>Search</label>
-   <input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Product Name, Seller SKU, Product ID, SKU ID">
+   <input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Product Name, Seller SKU (incl. bundle contents), Product ID, SKU ID">
   </div>
  </div>
  <div class="actions">
@@ -154,7 +164,9 @@ td.num,th.num{text-align:right}
     <td>{{ r.store }}</td>
     <td class="name">{{ r.product_name or '—' }}</td>
     <td><span class="status {{ r.status or '' }}">{{ r.status or '—' }}</span></td>
-    <td class="mono nowrap">{{ r.seller_sku or '—' }}</td>
+    <td class="mono nowrap">{% if r.components %}<span class="bundle-tag">Bundle</span>
+     {% for c in r.components %}<div class="bundle-item" title="{{ c.component_title or '' }}">{{ c.component_seller_sku or c.component_sku_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}
+     {% else %}{{ r.seller_sku or '—' }}{% endif %}</td>
     <td>{{ r.sku_name or '' }}</td>
     <td class="num nowrap">{% if r.retail_price is not none %}{{ '%.2f'|format(r.retail_price) }}{% if r.currency and r.currency != 'USD' %} {{ r.currency }}{% endif %}{% else %}—{% endif %}</td>
     <td class="num {% if not r.stock %}zero{% endif %}">{{ r.stock if r.stock is not none else '—' }}</td>

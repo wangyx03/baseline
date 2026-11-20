@@ -91,6 +91,10 @@ def _filters(args, omit=()):
     if "status" not in omit and statuses:
         where.append("p.status IN (" + ",".join(["%s"] * len(statuses)) + ")")
         params.extend(statuses)
+    kind = args.get("type", "")
+    if kind in ("bundle", "single"):
+        where.append(("" if kind == "bundle" else "NOT ") + "EXISTS (SELECT 1 FROM tkproducts_bundle_items b "
+                     "WHERE b.store_id = s.store_id AND b.bundle_sku_id = s.sku_id)")
     stock = args.get("stock", "")
     if stock == "in":
         where.append("s.stock > 0")
@@ -100,8 +104,11 @@ def _filters(args, omit=()):
     if q:
         like = f"%{q}%"
         where.append("(p.product_name LIKE %s OR s.seller_sku LIKE %s "
-                     "OR p.product_id = %s OR s.sku_id = %s)")
-        params.extend([like, like, q, q])
+                     "OR p.product_id = %s OR s.sku_id = %s "
+                     "OR EXISTS (SELECT 1 FROM tkproducts_bundle_items b "
+                     "WHERE b.store_id = s.store_id AND b.bundle_sku_id = s.sku_id "
+                     "AND b.component_seller_sku LIKE %s))")
+        params.extend([like, like, q, q, like])
     return " AND ".join(where), params
 
 
@@ -177,6 +184,19 @@ def page():
             params + [PER_PAGE, (page_no - 1) * PER_PAGE])
         rows = cur.fetchall()
 
+        # Bundle contents for the SKUs on this page.
+        components = {}
+        if rows:
+            keys = [(r["store_id"], r["sku_id"]) for r in rows]
+            cur.execute(
+                "SELECT store_id, bundle_sku_id, component_seller_sku, component_sku_id, "
+                "component_title, sku_count FROM tkproducts_bundle_items "
+                "WHERE (store_id, bundle_sku_id) IN (" + ",".join(["(%s,%s)"] * len(keys)) + ") "
+                "ORDER BY component_title",
+                [v for k in keys for v in k])
+            for c in cur.fetchall():
+                components.setdefault((c["store_id"], c["bundle_sku_id"]), []).append(c)
+
         # Facet counts (SKUs): every active filter except the facet's own dimension.
         store_where, store_params = _filters(args, omit={"store"})
         cur.execute(f"SELECT p.store_id, COUNT(*) AS n {SKU_FROM} WHERE {store_where} "
@@ -204,6 +224,7 @@ def page():
     for r in rows:
         r["store"] = STORE_NAMES.get(r["store_id"], r["store_id"])
         r["updated_local"] = _fmt(r["update_time"])
+        r["components"] = components.get((r["store_id"], r["sku_id"]), [])
         r["created_local"] = _fmt(r["create_time"])
 
     query = {k: [v for v in vs if v] for k, vs in args.lists() if k != "page"}
