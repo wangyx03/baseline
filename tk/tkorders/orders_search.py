@@ -205,6 +205,20 @@ def _day_bound(value, tz_name, end=False):
         return None
 
 
+# OMS condition of one line item's package, matching the OMS View badges:
+# no_tracking (no tracking number yet), not_in_oms, in_oms, exception, cancelled.
+# Uses the latest OMS outbound order for the tracking number (same as _oms_status).
+OMS_STATES = (('no_tracking', 'No tracking yet'), ('not_in_oms', 'Not in OMS'),
+              ('in_oms', 'In OMS'), ('exception', 'OMS exception'), ('cancelled', 'OMS cancelled'))
+OMS_STATE_SQL = """CASE WHEN TRIM(COALESCE(oi.tracking_number, '')) = '' THEN 'no_tracking'
+  ELSE COALESCE((SELECT CASE WHEN m.is_exception = 1 THEN 'exception'
+                             WHEN m.status = '4' THEN 'cancelled' ELSE 'in_oms' END
+                 FROM oms_outbound_orders m
+                 WHERE m.tracking_number = UPPER(TRIM(oi.tracking_number))
+                 ORDER BY COALESCE(m.oms_update_time, m.oms_create_time, m.synced_at) DESC, m.id DESC
+                 LIMIT 1), 'not_in_oms') END"""
+
+
 def _filters(params, omit=None):
     omit = omit or set()
     parts, args = [], []
@@ -252,6 +266,13 @@ def _filters(params, omit=None):
                               "WHERE live_filter.store_id=o.store_id AND live_filter.order_id=o.order_id "
                               "AND (live_filter.room_id IS NULL OR live_filter.room_id = ''))")
         parts.append('(' + ' OR '.join(conditions) + ')')
+    oms_states = [v for v in dict.fromkeys(params.getlist('oms')) if v in dict(OMS_STATES)]
+    if 'oms' not in omit and oms_states:
+        # An order matches when any of its packages is in one of the selected OMS states.
+        parts.append('EXISTS (SELECT 1 FROM tkorders_items oi '
+                     'WHERE oi.store_id=o.store_id AND oi.order_id=o.order_id '
+                     'AND (' + OMS_STATE_SQL + ') IN (' + ','.join(['%s'] * len(oms_states)) + '))')
+        args.extend(oms_states)
     sku_rule = params.get('sku_rule', 'all')
     sku_match = ("EXISTS (SELECT 1 FROM tkorders_items sku_filter "
                  "WHERE sku_filter.store_id=o.store_id "
@@ -527,6 +548,22 @@ def page():
             if selected not in ('', 'all', '__null__') and selected not in known_lives and LIVE_ID_RE.match(selected):
                 lives.append({'value': selected, 'store_id': None, 'first_local': '', 'n': 0,
                               'title': '', 'creator': ''})
+        # OMS condition facet: orders per package state under all other active filters.
+        oms_where, oms_args = _filters(params, {'oms'})
+        try:
+            oms_rows = _rows(cur, f'''
+                SELECT state, COUNT(DISTINCT store_id, order_id) AS n FROM (
+                    SELECT o.store_id, o.order_id, {OMS_STATE_SQL} AS state
+                    FROM tkorders o
+                    JOIN tkorders_items oi ON oi.store_id=o.store_id AND oi.order_id=o.order_id
+                    {oms_where}) x
+                GROUP BY state''', oms_args)
+        except mysql.connector.errors.Error as exc:
+            if exc.errno != 1146:       # oms_outbound_orders missing: no counts
+                raise
+            oms_rows = []
+        oms_counts = {r['state']: r['n'] for r in oms_rows}
+        oms_options = [{'value': v, 'label': label, 'n': oms_counts.get(v, 0)} for v, label in OMS_STATES]
     finally:
         cur.close()
         conn.close()
@@ -542,6 +579,7 @@ def page():
                            selected_warehouses=params.getlist('warehouse'),
                            lives=lives, no_live_count=no_live_count,
                            selected_lives=params.getlist('live'),
+                           oms_options=oms_options, selected_oms=params.getlist('oms'),
                            params=params, sort_dir=sort_dir, selected_tz=tz_name, tz_label=TIME_ZONES[tz_name], time_zones=TIME_ZONES,
                            export_groups=EXPORT_GROUPS,
                            export_fields=[{k: f[k] for k in ('key', 'label', 'group')} for f in EXPORT_FIELDS.values()],
