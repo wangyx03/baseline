@@ -52,6 +52,23 @@ SCHEMA = [
  REFERENCES tkproducts(store_id,product_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci'''
 ,
+# Virtual bundle (combined SKU) contents. A bundle SKU has no stock of its own;
+# each sale deducts sku_count of every component SKU. Filled from the product
+# detail API (skus[].combined_skus); the search API does not return it.
+'''CREATE TABLE IF NOT EXISTS tkproducts_bundle_items (
+ store_id SMALLINT UNSIGNED NOT NULL,
+ bundle_sku_id VARCHAR(64) NOT NULL,
+ component_sku_id VARCHAR(64) NOT NULL,
+ component_product_id VARCHAR(64) NOT NULL,
+ component_seller_sku VARCHAR(128),
+ component_title VARCHAR(500),
+ sku_count INT UNSIGNED NOT NULL DEFAULT 1,
+ synced_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ PRIMARY KEY (store_id, bundle_sku_id, component_sku_id),
+ KEY idx_tkproducts_bundle_items_component (store_id, component_seller_sku),
+ CONSTRAINT fk_tkproducts_bundle_items_tkproducts_skus FOREIGN KEY (store_id, bundle_sku_id)
+ REFERENCES tkproducts_skus(store_id, sku_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci''',
 '''CREATE TABLE IF NOT EXISTS tkproducts_sync_state (
  store_id SMALLINT UNSIGNED NOT NULL PRIMARY KEY,
  last_full_sync_at DATETIME NULL,
@@ -183,6 +200,10 @@ def save_product(conn, store_id, product):
             inventory_rows = [x for x in inv if isinstance(x, dict)]
             qty = sum(int(x.get('quantity') or 0) for x in inventory_rows)
             inventory_json = json.dumps(inv, ensure_ascii=False)
+            combined = combined_components(sku)
+            if combined:
+                # A bundle has no stock of its own: it can sell as many as its scarcest component allows.
+                qty = min(c['stock'] // c['sku_count'] for c in combined)
 
             cur.execute('''INSERT INTO tkproducts_skus
                 (store_id,product_id,sku_id,seller_sku,sku_name,inventory,
@@ -196,10 +217,57 @@ def save_product(conn, store_id, product):
                  inventory_json,
                  money(price.get('sale_price') or price.get('tax_exclusive_price')),
                  money(price.get('starting_bid_price')),qty,price.get('currency')))
+            if combined is not None:
+                save_bundle_items(cur, store_id, str(sku['id']), combined)
         # Keep SKU rows not returned in a partial response; no destructive reconciliation.
         return len(skus)
     finally:
         cur.close()
+
+
+def combined_components(sku):
+    """Bundle components of one SKU, or None when the response has no combined_skus
+    field (search API) so existing bundle rows are left untouched."""
+    raw = sku.get('combined_skus')
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise ValueError(f"Unexpected combined_skus structure for SKU {sku.get('id')}: expected list")
+    out = []
+    for item in raw:
+        if not isinstance(item, dict) or not item.get('sku_id'):
+            continue
+        inv = item.get('inventory') or []
+        stock = sum(int(x.get('quantity') or 0) for x in inv if isinstance(x, dict))
+        out.append({
+            'sku_id': str(item['sku_id']),
+            'product_id': str(item.get('product_id') or ''),
+            'seller_sku': item.get('seller_sku') or None,
+            'title': (item.get('title') or None),
+            'sku_count': max(1, int(item.get('sku_count') or 1)),
+            'stock': stock,
+        })
+    return out
+
+
+def save_bundle_items(cur, store_id, bundle_sku_id, components):
+    """Replace the component list of one bundle SKU (empty list = not a bundle)."""
+    cur.execute('DELETE FROM tkproducts_bundle_items WHERE store_id=%s AND bundle_sku_id=%s',
+                (store_id, bundle_sku_id))
+    for c in components:
+        cur.execute('''INSERT INTO tkproducts_bundle_items
+            (store_id,bundle_sku_id,component_sku_id,component_product_id,
+             component_seller_sku,component_title,sku_count)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)''',
+            (store_id, bundle_sku_id, c['sku_id'], c['product_id'], c['seller_sku'],
+             (c['title'] or '')[:500] or None, c['sku_count']))
+
+
+def needs_detail(product):
+    """True when a search-API product may be a virtual bundle: bundle SKUs carry no
+    seller SKU and their components are only in the detail API."""
+    return any(isinstance(sku, dict) and not sku.get('seller_sku') and 'combined_skus' not in sku
+               for sku in (product.get('skus') or []))
 
 
 def mark_sync(conn, store_id, products, skus):

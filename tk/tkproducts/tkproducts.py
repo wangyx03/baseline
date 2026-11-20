@@ -26,7 +26,7 @@ SEARCH_PATH = '/product/202502/products/search'
 def sync_shop(conn, shop):
     page_token = ''
     seen = set()
-    pages = products = skus = 0
+    pages = products = skus = details = 0
     while True:
         params = {'page_size': 100}
         if page_token:
@@ -36,11 +36,17 @@ def sync_shop(conn, shop):
         for product in batch:
             if not product.get('id'):
                 raise RuntimeError('Product response missing id; stopping before committing this page')
+            if db.needs_detail(product):
+                # Possible virtual bundle: the search API omits combined_skus.
+                product = fetch_product(shop, product['id'])
+                details += 1
+                time.sleep(0.15)
             skus += db.save_product(conn, shop['store_id'], product)
             products += 1
         conn.commit()
         pages += 1
-        print(f"[{shop['short_name']}] page={pages} products={products} skus={skus}", flush=True)
+        print(f"[{shop['short_name']}] page={pages} products={products} skus={skus} "
+              f"detail_fetches={details}", flush=True)
         next_token = data.get('next_page_token') or ''
         if not next_token:
             break
