@@ -6,8 +6,14 @@
 .small{color:#667085;font-size:12px}
 .filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
 .field label{display:block;font-size:12px;color:#596273;margin-bottom:6px}
-.field input,.field select{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #bbb;border-radius:6px;font:inherit;background:#fff}
+.field input,.field select,.multi-toggle{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #bbb;border-radius:6px;font:inherit;background:#fff}
 .field.wide{grid-column:span 2}
+.multi{position:relative}.multi-toggle{text-align:left;cursor:pointer;color:#202735}
+.multi-panel{position:absolute;z-index:20;top:100%;left:0;right:0;min-width:240px;max-height:320px;overflow:auto;background:#fff;border:1px solid #cbd5e1;box-shadow:0 8px 24px #0002;border-radius:8px;padding:9px}
+.multi-panel[hidden]{display:none}
+.multi-panel label{display:flex;align-items:center;gap:7px;padding:7px 3px;font-size:13px;color:#202735;cursor:pointer;margin:0}
+.multi-panel input[type=checkbox]{width:auto}
+.multi-panel label .facet-count{margin-left:auto;flex-shrink:0;color:#667085;font-size:12px;font-variant-numeric:tabular-nums;padding-left:10px}
 .actions{display:flex;gap:10px;align-items:center;margin-top:15px;flex-wrap:wrap}
 .btn{padding:10px 15px;background:#1769aa;color:#fff;border:0;border-radius:7px;cursor:pointer;text-decoration:none;font:inherit}
 .btn.secondary{background:#edf1f5;color:#344054}
@@ -23,7 +29,6 @@
 .sync-status.ok{color:#248a3d}.sync-status.err{color:#b42318}.sync-status.run{color:#1769aa}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
 .chip{display:inline-block;padding:3px 9px;border-radius:999px;background:#f2f4f7;color:#344054;font-size:12px;white-space:nowrap}
-.chip.store{background:#1f2937;color:#fff}
 .chip.warn{background:#fef3f2;color:#b42318}
 .status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#f2f4f7;color:#344054;white-space:nowrap}
 .status.ACTIVATE{background:#ecfdf3;color:#027a48}
@@ -70,35 +75,34 @@ td.num,th.num{text-align:right}
   {%- endif -%}
  </div>
  <div class="chips">
-  {% for store, items in summary.items() %}
-   <span class="chip store">{{ store }}</span>
-   {% for r in items %}<span class="chip">{{ r.status }} {{ r.n }}</span>{% endfor %}
-  {% endfor %}
   {% if inbox.get('PENDING') or inbox.get('PROCESSING') %}<span class="chip">webhook queue {{ (inbox.get('PENDING') or 0) + (inbox.get('PROCESSING') or 0) }}</span>{% endif %}
   {% if inbox.get('FAILED') %}<span class="chip warn">webhook failed {{ inbox.get('FAILED') }}</span>{% endif %}
  </div>
 </section>
 
-<form method="get" class="panel">
+<form method="get" class="panel" id="filters">
  <div class="filter-grid">
   <div class="field wide">
    <label>Search (name / seller SKU / product ID / SKU ID)</label>
    <input type="text" name="q" value="{{ params.get('q','') }}" placeholder="e.g. 9781234567890">
   </div>
   <div class="field">
-   <label>Store</label>
-   <select name="store">
-    <option value="">All</option>
-    {% for s in stores %}<option value="{{ s }}" {% if params.get('store') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-   </select>
+   <label>Store (multiple)</label>
+   <div class="multi"><button class="multi-toggle" type="button" data-toggle="stores">Store: All ▾</button>
+    <div class="multi-panel" id="stores" hidden>
+     <label><input type="checkbox" class="select-all"> All</label>
+     {% for s in stores %}<label><input type="checkbox" name="store" value="{{ s }}" {% if s in selected_stores %}checked{% endif %}> {{ s }} <span class="facet-count">{{ store_counts.get(s, 0) }}</span></label>{% endfor %}
+    </div>
+   </div>
   </div>
   <div class="field">
-   <label>Status</label>
-   <select name="status">
-    <option value="">All</option>
-    <option value="_not_deleted" {% if params.get('status') == '_not_deleted' %}selected{% endif %}>All except DELETED</option>
-    {% for st in statuses %}<option value="{{ st }}" {% if params.get('status') == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
-   </select>
+   <label>Status (multiple)</label>
+   <div class="multi"><button class="multi-toggle" type="button" data-toggle="statuses">Status: All ▾</button>
+    <div class="multi-panel" id="statuses" hidden>
+     <label><input type="checkbox" class="select-all"> All</label>
+     {% for st in statuses %}<label><input type="checkbox" name="status" value="{{ st.value }}" {% if st.value in selected_statuses %}checked{% endif %}> {{ st.value }} <span class="facet-count">{{ st.n }}</span></label>{% endfor %}
+    </div>
+   </div>
   </div>
   <div class="field">
    <label>Stock</label>
@@ -175,6 +179,49 @@ td.num,th.num{text-align:right}
 </div>
 {% endblock %}
 {% block scripts %}<script>
+// Multi-selects: no query value = All (every box shown checked); All/none submit as no parameter.
+const multiConfig = {stores: 'store', statuses: 'status'};
+const multiLabel = {stores: 'Store', statuses: 'Status'};
+function multiBoxes(id) {
+ return [...document.getElementById(id).querySelectorAll('input[type=checkbox]:not(.select-all)')];
+}
+function syncMulti(id) {
+ const boxes = multiBoxes(id);
+ const count = boxes.filter(x => x.checked).length;
+ const all = document.getElementById(id).querySelector('.select-all');
+ all.checked = boxes.length > 0 && count === boxes.length;
+ all.indeterminate = count > 0 && count < boxes.length;
+ document.querySelector('[data-toggle="' + id + '"]').textContent =
+  multiLabel[id] + ': ' + ((count === 0 || count === boxes.length) ? 'All' : count + ' selected') + ' ▾';
+}
+Object.keys(multiConfig).forEach(id => {
+ const boxes = multiBoxes(id);
+ const selected = new URLSearchParams(location.search).getAll(multiConfig[id]).filter(v => v && v !== 'all');
+ boxes.forEach(box => box.checked = selected.length === 0 || selected.includes(box.value));
+ document.getElementById(id).querySelector('.select-all').addEventListener('change', event => {
+  boxes.forEach(box => box.checked = event.target.checked);
+  syncMulti(id);
+ });
+ boxes.forEach(box => box.addEventListener('change', () => syncMulti(id)));
+ syncMulti(id);
+});
+document.getElementById('filters').addEventListener('submit', () => {
+ Object.keys(multiConfig).forEach(id => {
+  const boxes = multiBoxes(id);
+  const count = boxes.filter(x => x.checked).length;
+  if (count === 0 || count === boxes.length) boxes.forEach(x => x.checked = false);
+ });
+});
+document.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
+ const p = document.getElementById(b.dataset.toggle);
+ const opening = p.hidden;
+ document.querySelectorAll('.multi-panel').forEach(x => x.hidden = true);
+ p.hidden = !opening;
+}));
+document.addEventListener('click', event => {
+ if (!event.target.closest('.multi')) document.querySelectorAll('.multi-panel').forEach(p => p.hidden = true);
+});
+
 (function () {
  const button = document.getElementById("syncButton");
  const storeSelect = document.getElementById("syncStore");

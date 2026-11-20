@@ -72,19 +72,25 @@ def _int(value, default):
         return default
 
 
-def _filters(args):
-    """WHERE clause for the SKU list from the query string."""
+def _multi(args, key, allowed=None):
+    """Selected values of a multi-select; empty list means no restriction."""
+    values = [v for v in args.getlist(key) if v and v != "all" and len(v) <= 64]
+    if allowed is not None:
+        values = [v for v in values if v in allowed]
+    return list(dict.fromkeys(values))
+
+
+def _filters(args, omit=()):
+    """WHERE clause for the SKU list. `omit` skips one dimension (for its facet counts)."""
     where, params = ["1=1"], []
-    store = args.get("store", "")
-    if store in STORE_IDS:
-        where.append("p.store_id = %s")
-        params.append(STORE_IDS[store])
-    status = args.get("status", "")
-    if status == "_not_deleted":
-        where.append("COALESCE(UPPER(p.status),'') <> 'DELETED'")
-    elif status:
-        where.append("p.status = %s")
-        params.append(status)
+    stores = _multi(args, "store", STORE_IDS)
+    if "store" not in omit and stores:
+        where.append("p.store_id IN (" + ",".join(["%s"] * len(stores)) + ")")
+        params.extend(STORE_IDS[s] for s in stores)
+    statuses = _multi(args, "status")
+    if "status" not in omit and statuses:
+        where.append("p.status IN (" + ",".join(["%s"] * len(statuses)) + ")")
+        params.extend(statuses)
     stock = args.get("stock", "")
     if stock == "in":
         where.append("s.stock > 0")
@@ -97,6 +103,10 @@ def _filters(args):
                      "OR p.product_id = %s OR s.sku_id = %s)")
         params.extend([like, like, q, q])
     return " AND ".join(where), params
+
+
+SKU_FROM = ("FROM tkproducts_skus s JOIN tkproducts p "
+            "ON p.store_id = s.store_id AND p.product_id = s.product_id ")
 
 
 def _sync_state(cur):
@@ -167,10 +177,18 @@ def page():
             params + [PER_PAGE, (page_no - 1) * PER_PAGE])
         rows = cur.fetchall()
 
-        cur.execute("SELECT p.store_id, COALESCE(p.status,'(none)') AS status, COUNT(*) AS n "
-                    "FROM tkproducts p GROUP BY p.store_id, p.status ORDER BY n DESC")
-        status_counts = cur.fetchall()
-        statuses = sorted({r["status"] for r in status_counts if r["status"] != "(none)"})
+        # Facet counts (SKUs): every active filter except the facet's own dimension.
+        store_where, store_params = _filters(args, omit={"store"})
+        cur.execute(f"SELECT p.store_id, COUNT(*) AS n {SKU_FROM} WHERE {store_where} "
+                    "GROUP BY p.store_id", store_params)
+        store_counts = {STORE_NAMES.get(r["store_id"]): r["n"] for r in cur.fetchall()}
+
+        status_where, status_params = _filters(args, omit={"status"})
+        cur.execute(f"SELECT p.status, COUNT(*) AS n {SKU_FROM} WHERE {status_where} "
+                    "AND p.status IS NOT NULL GROUP BY p.status ORDER BY n DESC", status_params)
+        statuses = [{"value": r["status"], "n": r["n"]} for r in cur.fetchall()]
+        known = {x["value"] for x in statuses}
+        statuses += [{"value": v, "n": 0} for v in _multi(args, "status") if v not in known]
 
         cur.execute("SELECT status, COUNT(*) AS n FROM tkproducts_webhook_inbox "
                     "WHERE status IN ('PENDING','PROCESSING','FAILED') GROUP BY status")
@@ -188,11 +206,8 @@ def page():
         r["updated_local"] = _fmt(r["update_time"])
         r["created_local"] = _fmt(r["create_time"])
 
-    summary = {}
-    for r in status_counts:
-        summary.setdefault(STORE_NAMES.get(r["store_id"], r["store_id"]), []).append(r)
-
-    query = {k: v for k, v in args.items() if k != "page" and v}
+    query = {k: [v for v in vs if v] for k, vs in args.lists() if k != "page"}
+    query = {k: vs for k, vs in query.items() if vs}
     return render_template(
         "tkproducts.html",
         rows=rows,
@@ -206,7 +221,9 @@ def page():
         sort=sort,
         statuses=statuses,
         stores=list(STORE_IDS),
-        summary=summary,
+        store_counts=store_counts,
+        selected_stores=_multi(args, "store", STORE_IDS),
+        selected_statuses=_multi(args, "status"),
         inbox=inbox,
         sync_state=sync_state,
         sync_running=running,
