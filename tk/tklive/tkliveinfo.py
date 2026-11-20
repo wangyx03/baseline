@@ -7,9 +7,9 @@ columns; the full API record is kept in raw_json in case a field name below
 turns out to differ from the real response.
 
 Run from the baseline root:
-    python tklive/tkliveinfo.py                              # all configured stores, last 7 days
-    python tklive/tkliveinfo.py --store TU --days 30         # backfill one store
-    python tklive/tkliveinfo.py --store TU --days 7 --dump   # print raw API JSON, no DB write
+    python tk/tklive/tkliveinfo.py                              # all configured stores, last 7 days
+    python tk/tklive/tkliveinfo.py --store TU --days 30         # backfill one store
+    python tk/tklive/tkliveinfo.py --store TU --days 7 --dump   # print raw API JSON, no DB write
 
 Scheduled daily by tkliveinfo-sync.timer; the web page calls run_sync() too.
 """
@@ -21,11 +21,11 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]   # baseline/ (this file is in tk/tklive/)
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from tkapi import client as api  # noqa: E402  (loads .env)
+from api.tkapi import client as api  # noqa: E402  (loads .env)
 import db  # noqa: E402  (baseline/db.py: get_db(), session time_zone = UTC)
 
 
@@ -57,7 +57,7 @@ FIELD_KEYS = {
 # ---------------------------------------------------------
 DDL = """
 CREATE TABLE IF NOT EXISTS tkliveinfo (
-    store_id         TINYINT UNSIGNED NOT NULL COMMENT '1=TU, 2=VB (tkapi.client.SHOPS)',
+    store_id         TINYINT UNSIGNED NOT NULL COMMENT '1=TU, 2=VB (api.tkapi.client.SHOPS)',
     live_id          VARCHAR(64)      NOT NULL COMMENT 'joins to order line items live_room_id',
     live_title       VARCHAR(255)     NULL,
     creator_username VARCHAR(64)      NULL,

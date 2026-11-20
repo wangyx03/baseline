@@ -9,9 +9,9 @@ Holds everything that is not order- or product-specific:
     - call_api(): signed request with retries and safe error messages
 
 Used by:
-    tkorders/tiktokorders.py
-    tkproducts/tkproducts.py
-    tkapi/tiktok_webhook.py
+    tk/tkorders/tiktokorders.py
+    tk/tkproducts/tkproducts.py
+    api/tkapi/tiktok_webhook.py
 
 Required .env keys:
     TTS_TU_APP_KEY / TTS_TU_APP_SECRET / TTS_TU_ACCESS_TOKEN /
@@ -30,7 +30,7 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]   # baseline/ (this file is in api/tkapi/)
 ENV_PATH = BASE_DIR / ".env"
 
 load_dotenv(ENV_PATH, override=True)
@@ -38,7 +38,7 @@ load_dotenv(ENV_PATH, override=True)
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from tkapi.envfile import update_env_values
+from api.tkapi.envfile import update_env_values
 
 
 BASE_URL = "https://open-api.tiktokglobalshop.com"

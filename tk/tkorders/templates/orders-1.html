@@ -110,6 +110,7 @@
 .order-bottom-scroll-inner{height:1px}
 .actions .export-fields-btn{margin-left:auto;background:#fff;color:#344054;border:1px solid #d5dbe3;white-space:nowrap}.actions .export-fields-btn:hover{background:#f2f6fa}.export-count{color:#667085;font-size:12px}.actions .download-csv-btn{background:#c9efd4;color:#185b32;border:1px solid #9edbb2;font-weight:600;white-space:nowrap}.actions .download-csv-btn:hover{background:#afe5c0}
 
+.xf-format{display:flex;align-items:center;gap:20px;padding:14px 20px;border-bottom:1px solid #e5e7eb;font-size:14px}.xf-format label{display:flex;align-items:center;gap:7px;cursor:pointer}
 /* Export field picker */
 .xf-backdrop{position:fixed;inset:0;background:#0f172a66;z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px}
 .xf-backdrop[hidden]{display:none}
@@ -155,8 +156,10 @@
 .multi-panel label .facet-count{margin-left:auto;flex-shrink:0;color:#667085;font-size:12px;font-variant-numeric:tabular-nums;padding-left:10px}
 {% endblock %}
 {% block content %}
-<div class="orders-page"><h1>TikTok Orders</h1><p class="small">Read-only order search · Dates shown in selected time zone</p>
+<div class="orders-page"><h1>TikTok Orders</h1>
+<p class="small">Read-only order search · Dates shown in selected time zone</p>
 <form method="get" id="filters" class="filters">
+<input type="hidden" name="view" value="{{ view }}">
 <div class="filter-grid">
 <div class="field"><label>Store (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="stores">Select stores ▾</button><div class="multi-panel" id="stores" hidden><label><input type="checkbox" class="select-all" data-all="stores" checked> All</label><label><input type="checkbox" name="store" value="1" {% if '1' in selected_stores %}checked{% endif %}> Truth Unfolds (TU) <span class="facet-count">{{ store_counts.get(1, 0) }}</span></label><label><input type="checkbox" name="store" value="2" {% if '2' in selected_stores %}checked{% endif %}> Vesper Books (VB) <span class="facet-count">{{ store_counts.get(2, 0) }}</span></label></div></div></div>
 <div class="field"><label>Order Status (multiple)</label><div class="multi"><button class="multi-toggle" type="button" data-toggle="statuses">Select statuses ▾</button><div class="multi-panel" id="statuses" hidden><label><input type="checkbox" class="select-all" data-all="statuses" checked> All</label>{% for s in statuses %}{% if s.value %}<label><input type="checkbox" name="status" value="{{ s.value }}" {% if s.value in selected_statuses %}checked{% endif %}> {{ s.value }} <span class="facet-count">{{ s.n }}</span></label>{% endif %}{% endfor %}</div></div></div>
@@ -204,12 +207,13 @@
 <input type="hidden" name="from" id="ordersFrom" value="{{ params.get('from','') }}">
 <input type="hidden" name="to" id="ordersTo" value="{{ params.get('to','') }}">
 <div class="field orders-search-row"><label>Search</label><input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Order ID, Product ID, Product Name, Seller SKU, Tracking"></div>
-</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn export-fields-btn" type="button" id="openExportFields" title="Choose which columns the CSV contains">⚙ Export Fields <span id="exportFieldCount" class="export-count"></span></button><button class="btn download-csv-btn" type="button" onclick="downloadCsv()">Download CSV</button></div>
+</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn export-fields-btn" type="button" id="openExportFields" title="Choose export format, columns and row grouping" {% if view == 'oms' %}hidden{% endif %}>⚙ Export Fields <span id="exportFieldCount" class="export-count"></span></button><button class="btn download-csv-btn" type="button" onclick="downloadExport()" id="mainDownload" {% if view == 'oms' %}hidden{% endif %}>Download XLSX</button>{% if view == 'oms' %}<span class="small" id="omsLastSync">{% if oms_last_sync %}OMS synced {{ oms_last_sync }}{% endif %}</span><button class="btn export-fields-btn" type="button" id="syncFromOms" title="Pull OMS outbound orders created in the last 2 days (a full 30-day sync runs daily at 5 AM)">⟳ Sync from OMS</button><a class="btn export-fields-btn" href="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}">Download OMS Excel</a><button class="btn create-pkg-btn" type="button" id="createPackages" data-count="{{ pkg_pushable }}" {% if not pkg_ready %}disabled title="OMS table not available — see the message below"{% endif %}>Create package ({{ pkg_pushable }})</button>{% endif %}</div>
 </form>
 <!-- Export field picker. Kept outside the filter form so its checkboxes never reach the search URL. -->
 <div class="xf-backdrop" id="exportFieldsModal" hidden>
  <div class="xf-dialog" role="dialog" aria-modal="true" aria-labelledby="xfTitle">
   <div class="xf-head"><h3 id="xfTitle">Export Fields</h3><button type="button" class="xf-link" id="xfSelectAll">Select all</button><button type="button" class="xf-link" id="xfClearAll">Clear</button><button type="button" class="xf-close" id="xfClose" aria-label="Close">×</button></div>
+  <div class="xf-format"><strong>File Format</strong><label><input type="radio" name="xfFormat" value="xlsx" checked> Excel (.xlsx)</label><label><input type="radio" name="xfFormat" value="csv"> CSV (.csv)</label></div>
   <div class="xf-body">
    <div class="xf-left">
     <input type="search" class="xf-search" id="xfSearch" placeholder="Search fields">
@@ -245,8 +249,59 @@
 .pg-gap { color:#98a2b3; padding:0 2px; }
 .pg-jump { display:flex; align-items:center; gap:6px; margin-left:10px; font-size:13px; color:#596273; }
 .pg-jump input { width:72px; padding:7px 8px; border:1px solid #d5dbe3; border-radius:7px; font:inherit; font-size:13px; }
+/* OMS View packages */
+.actions .create-pkg-btn, .create-pkg-btn { background:#1769aa; color:#fff; border:1px solid #1769aa; font-weight:600; white-space:nowrap; }
+.create-pkg-btn:disabled { background:#cbd5e1; border-color:#cbd5e1; cursor:not-allowed; }
+.pkg-alert { background:#fff7e6; border:1px solid #f5d18b; color:#7a4b00; border-radius:8px; padding:10px 14px; margin:10px 0; font-size:13px; }
+.pkg-badge { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+.pkg-badge.ok { background:#dcfae6; color:#067647; } .pkg-badge.warn { background:#fef0c7; color:#93370d; }
+.pkg-badge.bad { background:#fee4e2; color:#b42318; } .pkg-badge.muted { background:#f2f4f7; color:#667085; }
+.pkg-err { color:#b42318; max-width:220px; }
+/* one toggle opens both columns; every line has the same height so the two columns stay aligned */
+.pkg-col .pkg-line { height:20px; line-height:20px; white-space:nowrap; }
+.pkg-col .pkg-line.small { font-size:12px; color:#667085; font-family:inherit; }
+.pkg-col .pkg-extra { display:none; }
+tr.pkg-open .pkg-col .pkg-extra { display:block; }
+.pkg-col .pkg-same { color:#98a2b3; }
+.pkg-toggle { border:0; background:none; padding:0; color:#1769aa; cursor:pointer; font:inherit; font-size:12px; }
+.pkg-toggle:focus { outline:none; } .pkg-toggle:focus-visible { outline:2px solid #1769aa; outline-offset:2px; } .pkg-more summary { cursor:pointer; color:#1769aa; font-family:inherit; font-size:12px; }
+.pkg-link { border:0; background:none; color:#1f5fbf; cursor:pointer; font:inherit; font-size:12px; padding:0; text-decoration:underline; }
+.pkg-dialog { width:min(760px,100%); } .pkg-body { padding:16px 20px; overflow:auto; font-size:14px; }
+.pkg-body table { font-size:12px; margin-top:10px; }
 </style>
-<section class="results"><h2>{{ total }} matching orders · {{ total_products }} total products (Qty) · {{ unique_tracking }} total packages</h2><div class="table-scroll"><table><thead><tr><th>Store</th><th>Order ID</th><th>Status</th><th>Order Type</th><th><button type="button" class="created-sort" onclick="toggleCreatedSort()" title="Toggle created time sorting">Created ({{ tz_label }}) <span aria-hidden="true">{{ "↑" if sort_dir == "asc" else "↓" }}</span></button></th><th>Warehouse</th><th>Seller SKUs</th><th>Products</th><th>Qty</th><th>Tracking</th></tr></thead><tbody>{% for o in orders %}
+<section class="results"><h2>{{ total }} matching orders · {{ total_products }} total products (Qty) · {{ unique_tracking }} total packages ({{ package_order_count }} orders)</h2><div class="oms-view-switch" style="display:flex;gap:10px;margin:12px 0;align-items:center">
+<a class="btn {{ 'secondary' if view == 'oms' else '' }}" href="{{ view_links.order }}">Orders View</a>
+<a class="btn {{ 'secondary' if view == 'order' else '' }}" href="{{ view_links.oms }}">OMS View</a>
+</div>
+{% if view == 'oms' %}
+{% if not pkg_ready %}<div class="pkg-alert">{% if pkg_error %}Package query failed — MySQL error <span class="mono">{{ pkg_error }}</span>{% else %}Table <span class="mono">oms_outbound_orders</span> not found in the database this site uses. Run <span class="mono">migrations/oms_outbound_orders.sql</span> there.{% endif %}</div>{% endif %}
+<div class="table-scroll"><table><thead><tr><th>Store</th><th>Tracking Number</th><th>Orders</th><th>Seller SKU × Qty</th><th>Qty</th><th>Ship to</th><th>Created ({{ tz_label }})</th><th>OMS</th></tr></thead><tbody id="pkgRows">
+{% for p in orders %}<tr>
+<td>{{ 'TU' if p.store_id == 1 else 'VB' }}</td>
+<td class="mono nowrap">{{ p.tracking }}</td>
+<td class="mono nowrap pkg-col">{% for oid, sku, qty in p.lines %}<div class="pkg-line{{ ' pkg-extra' if not loop.first }}{{ ' pkg-same' if not loop.first and oid == p.lines[loop.index0 - 1][0] }}">{{ oid }}</div>{% endfor %}{% if p.lines|length > 1 %}<div class="pkg-line"><button type="button" class="pkg-toggle" onclick="togglePkgLines(this)" data-more="+{{ p.lines|length - 1 }} more">▶ +{{ p.lines|length - 1 }} more</button></div>{% endif %}</td>
+<td class="mono nowrap pkg-col">{% for oid, sku, qty in p.lines %}<div class="pkg-line{{ ' pkg-extra' if not loop.first }}">{{ sku }} × {{ qty }}</div>{% endfor %}{% if p.lines|length > 1 %}<div class="pkg-line small">{{ p.skus|length }} title{{ 's' if p.skus|length != 1 }} · {{ p.total_qty }} book{{ 's' if p.total_qty != 1 }}</div>{% endif %}</td>
+<td>{{ p.total_qty }}</td>
+<td class="nowrap">{{ p.ship_to or '—' }}</td>
+<td class="nowrap">{{ p.create_time_local or '—' }}</td>
+<td>{% if p.oms %}{% if p.oms.is_exception %}<span class="pkg-badge bad" title="{{ p.oms.exception_desc or '' }}">OMS 异常</span> <span class="small">{{ p.oms.status_name or p.oms.status }}</span>
+<div class="small pkg-err">{{ (p.oms.exception_desc or '')|replace('OMS校验客户的库存不足:', '库存不足: ') }}</div>
+{% elif p.oms.status == '4' %}<span class="pkg-badge muted">OMS 已取消</span>
+{% else %}<span class="pkg-badge ok">In OMS</span>{% if p.oms.status_name or p.oms.status %} <span class="small">{{ p.oms.status_name or p.oms.status }}</span>{% endif %}{% endif %}
+<div class="mono small">{{ p.oms.oms_order_no if not p.oms.oms_order_no.startswith('PUSH:') else 'pushed, awaiting sync' }}{% if p.oms.count > 1 %} · {{ p.oms.count }} OMS orders{% endif %}</div>
+{% else %}<span class="pkg-badge muted">Not in OMS</span>{% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="8">No packages. Orders without a tracking number are not shown here.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="xf-backdrop" id="pkgModal" hidden>
+ <div class="xf-dialog pkg-dialog" role="dialog" aria-modal="true" aria-labelledby="pkgTitle">
+  <div class="xf-head"><h3 id="pkgTitle">Create packages in OMS</h3><button type="button" class="xf-close" id="pkgClose" aria-label="Close">×</button></div>
+  <div class="pkg-body" id="pkgBody"></div>
+  <div class="xf-foot"><span class="small" id="pkgNote"></span><div class="xf-actions"><button type="button" class="btn secondary" id="pkgCancel">Cancel</button><button type="button" class="btn create-pkg-btn" id="pkgConfirm">Create</button></div></div>
+ </div>
+</div>
+{% else %}
+<div class="table-scroll"><table><thead><tr><th>Store</th><th>Order ID</th><th>Status</th><th>Order Type</th><th><button type="button" class="created-sort" onclick="toggleCreatedSort()" title="Toggle created time sorting">Created ({{ tz_label }}) <span aria-hidden="true">{{ "↑" if sort_dir == "asc" else "↓" }}</span></button></th><th>Warehouse</th><th>Seller SKUs</th><th>Products</th><th>Qty</th><th>Tracking</th></tr></thead><tbody>{% for o in orders %}
 <tr class="order-main-row">
 <td>{{ 'TU' if o.store_id==1 else 'VB' }}</td>
 <td class="mono nowrap">{{ o.order_id }}</td>
@@ -271,8 +326,9 @@
 </td></tr>
 {% endif %}
 {% else %}<tr><td colspan="10">No matching orders.</td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
 <div class="order-bottom-scroll" id="orderBottomScroll" aria-label="Horizontal order table scrollbar" tabindex="0"><div class="order-bottom-scroll-inner" id="orderBottomScrollInner"></div></div>
-<div class="paging"><span class="small">Page {{ page }} of {{ pages }}</span>
+<div class="paging" id="pagingBar"><span class="small">Page {{ page }} of {{ pages }}</span>
 <div class="pager">
 {% if page>1 %}<button class="pg-btn" type="button" onclick="goPage(1)" title="First page">«</button><button class="pg-btn" type="button" onclick="goPage({{ page-1 }})">‹ Prev</button>{% endif %}
 {% set win_start = [1, page-2]|max %}{% set win_end = [pages, page+2]|min %}
@@ -571,33 +627,52 @@ const XF_GROUPS = {{ export_groups | tojson }};
 const XF_FIELDS = {{ export_fields | tojson }};
 const XF_DEFAULT = {{ default_export_fields | tojson }};
 const XF_LOCKED = {{ locked_export_fields | tojson }};
-const XF_STORAGE_KEY = 'tkorders.exportFields.v1';
+const XF_VIEW = 'order';
+const XF_STORAGE_KEY = 'tkorders.exportFields.v3.shared';
+const XF_ROWS_KEY = 'tkorders.exportRows.v3.' + XF_VIEW;
+const XF_DEFAULT_VIEW = XF_DEFAULT;
+const XF_LOCKED_VIEW = ['order_id', 'tracking_number'];
+const XF_DEFAULT_ROWS = 'item';
 const XF_BY_KEY = Object.fromEntries(XF_FIELDS.map(f => [f.key, f]));
 const XF_GROUP_LABEL = Object.fromEntries(XF_GROUPS);
 
 function xfNormalize(keys) {
  const out = [...new Set((keys || []).filter(k => XF_BY_KEY[k]))];
- XF_LOCKED.slice().reverse().forEach(k => { if (!out.includes(k)) out.unshift(k); });
+ XF_LOCKED_VIEW.slice().reverse().forEach(k => { if (!out.includes(k)) out.unshift(k); });
  return out;
 }
 function xfLoad() {
+ let saved = null;
  try {
-  const saved = JSON.parse(localStorage.getItem(XF_STORAGE_KEY) || 'null');
-  if (saved && Array.isArray(saved.fields) && saved.fields.length) {
-   return {fields: xfNormalize(saved.fields), rows: saved.rows === 'order' ? 'order' : 'item'};
-  }
+  saved = JSON.parse(localStorage.getItem(XF_STORAGE_KEY) || 'null');
+  if (!saved) saved = JSON.parse(localStorage.getItem('tkorders.exportFields.v2.order') || 'null');
  } catch (e) {}
- return {fields: xfNormalize(XF_DEFAULT), rows: 'item'};
+ const validRows = ['order','item'];
+ let rows = XF_DEFAULT_ROWS;
+ try {
+  const storedRows = localStorage.getItem(XF_ROWS_KEY);
+  if (validRows.includes(storedRows)) rows = storedRows;
+  else if (saved && validRows.includes(saved.rows)) rows = saved.rows;
+ } catch (e) {}
+ return {
+  fields: xfNormalize(saved && Array.isArray(saved.fields) && saved.fields.length ? saved.fields : XF_DEFAULT),
+  rows,
+  format: saved && saved.format === 'csv' ? 'csv' : 'xlsx'
+ };
 }
 function xfStore(state) {
- try { localStorage.setItem(XF_STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+ try {
+  localStorage.setItem(XF_STORAGE_KEY, JSON.stringify({fields:state.fields,format:state.format}));
+  localStorage.setItem(XF_ROWS_KEY, state.rows);
+ } catch (e) {}
 }
-let xfSaved = xfLoad();          // what Download CSV uses
+let xfSaved = xfLoad();          // export settings
 let xfDraft = null;              // working copy while the dialog is open
 
 function xfUpdateButton() {
  document.getElementById('exportFieldCount').textContent =
-  '(' + xfSaved.fields.length + (xfSaved.rows === 'order' ? ' · per order' : '') + ')';
+  '(' + xfSaved.fields.length + ')';
+ document.getElementById('mainDownload').textContent = 'Download ' + xfSaved.format.toUpperCase();
 }
 
 function xfRenderGroups() {
@@ -613,7 +688,7 @@ function xfRenderGroups() {
   all.addEventListener('click', () => {
    const keys = XF_FIELDS.filter(f => f.group === gid).map(f => f.key);
    const allOn = keys.every(k => xfDraft.fields.includes(k));
-   if (allOn) xfDraft.fields = xfDraft.fields.filter(k => !keys.includes(k) || XF_LOCKED.includes(k));
+   if (allOn) xfDraft.fields = xfDraft.fields.filter(k => !keys.includes(k) || XF_LOCKED_VIEW.includes(k));
    else keys.forEach(k => { if (!xfDraft.fields.includes(k)) xfDraft.fields.push(k); });
    xfRefresh();
   });
@@ -623,7 +698,7 @@ function xfRenderGroups() {
    const label = document.createElement('label');
    label.dataset.search = (f.label + ' ' + f.key).toLowerCase();
    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = f.key;
-   if (XF_LOCKED.includes(f.key)) { cb.disabled = true; label.classList.add('locked'); label.title = 'Always included'; }
+   if (XF_LOCKED_VIEW.includes(f.key)) { cb.disabled = true; label.classList.add('locked'); label.title = 'Always included'; }
    cb.addEventListener('change', () => {
     if (cb.checked) { if (!xfDraft.fields.includes(f.key)) xfDraft.fields.push(f.key); }
     else xfDraft.fields = xfDraft.fields.filter(k => k !== f.key);
@@ -648,7 +723,7 @@ function xfRenderSelected() {
   const name = document.createElement('span'); name.textContent = f.label;
   const tag = document.createElement('span'); tag.className = 'xf-tag'; tag.textContent = XF_GROUP_LABEL[f.group];
   li.append(handle, name, tag);
-  if (!XF_LOCKED.includes(key)) {
+  if (!XF_LOCKED_VIEW.includes(key)) {
    const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'xf-remove';
    rm.textContent = '×'; rm.title = 'Remove';
    rm.addEventListener('click', () => { xfDraft.fields = xfDraft.fields.filter(k => k !== key); xfRefresh(); });
@@ -682,7 +757,8 @@ function xfRefresh() {
   const keys = XF_FIELDS.filter(f => f.group === btn.dataset.groupToggle).map(f => f.key);
   btn.textContent = keys.every(k => xfDraft.fields.includes(k)) ? 'Clear group' : 'Select all';
  });
- document.querySelectorAll('input[name=xfRows]').forEach(r => { r.checked = r.value === xfDraft.rows; });
+ document.querySelectorAll('input[name=xfRows]').forEach(r => { r.checked = r.value === xfDraft.rows; r.closest('label').hidden = false; });
+ document.querySelectorAll('input[name=xfFormat]').forEach(r => { r.checked = r.value === xfDraft.format; });
  xfRenderSelected();
 }
 function xfFilter() {
@@ -694,7 +770,7 @@ function xfFilter() {
  });
 }
 function xfOpen() {
- xfDraft = {fields: xfSaved.fields.slice(), rows: xfSaved.rows};
+ xfDraft = {fields: xfSaved.fields.slice(), rows: xfSaved.rows, format: xfSaved.format};
  document.getElementById('xfSearch').value = ''; xfFilter();
  xfRefresh();
  document.getElementById('exportFieldsModal').hidden = false;
@@ -702,12 +778,12 @@ function xfOpen() {
 }
 function xfClose() { document.getElementById('exportFieldsModal').hidden = true; xfDraft = null; }
 function xfCommit() {
- xfSaved = {fields: xfNormalize(xfDraft.fields), rows: xfDraft.rows};
+ xfSaved = {fields: xfNormalize(xfDraft.fields), rows: xfDraft.rows, format: xfDraft.format};
  xfStore(xfSaved); xfUpdateButton(); xfClose();
 }
 
 // Build the export URL from the current (possibly unsubmitted) filters + saved field choice.
-function downloadCsv() {
+function downloadExport() {
  const form = document.getElementById('filters');
  const data = new FormData(form);
  const params = new URLSearchParams();
@@ -718,11 +794,13 @@ function downloadCsv() {
   if (count === 0 || count === boxes.length) skip.add(name);   // All / none = no restriction
  });
  for (const [k, v] of data.entries()) { if (!skip.has(k)) params.append(k, v); }
+ params.delete('view');
  const sort = new URLSearchParams(location.search).get('sort');
  if (sort) params.set('sort', sort);
  xfSaved.fields.forEach(k => params.append('fields', k));
  params.set('rows', xfSaved.rows);
- window.location.href = {{ url_for('orders.export_csv') | tojson }} + '?' + params.toString();
+ const endpoint = xfSaved.format === 'csv' ? {{ url_for('orders.export_csv') | tojson }} : {{ url_for('orders.export_xlsx') | tojson }};
+ window.location.href = endpoint + '?' + params.toString();
 }
 
 xfRenderGroups();
@@ -731,15 +809,120 @@ document.getElementById('openExportFields').addEventListener('click', xfOpen);
 document.getElementById('xfClose').addEventListener('click', xfClose);
 document.getElementById('xfCancel').addEventListener('click', xfClose);
 document.getElementById('xfSave').addEventListener('click', xfCommit);
-document.getElementById('xfDownload').addEventListener('click', () => { xfCommit(); downloadCsv(); });
+document.getElementById('xfDownload').addEventListener('click', () => { xfCommit(); downloadExport(); });
 document.getElementById('xfSearch').addEventListener('input', xfFilter);
 document.getElementById('xfSelectAll').addEventListener('click', () => {
  XF_FIELDS.forEach(f => { if (!xfDraft.fields.includes(f.key)) xfDraft.fields.push(f.key); }); xfRefresh();
 });
 document.getElementById('xfClearAll').addEventListener('click', () => { xfDraft.fields = xfNormalize([]); xfRefresh(); });
-document.getElementById('xfReset').addEventListener('click', () => { xfDraft = {fields: xfNormalize(XF_DEFAULT), rows: 'item'}; xfRefresh(); });
+document.getElementById('xfReset').addEventListener('click', () => { xfDraft = {fields: xfNormalize(XF_DEFAULT_VIEW), rows: XF_DEFAULT_ROWS, format: 'xlsx'}; xfRefresh(); });
 document.querySelectorAll('input[name=xfRows]').forEach(r => r.addEventListener('change', () => { if (r.checked) xfDraft.rows = r.value; }));
+document.querySelectorAll('input[name=xfFormat]').forEach(r => r.addEventListener('change', () => { if (r.checked) xfDraft.format = r.value; }));
 document.getElementById('exportFieldsModal').addEventListener('click', e => { if (e.target.id === 'exportFieldsModal') xfClose(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.getElementById('exportFieldsModal').hidden) xfClose(); });
 // Preserve the dropdown while checking multiple options; submit only on Search Orders.
+function togglePkgLines(btn) {
+ const row = btn.closest('tr');
+ const open = row.classList.toggle('pkg-open');
+ btn.textContent = open ? '▲ less' : '▶ ' + btn.dataset.more;
+}
+{% if view == 'oms' %}
+// ---- OMS View: Create package ---------------------------------------------
+(function () {
+ const CREATE_URL = {{ url_for('orders.create_packages') | tojson }};
+ const CSRF = {{ (csrf_token() if csrf_token is defined else '') | tojson }};
+ const btn = document.getElementById('createPackages');
+ const modal = document.getElementById('pkgModal');
+ const body = document.getElementById('pkgBody');
+ const note = document.getElementById('pkgNote');
+ const confirmBtn = document.getElementById('pkgConfirm');
+ const cancelBtn = document.getElementById('pkgCancel');
+ let done = false;
+ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ async function post(url, data) {
+  const headers = {'Content-Type': 'application/json'};
+  if (CSRF) headers['X-CSRFToken'] = CSRF;
+  const r = await fetch(url, {method: 'POST', headers, credentials: 'same-origin', body: JSON.stringify(data)});
+  let j = null;
+  try { j = await r.json(); } catch (e) { throw new Error('HTTP ' + r.status); }
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+ }
+ function close() { modal.hidden = true; if (done) location.reload(); }
+ if (btn) btn.addEventListener('click', () => {
+  const n = Number(btn.dataset.count) || 0;
+  done = false;
+  if (!n) {
+   body.innerHTML = 'No packages to push. Every package here is already in OMS.';
+   confirmBtn.hidden = true;
+  } else {
+   body.innerHTML = `<p style="margin:0 0 6px"><strong>Create ${n} package${n > 1 ? 's' : ''} in Lingxing OMS?</strong></p>
+     <p class="small" style="margin:0">From the current search: {{ total }} matching orders · {{ unique_tracking }} total packages ({{ package_order_count }} orders).<br>Packages already in OMS are skipped.</p>`;
+   confirmBtn.hidden = false; confirmBtn.disabled = false;
+   confirmBtn.textContent = `Create ${n}`;
+  }
+  note.textContent = ''; cancelBtn.textContent = 'Cancel';
+  modal.hidden = false;
+ });
+ confirmBtn.addEventListener('click', async () => {
+  confirmBtn.disabled = true; confirmBtn.textContent = 'Creating…';
+  try {
+   const j = await post(CREATE_URL, {query: location.search.slice(1)});
+   done = true;
+   const badge = {created: 'ok', failed: 'bad', unknown: 'bad', skipped: 'muted'};
+   const rows = j.results.map(r => `<tr><td>${esc(r.store)}</td><td class="mono">${esc(r.tracking)}</td>
+     <td><span class="pkg-badge ${badge[r.state] || 'muted'}">${esc(r.state)}</span></td><td>${esc(r.message)}</td></tr>`).join('');
+   body.innerHTML = `<p style="margin:0">${Object.entries(j.summary).map(([k, v]) => `<strong>${v}</strong> ${esc(k)}`).join(' · ') || 'Nothing to push.'}</p>
+     ${rows ? `<table><thead><tr><th>Store</th><th>Tracking</th><th>Result</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>` : ''}`;
+   note.textContent = 'Unknown = OMS did not answer clearly. Run the OMS sync before pushing those again.';
+  } catch (e) {
+   done = true;
+   body.innerHTML = `<p class="pkg-err">${esc(e.message)}</p>`;
+  }
+  confirmBtn.hidden = true; cancelBtn.textContent = 'Close';
+ });
+ // Sync from OMS: last 2 days, on every load of OMS View and on each button click.
+ // After a sync only the package rows, paging and button counts are swapped in (no reload loop).
+ const SYNC_URL = {{ url_for('orders.sync_from_oms') | tojson }};
+ const syncBtn = document.getElementById('syncFromOms');
+ const lastSync = document.getElementById('omsLastSync');
+ async function refreshPackages() {
+  const html = await (await fetch(location.href, {credentials: 'same-origin'})).text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  [['pkgRows', 'innerHTML'], ['pagingBar', 'innerHTML'], ['omsLastSync', 'innerHTML']].forEach(([id, prop]) => {
+   const fresh = doc.getElementById(id), cur = document.getElementById(id);
+   if (fresh && cur) cur[prop] = fresh[prop];
+  });
+  const freshBtn = doc.getElementById('createPackages');
+  if (freshBtn && btn) {
+   btn.dataset.count = freshBtn.dataset.count;
+   btn.textContent = freshBtn.textContent;
+   btn.disabled = freshBtn.disabled;
+  }
+ }
+ async function runSync(quick) {
+  if (!syncBtn || syncBtn.disabled) return;
+  syncBtn.disabled = true; syncBtn.textContent = 'Syncing…';
+  const btnWasDisabled = btn ? btn.disabled : true;
+  if (btn) btn.disabled = true;  // don't push on stale data while syncing
+  try {
+   const j = await post(SYNC_URL, {query: location.search.slice(1), quick: quick === true});
+   await refreshPackages();
+   lastSync.title = `Last sync: ${j.saved} OMS orders (${j.start} → ${j.end})`;
+  } catch (e) {
+   if (btn) btn.disabled = btnWasDisabled;
+   lastSync.innerHTML = `<span class="pkg-err">${esc(e.message)}</span>`;  // server message already says "OMS sync failed"
+  }
+  syncBtn.disabled = false; syncBtn.textContent = '⟳ Sync from OMS';
+ }
+ if (syncBtn) {
+  syncBtn.addEventListener('click', () => runSync(true));
+  runSync(true);   // last 2 days; the daily 5 AM job covers 30 days
+ }
+ document.getElementById('pkgClose').addEventListener('click', close);
+ cancelBtn.addEventListener('click', close);
+ modal.addEventListener('click', e => { if (e.target === modal) close(); });
+ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
+})();
+{% endif %}
 </script>{% endblock %}

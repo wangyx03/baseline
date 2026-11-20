@@ -13,8 +13,8 @@ Callback URL:
     /tiktok/vb/callback
 
 Run (from the baseline root):
-    python tkapi/oauth_callback.py
-    or: gunicorn -b 127.0.0.1:8504 tkapi.oauth_callback:app
+    python api/tkapi/oauth_callback.py
+    or: gunicorn -b 127.0.0.1:8504 api.tkapi.oauth_callback:app
 
 流程：
     1. TikTok 回调 code
@@ -55,7 +55,7 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]   # baseline/ (this file is in api/tkapi/)
 
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
@@ -88,10 +88,10 @@ STORE_CONFIG = {
 
 
 # ============================================================
-# .env read / write: shared with tkapi.client (tkapi/envfile.py)
+# .env read / write: shared with api.tkapi.client (api/tkapi/envfile.py)
 # ============================================================
 
-from tkapi.envfile import ENV_FILE, read_env_file, update_env_values
+from api.tkapi.envfile import ENV_FILE, read_env_file, update_env_values
 
 
 # ============================================================

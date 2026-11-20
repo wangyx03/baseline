@@ -8,7 +8,7 @@ import os
 import tempfile
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]   # baseline/ (this file is in api/tkapi/)
 ENV_FILE = BASE_DIR / ".env"
 
 

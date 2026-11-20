@@ -6,4 +6,4 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/baseline
-ExecStart=/opt/baseline/venv/bin/python tklive/tkliveinfo.py --days 7 --source timer
+ExecStart=/opt/baseline/venv/bin/python tk/tklive/tkliveinfo.py --days 7 --source timer

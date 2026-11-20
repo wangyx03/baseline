@@ -5,10 +5,10 @@ Shared ingress for both stores: product events (TTS_PRODUCT_WEBHOOK_TYPES)
 go to tkproducts_webhook_inbox, everything else to tkorders_webhook_inbox.
 
 Run with (from the baseline root):
-    gunicorn -w 2 -b 127.0.0.1:8505 tkapi.tiktok_webhook:app
+    gunicorn -w 2 -b 127.0.0.1:8505 api.tkapi.tiktok_webhook:app
 Workers:
-    python tkorders/tiktokorders.py --webhook-worker
-    python tkproducts/tkproducts.py --webhook-worker
+    python tk/tkorders/tiktokorders.py --webhook-worker
+    python tk/tkproducts/tkproducts.py --webhook-worker
 """
 import hashlib
 import hmac
@@ -18,13 +18,13 @@ import sys
 from pathlib import Path
 from flask import Flask, request, jsonify
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]   # baseline/ (this file is in api/tkapi/)
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from tkapi import client as api          # loads .env
-from tkorders import tkorders_db as db
-from tkproducts import tkproducts_db as products_db
+from api.tkapi import client as api          # loads .env
+from tk.tkorders import tkorders_db as db
+from tk.tkproducts import tkproducts_db as products_db
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024

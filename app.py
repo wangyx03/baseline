@@ -62,8 +62,8 @@ from bookselection.book_selection_generate import (
 from bookselection.weekly_book_modify import weekly_book_modify_bp
 
 from db import get_db
-from tkorders.orders_search import orders_bp
-from tklive.tkliveinfo_web import bp as tkliveinfo_bp
+from tk.tkorders.orders_search import orders_bp
+from tk.tklive.tkliveinfo_web import bp as tkliveinfo_bp
 
 
 BASE_DIR = Path(

@@ -2,11 +2,11 @@
 """Sync TikTok Shop product catalog for TU/VB without touching order services.
 
 Run (from the baseline root):
-     python tkproducts/tkproducts.py --store ALL
-     python tkproducts/tkproducts.py --store TU
-     python tkproducts/tkproducts.py --store VB
-     python tkproducts/tkproducts.py --webhook-worker
-  or python -m tkproducts.tkproducts ...
+     python tk/tkproducts/tkproducts.py --store ALL
+     python tk/tkproducts/tkproducts.py --store TU
+     python tk/tkproducts/tkproducts.py --store VB
+     python tk/tkproducts/tkproducts.py --webhook-worker
+  or python -m tk.tkproducts.tkproducts ...
 """
 import argparse
 import json
@@ -14,12 +14,12 @@ import sys
 import time
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]   # baseline/ (this file is in tk/tkproducts/)
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from tkapi import client as api
-from tkproducts import tkproducts_db as db
+from api.tkapi import client as api
+from tk.tkproducts import tkproducts_db as db
 
 SEARCH_PATH = '/product/202502/products/search'
 

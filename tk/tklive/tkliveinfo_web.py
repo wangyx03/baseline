@@ -6,7 +6,7 @@
 The page calls /refresh once on open; the Refresh button calls it again.
 
 Register in the baseline web app:
-    from tklive.tkliveinfo_web import bp as tkliveinfo_bp
+    from tk.tklive.tkliveinfo_web import bp as tkliveinfo_bp
     app.register_blueprint(tkliveinfo_bp)
 
 Access: users with the TikTok LIVE module (MODULE_TIKTOK_LIVE = 9).
@@ -20,8 +20,8 @@ from flask_login import login_required
 
 import db
 from permissions.permissions import MODULE_TIKTOK_LIVE, module_required
-from tkapi import client as api
-from tklive.tkliveinfo import SyncBusy, init_schema, run_sync
+from api.tkapi import client as api
+from tk.tklive.tkliveinfo import SyncBusy, init_schema, run_sync
 
 bp = Blueprint("tkliveinfo", __name__, url_prefix="/tkliveinfo", template_folder="templates")
 

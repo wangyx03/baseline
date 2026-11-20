@@ -3,21 +3,21 @@
 Multi-store TikTok Shop order sync.
 
 Default behavior (run from the baseline root):
-    python tkorders/tiktokorders.py
-    python -m tkorders.tiktokorders
+    python tk/tkorders/tiktokorders.py
+    python -m tk.tkorders.tiktokorders
 
 This syncs every configured shop (TU / VB), fetches new orders, stores them
 in shared MySQL tables `tkorders` / `tkorders_items`, then runs backfill.
 
 Useful CLI:
-    python tkorders/tiktokorders.py --store TU
-    python tkorders/tiktokorders.py --store VB
-    python tkorders/tiktokorders.py --backfill --store TU
-    python tkorders/tiktokorders.py --refresh <order_id> --store TU
-    python tkorders/tiktokorders.py --history --from 2026-10-01 --to 2026-10-30 --store TU
-    python tkorders/tiktokorders.py --webhook-worker
+    python tk/tkorders/tiktokorders.py --store TU
+    python tk/tkorders/tiktokorders.py --store VB
+    python tk/tkorders/tiktokorders.py --backfill --store TU
+    python tk/tkorders/tiktokorders.py --refresh <order_id> --store TU
+    python tk/tkorders/tiktokorders.py --history --from 2026-10-01 --to 2026-10-30 --store TU
+    python tk/tkorders/tiktokorders.py --webhook-worker
 
-Credentials, signing and call_api() live in tkapi/client.py.
+Credentials, signing and call_api() live in api/tkapi/client.py.
 
 Optional .env:
     TTS_INITIAL_LOOKBACK_SECONDS=3600
@@ -38,12 +38,12 @@ from pathlib import Path
 # Project paths (baseline root must come first on sys.path)
 # ---------------------------------------------------------
 SCRIPT_DIR = Path(__file__).resolve().parent
-BASE_DIR = SCRIPT_DIR.parent
+BASE_DIR = SCRIPT_DIR.parents[1]   # baseline/ (this file is in tk/tkorders/)
 
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from tkapi.client import (
+from api.tkapi.client import (
     SHOPS,
     TikTokAPIError,
     call_api,
@@ -51,7 +51,7 @@ from tkapi.client import (
     selected_shops,
     shop_is_configured,
 )
-from tkorders import tkorders_db as db
+from tk.tkorders import tkorders_db as db
 
 
 INITIAL_LOOKBACK_SECONDS = int(
