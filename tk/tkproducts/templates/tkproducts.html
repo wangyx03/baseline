@@ -37,7 +37,6 @@ th{white-space:nowrap;background:#f8fafc}
 td.num,th.num{text-align:right}
 .mono{font-family:ui-monospace,monospace;font-size:12px}
 .nowrap{white-space:nowrap}
-.thumb{width:44px;height:44px;object-fit:cover;border-radius:6px;background:#f2f4f7;display:block}
 .name{max-width:520px}
 .zero{color:#b42318;font-weight:600}
 .pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:14px;font-size:13px}
@@ -133,7 +132,6 @@ td.num,th.num{text-align:right}
  <table>
   <thead>
    <tr>
-    <th></th>
     <th>Store</th>
     <th>Product</th>
     <th>Status</th>
@@ -149,7 +147,6 @@ td.num,th.num{text-align:right}
   <tbody>
   {% for r in rows %}
    <tr>
-    <td>{% if r.image_url %}<img class="thumb" src="{{ r.image_url }}" loading="lazy" alt="">{% else %}<span class="thumb"></span>{% endif %}</td>
     <td>{{ r.store }}</td>
     <td class="name">{{ r.product_name or '—' }}</td>
     <td><span class="status {{ r.status or '' }}">{{ r.status or '—' }}</span></td>
@@ -162,7 +159,7 @@ td.num,th.num{text-align:right}
     <td class="nowrap">{{ r.updated_local or '—' }}</td>
    </tr>
   {% else %}
-   <tr><td colspan="11">No products match these filters.{% if not sync_state or sync_state[0].last_full_sync == 'never' %} Run a sync to load the catalog.{% endif %}</td></tr>
+   <tr><td colspan="10">No products match these filters.{% if not sync_state or sync_state[0].last_full_sync == 'never' %} Run a sync to load the catalog.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
  </table>

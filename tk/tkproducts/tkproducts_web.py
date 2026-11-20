@@ -158,7 +158,7 @@ def page():
         page_no = min(page_no, pages)
 
         cur.execute(
-            "SELECT p.store_id, p.product_id, p.product_name, p.status, p.image_url, "
+            "SELECT p.store_id, p.product_id, p.product_name, p.status, "
             "p.create_time, p.update_time, s.sku_id, s.seller_sku, s.sku_name, "
             "s.retail_price, s.currency, s.stock "
             "FROM tkproducts_skus s JOIN tkproducts p "
