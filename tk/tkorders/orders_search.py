@@ -329,11 +329,14 @@ def page():
     cur = conn.cursor(dictionary=True)
     try:
         total = _rows(cur, 'SELECT COUNT(*) AS n FROM tkorders o' + where, args)[0]['n']
-        # Sum all line-item quantities for every matching order, not just the current page.
+        # Total physical items for every matching order, not just the current page.
+        # A virtual bundle line counts quantity x (books in the bundle).
         # EXISTS / correlated aggregate prevents duplicating orders with multiple items.
-        total_products = _rows(cur, """
+        total_items = _rows(cur, """
             SELECT COALESCE(SUM(
-                (SELECT COALESCE(SUM(COALESCE(i.quantity, 0)), 0)
+                (SELECT COALESCE(SUM(COALESCE(i.quantity, 0) * COALESCE(
+                            (SELECT SUM(b.sku_count) FROM tkproducts_bundle_items b
+                             WHERE b.store_id = i.store_id AND b.bundle_sku_id = i.sku_id), 1)), 0)
                  FROM tkorders_items i
                  WHERE i.store_id = o.store_id AND i.order_id = o.order_id)
             ), 0) AS n
@@ -446,12 +449,14 @@ def page():
             item_args = [v for pair in keys for v in pair]
             item_rows = _rows(cur, f"""
                 SELECT store_id, order_id, line_item_id, product_name, product_id,
-                       seller_sku, quantity
+                       sku_id, seller_sku, quantity
                 FROM tkorders_items
                 WHERE (store_id, order_id) IN ({placeholders})
                 ORDER BY store_id, order_id, id
             """, item_args)
+            components = _bundle_components(cur, item_rows)
             for item in item_rows:
+                item['components'] = components.get((item['store_id'], item['sku_id']), [])
                 items_by_order.setdefault((item['store_id'], item['order_id']), []).append(item)
         for order in (orders if view == 'order' else []):
             line_items = items_by_order.get((order['store_id'], order['order_id']), [])
@@ -525,7 +530,7 @@ def page():
     finally:
         cur.close()
         conn.close()
-    return render_template('orders.html', orders=orders, total=total, total_products=total_products, unique_tracking=unique_tracking, package_order_count=package_order_count, page=page_number,
+    return render_template('orders.html', orders=orders, total=total, total_items=total_items, unique_tracking=unique_tracking, package_order_count=package_order_count, page=page_number,
                            pages=max(1, (page_total + per_page - 1) // per_page),
                            pkg_ready=pkg_ready, pkg_pushable=pkg_pushable, pkg_error=pkg_error, oms_last_sync=oms_last_sync,
                            view_links=_view_links(),
@@ -626,12 +631,18 @@ def _package_page(cur, tracking_where, args, sort_dir, per_page, page_number, di
 
 
 def _package_contents(cur, keys):
-    """{(store_id, tracking): [line items + order recipient fields]} for whole packages."""
+    """{(store_id, tracking): [line items + order recipient fields]} for whole packages.
+
+    Virtual bundle lines are replaced by their component SKUs (quantity x sku_count),
+    so OMS View, Create package and Download OMS Excel all ship the real books.
+    A bundle whose contents are not synced yet keeps its empty Seller SKU and is
+    therefore skipped by the push / export rules.
+    """
     if not keys:
         return {}
     placeholders = ','.join(['(%s,%s)'] * len(keys))
     lines = _rows(cur, f"""
-        SELECT i.store_id, i.tracking_number, i.order_id, i.seller_sku, i.quantity,
+        SELECT i.store_id, i.tracking_number, i.order_id, i.sku_id, i.seller_sku, i.quantity,
                o.warehouse_id, o.buyer_email, o.recipient_name, o.recipient_phone, o.recipient_state,
                o.recipient_city, o.recipient_postal_code, o.recipient_address_line1,
                o.recipient_address_line2, o.delivery_instruction
@@ -640,9 +651,18 @@ def _package_contents(cur, keys):
         WHERE (i.store_id, i.tracking_number) IN ({placeholders})
         ORDER BY o.create_time ASC, o.order_id ASC, i.id ASC
     """, [v for key in keys for v in key])
+    components = _bundle_components(cur, lines)
     out = {}
     for li in lines:
-        out.setdefault((li['store_id'], li['tracking_number']), []).append(li)
+        parts = components.get((li['store_id'], li['sku_id'])) or []
+        if parts:
+            qty = int(li['quantity'] or 0)
+            expanded = [dict(li, seller_sku=c['component_seller_sku'],
+                             quantity=qty * int(c['sku_count'] or 1), bundle_sku_id=li['sku_id'])
+                        for c in parts]
+        else:
+            expanded = [li]
+        out.setdefault((li['store_id'], li['tracking_number']), []).extend(expanded)
     return out
 
 
@@ -694,6 +714,33 @@ def create_packages():
     for r in results:
         summary[r['state']] = summary.get(r['state'], 0) + 1
     return jsonify(results=results, summary=summary)
+
+
+def _bundle_components(cur, items):
+    """{(store_id, sku_id): [component rows]} for line items that are virtual bundles.
+
+    Bundle contents come from tkproducts_bundle_items (filled by the product sync);
+    a bundle line item itself has no seller SKU.
+    """
+    keys = list({(i['store_id'], i['sku_id']) for i in items if i.get('sku_id')})
+    if not keys:
+        return {}
+    try:
+        rows = _rows(cur, f"""
+            SELECT store_id, bundle_sku_id, component_seller_sku, component_sku_id,
+                   component_product_id, component_title, sku_count
+            FROM tkproducts_bundle_items
+            WHERE (store_id, bundle_sku_id) IN ({','.join(['(%s,%s)'] * len(keys))})
+            ORDER BY component_title
+        """, [v for k in keys for v in k])
+    except mysql.connector.errors.Error as exc:
+        if exc.errno == 1146:       # table not created yet: show orders without bundle detail
+            return {}
+        raise
+    out = {}
+    for r in rows:
+        out.setdefault((r['store_id'], r['bundle_sku_id']), []).append(r)
+    return out
 
 
 OMS_SYNC_SCRIPT = Path(__file__).resolve().parents[2] / 'oms' / 'oms packages' / 'oms_outbound_sync.py'

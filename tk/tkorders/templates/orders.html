@@ -238,6 +238,11 @@
 .order-summary { display:block; max-width:270px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .order-expand { border:1px solid #d5dbe3; background:#fff; border-radius:6px; padding:5px 9px; cursor:pointer; font:inherit; color:#1769aa; margin-top:5px; white-space:nowrap; }
 .order-expand:hover { background:#eef5fc; }
+.bundle-tag { display:inline-block; padding:1px 7px; border-radius:999px; background:#f4ebff; color:#6941c6; font-size:11px; font-weight:600; }
+.bundle-toggle { border:1px solid #d5dbe3; background:#fff; border-radius:6px; padding:1px 7px; cursor:pointer; font:inherit; font-size:12px; color:#1769aa; }
+.bundle-toggle:hover { background:#eef5fc; }
+.bundle-list { margin-top:5px; padding-left:8px; border-left:2px solid #e9d7fe; font-size:12px; line-height:1.6; }
+.bundle-sub { font-size:12px; color:#596273; padding-left:8px; border-left:2px solid #e9d7fe; }
 .order-details-row td { background:#f8fafc; padding:12px 18px; }
 .order-details-table { width:100%; border-collapse:collapse; font-size:13px; }
 .order-details-table th,.order-details-table td { padding:8px 10px; border-bottom:1px solid #e5e7eb; }
@@ -269,7 +274,7 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
 .pkg-dialog { width:min(760px,100%); } .pkg-body { padding:16px 20px; overflow:auto; font-size:14px; }
 .pkg-body table { font-size:12px; margin-top:10px; }
 </style>
-<section class="results"><h2>{{ total }} matching orders · {{ total_products }} total products (Qty) · {{ unique_tracking }} total packages ({{ package_order_count }} orders)</h2><div class="oms-view-switch" style="display:flex;gap:10px;margin:12px 0;align-items:center">
+<section class="results"><h2>{{ total }} matching orders · {{ total_items }} total items · {{ unique_tracking }} total packages ({{ package_order_count }} orders)</h2><div class="oms-view-switch" style="display:flex;gap:10px;margin:12px 0;align-items:center">
 <a class="btn {{ 'secondary' if view == 'oms' else '' }}" href="{{ view_links.order }}">Orders View</a>
 <a class="btn {{ 'secondary' if view == 'order' else '' }}" href="{{ view_links.oms }}">OMS View</a>
 </div>
@@ -309,11 +314,17 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
 <td>{{ o.order_type or '—' }}</td>
 <td class="nowrap">{{ o.create_time_local or '—' }}</td>
 <td>{{ o.warehouse_name or o.warehouse_id or '—' }}</td>
+{% set fb = o.first_item.components if o.first_item else [] %}
 <td>
-  <span class="order-summary" title="{{ o.first_item.seller_sku if o.first_item else '' }}">{{ (o.first_item.seller_sku or '—') if o.first_item else '—' }}</span>
+  {% if fb %}<span class="bundle-tag">Bundle</span> <button class="bundle-toggle" type="button" aria-expanded="false" onclick="toggleBundle(this)" title="Show bundle contents">{{ fb|length }} SKUs ▾</button>
+  <div class="bundle-list" hidden>{% for c in fb %}<div class="mono">{{ c.component_seller_sku or c.component_sku_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}</div>
+  {% else %}<span class="order-summary" title="{{ o.first_item.seller_sku if o.first_item else '' }}">{{ (o.first_item.seller_sku or '—') if o.first_item else '—' }}</span>{% endif %}
   {% if o.item_count > 1 %}<button class="order-expand" type="button" aria-expanded="false" aria-controls="order-items-{{ loop.index }}" onclick="toggleOrderItems(this)">Show {{ o.item_count }} items ▾</button>{% endif %}
 </td>
-<td><span class="order-summary" title="{{ o.first_item.product_name if o.first_item else '' }}">{{ (o.first_item.product_name or '—') if o.first_item else '—' }}</span></td>
+<td><span class="order-summary" title="{{ o.first_item.product_name if o.first_item else '' }}">{{ (o.first_item.product_name or '—') if o.first_item else '—' }}</span>
+  {% if fb %} <button class="bundle-toggle" type="button" aria-expanded="false" onclick="toggleBundle(this)" title="Show bundle contents">▾</button>
+  <div class="bundle-list" hidden>{% for c in fb %}<div title="{{ c.component_title or '' }}">{{ c.component_title or c.component_product_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}</div>{% endif %}
+</td>
 <td>{{ o.total_qty }}</td>
 <td class="nowrap">{{ o.tracking or '—' }}</td>
 </tr>
@@ -322,7 +333,7 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
 <td colspan="10">
   <strong>Order {{ o.order_id }} · {{ o.item_count }} line items</strong>
   <table class="order-details-table"><thead><tr><th>Seller SKU</th><th>Product</th><th>Product ID</th><th>Quantity</th></tr></thead>
-  <tbody>{% for item in o.line_items %}<tr><td>{{ item.seller_sku or '—' }}</td><td>{{ item.product_name or '—' }}</td><td>{{ item.product_id or '—' }}</td><td>{{ item.quantity }}</td></tr>{% endfor %}</tbody></table>
+  <tbody>{% for item in o.line_items %}<tr><td>{% if item.components %}<span class="bundle-tag">Bundle</span>{% for c in item.components %}<div class="mono">{{ c.component_seller_sku or c.component_sku_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}{% else %}{{ item.seller_sku or '—' }}{% endif %}</td><td>{{ item.product_name or '—' }}{% if item.components %}{% for c in item.components %}<div class="bundle-sub">{{ c.component_title or c.component_product_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}{% endif %}</td><td>{{ item.product_id or '—' }}</td><td>{{ item.quantity }}</td></tr>{% endfor %}</tbody></table>
 </td></tr>
 {% endif %}
 {% else %}<tr><td colspan="10">No matching orders.</td></tr>{% endfor %}</tbody></table></div>
@@ -574,6 +585,16 @@ function toggleCreatedSort(){
  u.searchParams.set('sort', {{ ('"desc"' if sort_dir == 'asc' else '"asc"') | safe }});
  u.searchParams.set('page','1');
  location.href=u.toString();
+}
+// Bundle line: one click opens the component list in both Seller SKUs and Products cells.
+function toggleBundle(button) {
+ const row = button.closest('tr');
+ const opening = button.getAttribute('aria-expanded') !== 'true';
+ row.querySelectorAll('.bundle-list').forEach(list => list.hidden = !opening);
+ row.querySelectorAll('.bundle-toggle').forEach(b => {
+  b.setAttribute('aria-expanded', String(opening));
+  b.textContent = b.textContent.replace(opening ? '▾' : '▴', opening ? '▴' : '▾');
+ });
 }
 function toggleOrderItems(button) {
  const row=document.getElementById(button.getAttribute('aria-controls'));
