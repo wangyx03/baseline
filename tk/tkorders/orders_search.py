@@ -114,6 +114,7 @@ _EXPORT_FIELD_DEFS = [
     ('line_item_id', 'Line Item ID', 'item', 'line_item_id', 'text'),
     ('product_id', 'Product ID', 'item', 'product_id', 'text'),
     ('seller_sku', 'Seller SKU', 'item', 'seller_sku', 'text'),
+    ('bundle_name', 'Bundle', 'item', 'bundle_name', 'text'),
     ('product_name', 'Product Name', 'item', 'product_name', 'text'),
     ('quantity', 'Qty', 'item', 'quantity', 'text'),
     ('sku_id', 'SKU ID', 'item', 'sku_id', 'text'),
@@ -160,6 +161,35 @@ def _export_selection(params):
     return keys, rows
 
 
+# Virtual bundles in exports: a bundle line item is joined to tkproducts_bundle_items
+# and becomes one row per component book. SKU / product columns show the component,
+# Qty = line quantity x books per bundle, and the line's money columns stay on the
+# first component row only so totals are not counted twice. "Bundle" shows the
+# bundle's own product name on those rows.
+BUNDLE_JOIN = ('LEFT JOIN tkproducts_bundle_items {b} '
+               'ON {b}.store_id={i}.store_id AND {b}.bundle_sku_id={i}.sku_id')
+_BUNDLE_COMPONENT_COLS = {'seller_sku': 'component_seller_sku', 'product_name': 'component_title',
+                          'product_id': 'component_product_id', 'sku_id': 'component_sku_id'}
+_BUNDLE_MONEY_COLS = {'original_price', 'sale_price', 'platform_discount', 'seller_discount',
+                      'sales_tax_amount'}
+
+
+def _item_col_expr(col, i, b):
+    """Line-item column expression aware of bundle components (aliases i / b)."""
+    if col in _BUNDLE_COMPONENT_COLS:
+        return f'COALESCE({b}.{_BUNDLE_COMPONENT_COLS[col]}, {i}.{col})'
+    if col == 'quantity':
+        return f'COALESCE({i}.quantity, 0) * COALESCE({b}.sku_count, 1)'
+    if col == 'bundle_name':
+        return f'IF({b}.bundle_sku_id IS NULL, NULL, {i}.product_name)'
+    if col in _BUNDLE_MONEY_COLS:
+        first = (f'({b}.component_sku_id IS NULL OR {b}.component_sku_id = '
+                 f'(SELECT MIN(b2.component_sku_id) FROM tkproducts_bundle_items b2 '
+                 f'WHERE b2.store_id={b}.store_id AND b2.bundle_sku_id={b}.bundle_sku_id))')
+        return f'IF({first}, {i}.{col}, NULL)'
+    return f'{i}.{col}'
+
+
 def _export_select_expr(field, rows):
     """SQL expression for one whitelisted export field."""
     col, kind = field['col'], field['kind']
@@ -168,16 +198,17 @@ def _export_select_expr(field, rows):
             return 'COALESCE(w.warehouse, o.warehouse_id)'
         return 'o.' + col
     if rows == 'item':
-        return 'i.' + col
-    # One row per order: fold all line items of the order into one cell.
+        return _item_col_expr(col, 'i', 'b')
+    # One row per order: fold all line items (bundles as their books) into one cell.
+    expr = _item_col_expr(col, 'x', 'xb')
     if col == 'quantity':
-        agg = 'SUM(COALESCE(x.quantity, 0))'
+        agg = f'SUM({expr})'
     else:
-        inner = ("IF(x.{c} IS NULL, '', IF(x.{c}, 'Yes', 'No'))" if kind == 'bool'
-                 else "COALESCE(x.{c}, '')").format(c=col)
-        agg = f"GROUP_CONCAT({inner} ORDER BY x.id SEPARATOR ' | ')"
-    return (f'(SELECT {agg} FROM tkorders_items x '
-            'WHERE x.store_id=o.store_id AND x.order_id=o.order_id)')
+        inner = (f"IF({expr} IS NULL, '', IF({expr}, 'Yes', 'No'))" if kind == 'bool'
+                 else f"COALESCE({expr}, '')")
+        agg = f"GROUP_CONCAT({inner} ORDER BY x.id, xb.component_title SEPARATOR ' | ')"
+    return (f'(SELECT {agg} FROM tkorders_items x ' + BUNDLE_JOIN.format(i='x', b='xb') +
+            ' WHERE x.store_id=o.store_id AND x.order_id=o.order_id)')
 
 
 def _effective_params(params):
@@ -890,10 +921,11 @@ def _export_response(fmt):
         FROM tkorders o
         LEFT JOIN tkorders_items i
           ON i.store_id=o.store_id AND i.order_id=o.order_id
+        """ + BUNDLE_JOIN.format(i='i', b='b') + """
         LEFT JOIN warehouses w
           ON w.store_id=o.store_id AND w.warehouse_id=o.warehouse_id
         """
-        order_sql = f" ORDER BY o.create_time {sort_dir}, o.order_id {sort_dir}, i.id ASC"
+        order_sql = f" ORDER BY o.create_time {sort_dir}, o.order_id {sort_dir}, i.id ASC, b.component_title ASC"
     else:
         from_sql = """
         FROM tkorders o
