@@ -10,6 +10,7 @@ Signing/transport reuse api/omsapi/client.py (OmsClient).
     OMS_PKG_CHANNEL=Upload_Shipping_Label_SD
     OMS_PKG_CARRIER=usps                    used when the tracking prefix is not recognised
     OMS_PKG_IS_SUBMIT=0                     0 = save as draft (待提交)
+    OMS_PKG_SALES_PLATFORM=TikTok           销售平台, must match an OMS platform name
 """
 import json
 import os
@@ -57,6 +58,7 @@ def settings():
         'channel': os.environ.get('OMS_PKG_CHANNEL', 'Upload_Shipping_Label_SD'),
         'carrier': os.environ.get('OMS_PKG_CARRIER', 'usps'),
         'is_submit': 1 if os.environ.get('OMS_PKG_IS_SUBMIT', '0') == '1' else 0,
+        'sales_platform': os.environ.get('OMS_PKG_SALES_PLATFORM', 'TikTok').strip(),
     }
 
 
@@ -100,8 +102,10 @@ def build_payload(tracking, lines, cfg):
     payload = {
         'whCode': wh_code_for(first.get('warehouse_id'), cfg),
         'thirdOrderNo': tracking,                         # required, globally unique -> tracking
-        'platformOrderNo': ','.join(order_ids)[:255],     # TikTok order IDs in this package
+        # OMS accepts one platform order number only: the first (earliest) order in the package.
+        'platformOrderNo': order_ids[0] if order_ids else '',
         'store': STORE_NAMES.get(first.get('store_id'), ''),
+        'salesPlatform': cfg['sales_platform'],
         'subOrderType': 1,                                # 1 = product outbound (小包)
         'isSubmit': cfg['is_submit'],                     # 0 = draft
         'logisticsChannel': cfg['channel'],
@@ -109,7 +113,6 @@ def build_payload(tracking, lines, cfg):
         'logisticsCarrier': carrier_for(tracking, cfg['carrier']),
         'receiver': first.get('recipient_name') or '',
         'telephone': first.get('recipient_phone') or '',
-        'email': first.get('buyer_email') or '',
         'countryRegionCode': 'US',
         'provinceCode': US_STATES.get(state.lower(), ''),
         'provinceName': state,
