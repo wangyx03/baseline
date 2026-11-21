@@ -241,6 +241,10 @@
 .order-expand { border:1px solid #d5dbe3; background:#fff; border-radius:6px; padding:5px 9px; cursor:pointer; font:inherit; color:#1769aa; margin-top:5px; white-space:nowrap; }
 .order-expand:hover { background:#eef5fc; }
 .pkg-pick { width:28px; text-align:center; }
+.pkg-opts { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; padding:0 22px 16px; }
+.pkg-opts[hidden] { display:none; }
+.pkg-opts label { display:flex; flex-direction:column; gap:5px; font-size:12px; color:#596273; }
+.pkg-opts select { padding:8px 9px; border:1px solid #d5dbe3; border-radius:7px; font:inherit; font-size:13px; color:#202735; background:#fff; }
 .pkg-pick input { width:auto; cursor:pointer; }
 .bundle-tag { display:inline-block; padding:1px 7px; border-radius:999px; background:#f4ebff; color:#6941c6; font-size:11px; font-weight:600; }
 .bundle-toggle { border:1px solid #d5dbe3; background:#fff; border-radius:6px; padding:1px 7px; cursor:pointer; font:inherit; font-size:12px; color:#1769aa; }
@@ -311,6 +315,14 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
  <div class="xf-dialog pkg-dialog" role="dialog" aria-modal="true" aria-labelledby="pkgTitle">
   <div class="xf-head"><h3 id="pkgTitle">Create packages in OMS</h3><button type="button" class="xf-close" id="pkgClose" aria-label="Close">×</button></div>
   <div class="pkg-body" id="pkgBody"></div>
+  {% if push_options %}
+  <div class="pkg-opts" id="pkgOpts">
+   <label>Warehouse<select id="pkgOptWh"><option value="">Auto (by TikTok warehouse)</option>{% for w in push_options.warehouses %}<option value="{{ w.code }}">{{ w.name }} · {{ w.code }}</option>{% endfor %}</select></label>
+   <label>Shipping service<select id="pkgOptChannel">{% for c in push_options.channels %}<option value="{{ c.code }}" data-wh="{{ c.warehouses|join(';') }}" {% if c.code == push_defaults.channel %}selected{% endif %}>{{ c.name }} ({{ c.code }})</option>{% endfor %}{% if push_defaults.channel not in push_options.channels|map(attribute='code')|list %}<option value="" selected>{{ push_defaults.channel }} (default)</option>{% endif %}</select></label>
+   <label>Sales platform<select id="pkgOptPlatform">{% for name in push_options.platforms %}<option value="{{ name }}" {% if name == push_defaults.sales_platform %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+   <label>Store<select id="pkgOptStore"><option value="">Auto (by package store)</option>{% for name in push_options.stores %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select></label>
+  </div>
+  {% endif %}
   <div class="xf-foot"><span class="small" id="pkgNote"></span><div class="xf-actions"><button type="button" class="btn secondary" id="pkgCancel">Cancel</button><button type="button" class="btn create-pkg-btn" id="pkgConfirm">Create</button></div></div>
  </div>
 </div>
@@ -907,6 +919,26 @@ function togglePkgLines(btn) {
  document.getElementById('pkgRows').addEventListener('change', e => { if (e.target.classList.contains('pkg-pick-box')) updatePick(); });
  updatePick();
  let sending = null;
+ // Dialog choices: Warehouse / Shipping service / Sales platform / Store ('' = automatic).
+ const opts = document.getElementById('pkgOpts');
+ const optWh = document.getElementById('pkgOptWh'), optCh = document.getElementById('pkgOptChannel');
+ function pushOptions() {
+  if (!opts) return {};
+  return {wh_code: optWh.value, channel: optCh.value,
+          sales_platform: document.getElementById('pkgOptPlatform').value,
+          store: document.getElementById('pkgOptStore').value};
+ }
+ // Only offer shipping services bound to the chosen warehouse.
+ function filterChannels() {
+  if (!optWh || !optCh) return;
+  const wh = optWh.value;
+  [...optCh.options].forEach(o => { o.hidden = !!wh && !!o.dataset.wh && !o.dataset.wh.split(';').includes(wh); });
+  if (optCh.selectedOptions[0] && optCh.selectedOptions[0].hidden) {
+   const first = [...optCh.options].find(o => !o.hidden);
+   if (first) optCh.value = first.value;
+  }
+ }
+ if (optWh) optWh.addEventListener('change', filterChannels);
  if (btn) btn.addEventListener('click', () => {
   const chosen = picked();
   const partial = chosen.length < pickBoxes().length;
@@ -917,29 +949,31 @@ function togglePkgLines(btn) {
    body.innerHTML = 'No packages to push. Every package here is already in OMS.';
    confirmBtn.hidden = true;
   } else if (sending) {
-   body.innerHTML = `<p style="margin:0 0 6px"><strong>Create ${n} selected package${n > 1 ? 's' : ''} in Lingxing OMS?</strong></p>
+   body.innerHTML = `<p style="margin:0 0 6px"><strong>Create ${n} selected package${n > 1 ? 's' : ''} in OMS?</strong></p>
      <p class="small" style="margin:0">Only the ticked packages are pushed.</p>`;
    confirmBtn.hidden = false; confirmBtn.disabled = false;
    confirmBtn.textContent = `Create ${n}`;
   } else {
-   body.innerHTML = `<p style="margin:0 0 6px"><strong>Create ${n} package${n > 1 ? 's' : ''} in Lingxing OMS?</strong></p>
+   body.innerHTML = `<p style="margin:0 0 6px"><strong>Create ${n} package${n > 1 ? 's' : ''} in OMS?</strong></p>
      <p class="small" style="margin:0">All ticked, so every pushable package in the current search is pushed (all pages): {{ total }} matching orders · {{ unique_tracking }} total packages ({{ package_order_count }} orders).<br>Packages already in OMS are skipped; cancelled ones are pushed again.</p>`;
    confirmBtn.hidden = false; confirmBtn.disabled = false;
    confirmBtn.textContent = `Create ${n}`;
   }
+  if (opts) opts.hidden = !n;
   note.textContent = ''; cancelBtn.textContent = 'Cancel';
   modal.hidden = false;
  });
  confirmBtn.addEventListener('click', async () => {
   confirmBtn.disabled = true; confirmBtn.textContent = 'Creating…';
   try {
-   const req = {query: location.search.slice(1)};
+   const req = {query: location.search.slice(1), options: pushOptions()};
    if (sending) req.packages = sending;
    const j = await post(CREATE_URL, req);
    done = true;
    const badge = {created: 'ok', failed: 'bad', unknown: 'bad', skipped: 'muted'};
    const rows = j.results.map(r => `<tr><td>${esc(r.store)}</td><td class="mono">${esc(r.tracking)}</td>
      <td><span class="pkg-badge ${badge[r.state] || 'muted'}">${esc(r.state)}</span></td><td>${esc(r.message)}</td></tr>`).join('');
+   if (opts) opts.hidden = true;
    body.innerHTML = `<p style="margin:0">${Object.entries(j.summary).map(([k, v]) => `<strong>${v}</strong> ${esc(k)}`).join(' · ') || 'Nothing to push.'}</p>
      ${rows ? `<table><thead><tr><th>Store</th><th>Tracking</th><th>Result</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>` : ''}`;
    note.textContent = 'Unknown = OMS did not answer clearly. Run the OMS sync before pushing those again.';

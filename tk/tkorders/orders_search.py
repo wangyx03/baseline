@@ -628,6 +628,8 @@ def page():
                            lives=lives, no_live_count=no_live_count,
                            selected_lives=params.getlist('live'),
                            oms_options=oms_options, selected_oms=params.getlist('oms'),
+                           push_options=oms_packages.form_options() if view == 'oms' else None,
+                           push_defaults=_push_defaults() if view == 'oms' else None,
                            sku_count_options=sku_count_options,
                            params=params, sort_dir=sort_dir, selected_tz=tz_name, tz_label=TIME_ZONES[tz_name], time_zones=TIME_ZONES,
                            export_groups=EXPORT_GROUPS,
@@ -760,6 +762,12 @@ def _package_contents(cur, keys):
     return out
 
 
+def _push_defaults():
+    """Dialog defaults only (never the OMS credentials in settings())."""
+    cfg = oms_packages.settings()
+    return {'channel': cfg['channel'], 'sales_platform': cfg['sales_platform']}
+
+
 def _picked_packages(value):
     """None = no selection sent (push everything matching); else [(store_id, tracking)]."""
     if value is None:
@@ -824,12 +832,13 @@ def create_packages():
             return jsonify(error=f'More than {PKG_MAX} packages. Narrow the filters first.'), 400
         contents = _package_contents(cur, [(p['store_id'], p['tracking']) for p in packages])
         previous = _oms_order_counts(cur, [p['tracking'] for p in packages])
+        overrides = oms_packages.clean_overrides(body.get('options'))
         ready = []
         for p in packages:
             lines = contents.get((p['store_id'], p['tracking'])) or []
             if not lines:
                 continue
-            payload, order_ids = oms_packages.build_payload(p['tracking'], lines, cfg)
+            payload, order_ids = oms_packages.build_payload(p['tracking'], lines, cfg, overrides)
             earlier = previous.get(p['tracking'].upper(), 0)
             if earlier:
                 # Re-push after a cancellation: thirdOrderNo must be new in OMS, so add -R<n>.

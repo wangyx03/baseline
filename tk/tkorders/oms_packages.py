@@ -16,6 +16,9 @@ import json
 import os
 import re
 import time
+import warnings
+from functools import lru_cache
+from pathlib import Path
 
 from api.omsapi.client import OmsClient
 
@@ -62,6 +65,53 @@ def settings():
     }
 
 
+TEMPLATE_PATH = Path(__file__).with_name('oms_import_template.xlsx')
+
+
+@lru_cache(maxsize=1)
+def form_options():
+    """Choices for the Create package dialog, read from the OMS import template's
+    reference sheets (仓库代码 / 物流渠道 / 销售平台) so they match OMS."""
+    from openpyxl import load_workbook
+    out = {'warehouses': [], 'channels': [], 'platforms': [],
+           'stores': list(STORE_NAMES.values())}
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            wb = load_workbook(TEMPLATE_PATH, read_only=True, data_only=True)
+    except FileNotFoundError:
+        return out
+    try:
+        for name, code in list(wb['仓库代码'].iter_rows(min_row=2, values_only=True)):
+            if code:
+                out['warehouses'].append({'code': str(code).strip(), 'name': str(name or code).strip()})
+        for row in wb['物流渠道'].iter_rows(min_row=2, values_only=True):
+            name, code, bound = (list(row) + [None, None, None])[:3]
+            if code:
+                out['channels'].append({'code': str(code).strip(), 'name': str(name or code).strip(),
+                                        'warehouses': [w.strip() for w in str(bound or '').split(';') if w.strip()]})
+        for (name, *_rest) in wb['销售平台'].iter_rows(min_row=2, values_only=True):
+            if name:
+                out['platforms'].append(str(name).strip())
+    finally:
+        wb.close()
+    return out
+
+
+def clean_overrides(raw):
+    """Keep only dialog choices that exist in form_options(); '' / missing = automatic."""
+    raw = raw if isinstance(raw, dict) else {}
+    opts = form_options()
+    allowed = {
+        'wh_code': {w['code'] for w in opts['warehouses']},
+        'channel': {c['code'] for c in opts['channels']},
+        'sales_platform': set(opts['platforms']),
+        'store': set(opts['stores']),
+    }
+    return {k: str(raw[k]).strip() for k in allowed
+            if raw.get(k) and str(raw[k]).strip() in allowed[k]}
+
+
 def is_configured(cfg=None):
     cfg = cfg or settings()
     return bool(cfg['app_key'] and cfg['app_secret'])
@@ -80,13 +130,16 @@ def wh_code_for(warehouse_id, cfg):
     return cfg['wh_map'].get(str(warehouse_id or ''), cfg['wh_code'])
 
 
-def build_payload(tracking, lines, cfg):
+def build_payload(tracking, lines, cfg, overrides=None):
     """One OMS parcel for one tracking number.
 
     lines: every line item with this tracking (ordered by order create time),
     each carrying the order's recipient fields. Same SKU -> quantities added.
     Recipient comes from the first order (orders in one package share it).
+    overrides (from the Create package dialog, see clean_overrides): wh_code, channel,
+    sales_platform, store replace the automatic values.
     """
+    overrides = overrides or {}
     first = lines[0]
     products, order_ids, remarks = {}, [], []  # field names per OMS doc 创建小包出库单
     for li in lines:
@@ -100,15 +153,15 @@ def build_payload(tracking, lines, cfg):
             remarks.append(note)
     state = (first.get('recipient_state') or '').strip()
     payload = {
-        'whCode': wh_code_for(first.get('warehouse_id'), cfg),
+        'whCode': overrides.get('wh_code') or wh_code_for(first.get('warehouse_id'), cfg),
         'thirdOrderNo': tracking,                         # required, globally unique -> tracking
         # OMS accepts one platform order number only: the first (earliest) order in the package.
         'platformOrderNo': order_ids[0] if order_ids else '',
-        'store': STORE_NAMES.get(first.get('store_id'), ''),
-        'salesPlatform': cfg['sales_platform'],
+        'store': overrides.get('store') or STORE_NAMES.get(first.get('store_id'), ''),
+        'salesPlatform': overrides.get('sales_platform') or cfg['sales_platform'],
         'subOrderType': 1,                                # 1 = product outbound (小包)
         'isSubmit': cfg['is_submit'],                     # 0 = draft
-        'logisticsChannel': cfg['channel'],
+        'logisticsChannel': overrides.get('channel') or cfg['channel'],
         'logisticsTrackNo': tracking,
         'logisticsCarrier': carrier_for(tracking, cfg['carrier']),
         'receiver': first.get('recipient_name') or '',
