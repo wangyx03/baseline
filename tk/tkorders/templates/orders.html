@@ -963,24 +963,33 @@ function togglePkgLines(btn) {
   note.textContent = ''; cancelBtn.textContent = 'Cancel';
   modal.hidden = false;
  });
+ const PUSH_CHUNK = 100;   // packages per request = one OMS API call
  confirmBtn.addEventListener('click', async () => {
   confirmBtn.disabled = true; confirmBtn.textContent = 'Creating…';
+  if (opts) opts.hidden = true;
+  const query = location.search.slice(1), options = pushOptions();
+  const results = [], summary = {};
+  let errorMsg = '';
   try {
-   const req = {query: location.search.slice(1), options: pushOptions()};
-   if (sending) req.packages = sending;
-   const j = await post(CREATE_URL, req);
-   done = true;
-   const badge = {created: 'ok', failed: 'bad', unknown: 'bad', skipped: 'muted'};
-   const rows = j.results.map(r => `<tr><td>${esc(r.store)}</td><td class="mono">${esc(r.tracking)}</td>
-     <td><span class="pkg-badge ${badge[r.state] || 'muted'}">${esc(r.state)}</span></td><td>${esc(r.message)}</td></tr>`).join('');
-   if (opts) opts.hidden = true;
-   body.innerHTML = `<p style="margin:0">${Object.entries(j.summary).map(([k, v]) => `<strong>${v}</strong> ${esc(k)}`).join(' · ') || 'Nothing to push.'}</p>
-     ${rows ? `<table><thead><tr><th>Store</th><th>Tracking</th><th>Result</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>` : ''}`;
-   note.textContent = 'Unknown = OMS did not answer clearly. Run the OMS sync before pushing those again.';
+   // All ticked: get every pushable package of the search (all pages) first.
+   const keys = sending || (await post(CREATE_URL, {query, dry_run: true})).packages;
+   for (let i = 0; i < keys.length; i += PUSH_CHUNK) {
+    body.innerHTML = `<p style="margin:0">Creating packages… ${Math.min(i, keys.length)} / ${keys.length}</p>`;
+    const j = await post(CREATE_URL, {query, options, packages: keys.slice(i, i + PUSH_CHUNK)});
+    results.push(...j.results);
+    Object.entries(j.summary).forEach(([k, v]) => summary[k] = (summary[k] || 0) + v);
+   }
   } catch (e) {
-   done = true;
-   body.innerHTML = `<p class="pkg-err">${esc(e.message)}</p>`;
+   errorMsg = e.message;
   }
+  done = true;
+  const badge = {created: 'ok', failed: 'bad', unknown: 'bad', skipped: 'muted'};
+  const rows = results.map(r => `<tr><td>${esc(r.store)}</td><td class="mono">${esc(r.tracking)}</td>
+    <td><span class="pkg-badge ${badge[r.state] || 'muted'}">${esc(r.state)}</span></td><td>${esc(r.message)}</td></tr>`).join('');
+  body.innerHTML = (errorMsg ? `<p class="pkg-err">${esc(errorMsg)}${results.length ? ' — stopped; the results below were already sent.' : ''}</p>` : '') +
+   `<p style="margin:0">${Object.entries(summary).map(([k, v]) => `<strong>${v}</strong> ${esc(k)}`).join(' · ') || (errorMsg ? '' : 'Nothing to push.')}</p>
+    ${rows ? `<table><thead><tr><th>Store</th><th>Tracking</th><th>Result</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>` : ''}`;
+  note.textContent = 'Unknown = OMS did not answer clearly. Run the OMS sync before pushing those again.';
   confirmBtn.hidden = true; cancelBtn.textContent = 'Close';
  });
  // Sync from OMS: last 2 days, on every load of OMS View and on each button click.

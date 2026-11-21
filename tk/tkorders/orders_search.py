@@ -652,7 +652,8 @@ def _view_links():
 # ---------------------------------------------------------------------------
 # OMS View: packages (store + tracking number) and the "Create package" push.
 # ---------------------------------------------------------------------------
-PKG_MAX = 500           # packages per Create package click
+PKG_MAX = 500           # packages per Create package request
+PKG_LIST_MAX = 5000     # packages per "all ticked" push (sent in chunks)
 
 
 def _selected_packages_sql(tracking_where):
@@ -813,6 +814,16 @@ def create_packages():
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     try:
+        if body.get('dry_run'):
+            # "All ticked": the page first fetches every pushable package of the search,
+            # then sends them in chunks (each chunk stays well inside the request timeout).
+            keys = _rows(cur, f"""
+                SELECT s.store_id, s.tracking FROM ({_selected_packages_sql(tracking_where)}) s
+                WHERE {PUSHABLE_SQL}
+                ORDER BY s.store_id, s.tracking LIMIT %s""", args + [PKG_LIST_MAX + 1])
+            if len(keys) > PKG_LIST_MAX:
+                return jsonify(error=f'More than {PKG_LIST_MAX} packages. Narrow the filters first.'), 400
+            return jsonify(packages=[f"{k['store_id']}:{k['tracking']}" for k in keys])
         picked = _picked_packages(body.get('packages'))
         if picked is not None and not picked:
             return jsonify(error='No valid packages selected.'), 400
