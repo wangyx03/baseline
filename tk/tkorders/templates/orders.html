@@ -965,7 +965,9 @@ function togglePkgLines(btn) {
   note.textContent = ''; cancelBtn.textContent = 'Cancel';
   modal.hidden = false;
  });
- const PUSH_CHUNK = 100;   // packages per request = one OMS API call
+ // Packages per request. OMS takes about a second per parcel, so small chunks keep each
+ // request far below the proxy timeout (nginx / Cloudflare answer 504 after ~60-100 s).
+ const PUSH_CHUNK = 20;
  confirmBtn.addEventListener('click', async () => {
   confirmBtn.disabled = true; confirmBtn.textContent = 'Creating…';
   if (opts) opts.hidden = true;
@@ -984,7 +986,10 @@ function togglePkgLines(btn) {
     Object.entries(j.summary).forEach(([k, v]) => summary[k] = (summary[k] || 0) + v);
    }
   } catch (e) {
-   errorMsg = e.message;
+   errorMsg = /HTTP 50[24]/.test(e.message)
+    ? `${e.message}: the server did not answer in time. The last batch may still have been created in OMS. ` +
+      'Click Sync from OMS, then Create package again (packages already in OMS are skipped).'
+    : e.message;
   }
   done = true; busy = false; cancelBtn.disabled = false;
   const badge = {created: 'ok', failed: 'bad', unknown: 'bad', skipped: 'muted'};
