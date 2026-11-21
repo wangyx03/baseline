@@ -209,7 +209,7 @@
 <input type="hidden" name="from" id="ordersFrom" value="{{ params.get('from','') }}">
 <input type="hidden" name="to" id="ordersTo" value="{{ params.get('to','') }}">
 <div class="field orders-search-row"><label>Search</label><input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Order ID, Product ID, Product Name, Seller SKU, Tracking"></div>
-</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn export-fields-btn" type="button" id="openExportFields" title="Choose export format, columns and row grouping" {% if view == 'oms' %}hidden{% endif %}>⚙ Export Fields <span id="exportFieldCount" class="export-count"></span></button><button class="btn download-csv-btn" type="button" onclick="downloadExport()" id="mainDownload" {% if view == 'oms' %}hidden{% endif %}>Download XLSX</button>{% if view == 'oms' %}<span class="small" id="omsLastSync">{% if oms_last_sync %}OMS synced {{ oms_last_sync }}{% endif %}</span><button class="btn export-fields-btn" type="button" id="syncFromOms" title="Pull OMS outbound orders created in the last 2 days (a full 30-day sync runs daily at 5 AM)">⟳ Sync from OMS</button><a class="btn export-fields-btn" href="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}">Download OMS Excel</a><button class="btn create-pkg-btn" type="button" id="createPackages" data-count="{{ pkg_pushable }}" {% if not pkg_ready %}disabled title="OMS table not available — see the message below"{% endif %}>Create package ({{ pkg_pushable }})</button>{% endif %}</div>
+</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn export-fields-btn" type="button" id="openExportFields" title="Choose export format, columns and row grouping" {% if view == 'oms' %}hidden{% endif %}>⚙ Export Fields <span id="exportFieldCount" class="export-count"></span></button><button class="btn download-csv-btn" type="button" onclick="downloadExport()" id="mainDownload" {% if view == 'oms' %}hidden{% endif %}>Download XLSX</button>{% if view == 'oms' %}<span class="small" id="omsLastSync">{% if oms_last_sync %}OMS synced {{ oms_last_sync }}{% endif %}</span><button class="btn export-fields-btn" type="button" id="syncFromOms" title="Pull OMS outbound orders created in the last 2 days (a full 30-day sync runs daily at 5 AM)">⟳ Sync from OMS</button><a class="btn export-fields-btn" href="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}">Download OMS Excel</a><button class="btn create-pkg-btn" type="button" id="createPackages" data-count="{{ pkg_pushable }}" data-ready="{{ 1 if pkg_ready else 0 }}" {% if not pkg_ready %}disabled title="OMS table not available — see the message below"{% endif %}>Create package ({{ pkg_pushable }})</button>{% endif %}</div>
 </form>
 <!-- Export field picker. Kept outside the filter form so its checkboxes never reach the search URL. -->
 <div class="xf-backdrop" id="exportFieldsModal" hidden>
@@ -290,7 +290,7 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
 {% if not pkg_ready %}<div class="pkg-alert">{% if pkg_error %}Package query failed — MySQL error <span class="mono">{{ pkg_error }}</span>{% else %}Table <span class="mono">oms_outbound_orders</span> not found in the database this site uses. Run <span class="mono">migrations/oms_outbound_orders.sql</span> there.{% endif %}</div>{% endif %}
 <div class="table-scroll"><table><thead><tr><th class="pkg-pick"><input type="checkbox" id="pkgPickAll" title="Select all pushable packages on this page"></th><th>Store</th><th>Tracking Number</th><th>Orders</th><th>Seller SKU × Qty</th><th>Qty</th><th>Ship to</th><th>Created ({{ tz_label }})</th><th>OMS</th></tr></thead><tbody id="pkgRows">
 {% for p in orders %}<tr>
-<td class="pkg-pick">{% if p.pushable %}<input type="checkbox" class="pkg-pick-box" value="{{ p.store_id }}:{{ p.tracking }}">{% else %}<input type="checkbox" disabled title="Already in OMS">{% endif %}</td>
+<td class="pkg-pick">{% if p.pushable %}<input type="checkbox" class="pkg-pick-box" value="{{ p.store_id }}:{{ p.tracking }}" checked>{% else %}<input type="checkbox" disabled title="Already in OMS">{% endif %}</td>
 <td>{{ 'TU' if p.store_id == 1 else 'VB' }}</td>
 <td class="mono nowrap">{{ p.tracking }}</td>
 <td class="mono nowrap pkg-col">{% for oid, sku, qty in p.lines %}<div class="pkg-line{{ ' pkg-extra' if not loop.first }}{{ ' pkg-same' if not loop.first and oid == p.lines[loop.index0 - 1][0] }}">{{ oid }}</div>{% endfor %}{% if p.lines|length > 1 %}<div class="pkg-line"><button type="button" class="pkg-toggle" onclick="togglePkgLines(this)" data-more="+{{ p.lines|length - 1 }} more">▶ +{{ p.lines|length - 1 }} more</button></div>{% endif %}</td>
@@ -886,7 +886,8 @@ function togglePkgLines(btn) {
   return j;
  }
  function close() { modal.hidden = true; if (done) location.reload(); }
- // Ticked packages (this page). None ticked = every pushable package matching the search.
+ // Every pushable package starts ticked. All ticked = push every pushable package matching
+ // the search (all pages); some ticked = only those; none ticked = nothing to push.
  const pickAll = document.getElementById('pkgPickAll');
  const pickBoxes = () => [...document.querySelectorAll('#pkgRows .pkg-pick-box')];
  const picked = () => pickBoxes().filter(b => b.checked).map(b => b.value);
@@ -897,7 +898,10 @@ function togglePkgLines(btn) {
    pickAll.checked = boxes.length > 0 && n === boxes.length;
    pickAll.indeterminate = n > 0 && n < boxes.length;
   }
-  if (btn) btn.textContent = n ? `Create package (${n} selected)` : `Create package (${Number(btn.dataset.count) || 0})`;
+  if (!btn) return;
+  const all = boxes.length > 0 && n === boxes.length;
+  btn.textContent = all ? `Create package (${Number(btn.dataset.count) || 0})` : `Create package (${n} selected)`;
+  btn.disabled = btn.dataset.ready === '0' || (!all && n === 0);
  }
  if (pickAll) pickAll.addEventListener('change', () => { pickBoxes().forEach(b => b.checked = pickAll.checked); updatePick(); });
  document.getElementById('pkgRows').addEventListener('change', e => { if (e.target.classList.contains('pkg-pick-box')) updatePick(); });
@@ -905,8 +909,9 @@ function togglePkgLines(btn) {
  let sending = null;
  if (btn) btn.addEventListener('click', () => {
   const chosen = picked();
-  const n = chosen.length || Number(btn.dataset.count) || 0;
-  sending = chosen.length ? chosen : null;
+  const partial = chosen.length < pickBoxes().length;
+  const n = partial ? chosen.length : (Number(btn.dataset.count) || 0);
+  sending = partial ? chosen : null;
   done = false;
   if (!n) {
    body.innerHTML = 'No packages to push. Every package here is already in OMS.';
@@ -918,7 +923,7 @@ function togglePkgLines(btn) {
    confirmBtn.textContent = `Create ${n}`;
   } else {
    body.innerHTML = `<p style="margin:0 0 6px"><strong>Create ${n} package${n > 1 ? 's' : ''} in Lingxing OMS?</strong></p>
-     <p class="small" style="margin:0">Nothing ticked, so every pushable package in the current search is pushed: {{ total }} matching orders · {{ unique_tracking }} total packages ({{ package_order_count }} orders).<br>Packages already in OMS are skipped; cancelled ones are pushed again.</p>`;
+     <p class="small" style="margin:0">All ticked, so every pushable package in the current search is pushed (all pages): {{ total }} matching orders · {{ unique_tracking }} total packages ({{ package_order_count }} orders).<br>Packages already in OMS are skipped; cancelled ones are pushed again.</p>`;
    confirmBtn.hidden = false; confirmBtn.disabled = false;
    confirmBtn.textContent = `Create ${n}`;
   }
@@ -959,10 +964,11 @@ function togglePkgLines(btn) {
   const freshBtn = doc.getElementById('createPackages');
   if (freshBtn && btn) {
    btn.dataset.count = freshBtn.dataset.count;
+   btn.dataset.ready = freshBtn.dataset.ready;
    btn.textContent = freshBtn.textContent;
    btn.disabled = freshBtn.disabled;
   }
-  updatePick();   // rows were replaced: ticks are cleared
+  updatePick();   // rows were replaced: back to all ticked
  }
  async function runSync(quick) {
   if (!syncBtn || syncBtn.disabled) return;
