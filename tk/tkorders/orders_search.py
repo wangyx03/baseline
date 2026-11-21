@@ -250,6 +250,15 @@ OMS_STATE_SQL = """CASE WHEN TRIM(COALESCE(oi.tracking_number, '')) = '' THEN 'n
                  LIMIT 1), 'not_in_oms') END"""
 
 
+# Distinct SKUs in one order. A virtual bundle counts as its component books, so an
+# order with one bundle of two books is a multi-SKU order.
+ORDER_SKU_COUNT_SQL = """(SELECT COUNT(DISTINCT COALESCE(sb.component_sku_id, si.sku_id, si.seller_sku))
+  FROM tkorders_items si
+  LEFT JOIN tkproducts_bundle_items sb ON sb.store_id=si.store_id AND sb.bundle_sku_id=si.sku_id
+  WHERE si.store_id=o.store_id AND si.order_id=o.order_id)"""
+SKU_COUNT_OPTIONS = (('single', 'Single SKU'), ('multi', 'Multiple SKUs'))
+
+
 def _filters(params, omit=None):
     omit = omit or set()
     parts, args = [], []
@@ -297,6 +306,9 @@ def _filters(params, omit=None):
                               "WHERE live_filter.store_id=o.store_id AND live_filter.order_id=o.order_id "
                               "AND (live_filter.room_id IS NULL OR live_filter.room_id = ''))")
         parts.append('(' + ' OR '.join(conditions) + ')')
+    sku_count = params.get('sku_count', '')
+    if 'sku_count' not in omit and sku_count in dict(SKU_COUNT_OPTIONS):
+        parts.append(ORDER_SKU_COUNT_SQL + (' > 1' if sku_count == 'multi' else ' <= 1'))
     oms_states = [v for v in dict.fromkeys(params.getlist('oms')) if v in dict(OMS_STATES)]
     if 'oms' not in omit and oms_states:
         # An order matches when any of its packages is in one of the selected OMS states.
@@ -579,6 +591,11 @@ def page():
             if selected not in ('', 'all', '__null__') and selected not in known_lives and LIVE_ID_RE.match(selected):
                 lives.append({'value': selected, 'store_id': None, 'first_local': '', 'n': 0,
                               'title': '', 'creator': ''})
+        # SKUs-per-order facet under all other active filters.
+        sc_where, sc_args = _filters(params, {'sku_count'})
+        sc = _rows(cur, f'''SELECT COALESCE(SUM(c <= 1), 0) AS single, COALESCE(SUM(c > 1), 0) AS multi
+                            FROM (SELECT {ORDER_SKU_COUNT_SQL} AS c FROM tkorders o{sc_where}) x''', sc_args)[0]
+        sku_count_options = [{'value': v, 'label': label, 'n': int(sc[v] or 0)} for v, label in SKU_COUNT_OPTIONS]
         # OMS condition facet: orders per package state under all other active filters.
         oms_where, oms_args = _filters(params, {'oms'})
         try:
@@ -611,6 +628,7 @@ def page():
                            lives=lives, no_live_count=no_live_count,
                            selected_lives=params.getlist('live'),
                            oms_options=oms_options, selected_oms=params.getlist('oms'),
+                           sku_count_options=sku_count_options,
                            params=params, sort_dir=sort_dir, selected_tz=tz_name, tz_label=TIME_ZONES[tz_name], time_zones=TIME_ZONES,
                            export_groups=EXPORT_GROUPS,
                            export_fields=[{k: f[k] for k in ('key', 'label', 'group')} for f in EXPORT_FIELDS.values()],
