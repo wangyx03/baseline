@@ -660,9 +660,15 @@ def _selected_packages_sql(tracking_where):
             + tracking_where)
 
 
-# A package is "in OMS" when oms_outbound_orders (synced from OMS + written on push)
-# has any outbound order with the same tracking number.
-IN_OMS_SQL = "EXISTS (SELECT 1 FROM oms_outbound_orders m WHERE m.tracking_number = UPPER(s.tracking))"
+# oms_outbound_orders holds OMS outbound orders (synced from OMS + written on push),
+# matched to packages by tracking number.
+# A package can be pushed when OMS has no outbound order for its tracking number, or when
+# the latest one (same ordering as _oms_status) is cancelled (status 4). Earlier
+# cancellations do not matter: only the most recent OMS order counts.
+PUSHABLE_SQL = """COALESCE((SELECT COALESCE(m.status, '') = '4' FROM oms_outbound_orders m
+    WHERE m.tracking_number = UPPER(s.tracking)
+    ORDER BY COALESCE(m.oms_update_time, m.oms_create_time, m.synced_at) DESC, m.id DESC
+    LIMIT 1), 1) = 1"""
 
 
 def _oms_status(cur, trackings):
@@ -685,10 +691,11 @@ def _oms_status(cur, trackings):
 def _package_page(cur, tracking_where, args, sort_dir, per_page, page_number, display_tz):
     selected = _selected_packages_sql(tracking_where)
     counts = _rows(cur, f"""
-        SELECT COUNT(*) AS n, COALESCE(SUM(NOT {IN_OMS_SQL}), 0) AS pushable
+        SELECT COUNT(*) AS n, COALESCE(SUM({PUSHABLE_SQL}), 0) AS pushable
         FROM ({selected}) s""", args)[0]
     rows = _rows(cur, f"""
-        SELECT s.store_id, s.tracking, MAX(o.create_time) AS create_time
+        SELECT s.store_id, s.tracking, MAX(o.create_time) AS create_time,
+               {PUSHABLE_SQL} AS pushable
         FROM ({selected}) s
         JOIN tkorders_items a ON a.store_id=s.store_id AND a.tracking_number=s.tracking
         JOIN tkorders o ON o.store_id=a.store_id AND o.order_id=a.order_id
@@ -753,12 +760,37 @@ def _package_contents(cur, keys):
     return out
 
 
+def _picked_packages(value):
+    """None = no selection sent (push everything matching); else [(store_id, tracking)]."""
+    if value is None:
+        return None
+    out = []
+    for item in value if isinstance(value, list) else []:
+        store, _, tracking = str(item).partition(':')
+        tracking = tracking.strip()
+        if store in ('1', '2') and tracking and len(tracking) <= 128:
+            out.append((int(store), tracking))
+    return list(dict.fromkeys(out))
+
+
+def _oms_order_counts(cur, trackings):
+    """{UPPER(tracking): number of OMS outbound orders already recorded}."""
+    keys = list(dict.fromkeys(t.upper() for t in trackings if t))
+    if not keys:
+        return {}
+    rows = _rows(cur, f"""SELECT tracking_number, COUNT(*) AS n FROM oms_outbound_orders
+        WHERE tracking_number IN ({','.join(['%s'] * len(keys))}) GROUP BY tracking_number""", keys)
+    return {r['tracking_number']: int(r['n']) for r in rows}
+
+
 @orders_bp.route('/oms/create-packages', methods=['POST'])
 @module_required(MODULE_TIKTOK_ORDERS)
 def create_packages():
-    """Push every package matching the submitted filters that is not in OMS yet.
+    """Push the ticked packages (body.packages = ["store_id:tracking", ...]) or, when
+    nothing is ticked, every package matching the submitted filters, that is pushable.
 
-    "Not in OMS" = no row in oms_outbound_orders with this tracking number.
+    Pushable = no row in oms_outbound_orders with this tracking number, or the latest
+    one is cancelled (re-push uses thirdOrderNo <tracking>-R<n>).
     A successful push is written there immediately, so it is not pushed again
     before the next sync. OMS also rejects a duplicate thirdOrderNo (= tracking).
     """
@@ -773,19 +805,35 @@ def create_packages():
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     try:
+        picked = _picked_packages(body.get('packages'))
+        if picked is not None and not picked:
+            return jsonify(error='No valid packages selected.'), 400
+        if picked and len(picked) > PKG_MAX:
+            return jsonify(error=f'More than {PKG_MAX} packages selected.'), 400
+        pick_sql, pick_args = '', []
+        if picked:
+            # Ticked rows only, and still only those matching the filters and pushable.
+            pick_sql = (' AND (s.store_id, s.tracking) IN ('
+                        + ','.join(['(%s,%s)'] * len(picked)) + ')')
+            pick_args = [v for pair in picked for v in pair]
         packages = _rows(cur, f"""
             SELECT s.store_id, s.tracking FROM ({_selected_packages_sql(tracking_where)}) s
-            WHERE NOT {IN_OMS_SQL}
-            ORDER BY s.store_id, s.tracking LIMIT %s""", args + [PKG_MAX + 1])
+            WHERE {PUSHABLE_SQL}{pick_sql}
+            ORDER BY s.store_id, s.tracking LIMIT %s""", args + pick_args + [PKG_MAX + 1])
         if len(packages) > PKG_MAX:
             return jsonify(error=f'More than {PKG_MAX} packages. Narrow the filters first.'), 400
         contents = _package_contents(cur, [(p['store_id'], p['tracking']) for p in packages])
+        previous = _oms_order_counts(cur, [p['tracking'] for p in packages])
         ready = []
         for p in packages:
             lines = contents.get((p['store_id'], p['tracking'])) or []
             if not lines:
                 continue
             payload, order_ids = oms_packages.build_payload(p['tracking'], lines, cfg)
+            earlier = previous.get(p['tracking'].upper(), 0)
+            if earlier:
+                # Re-push after a cancellation: thirdOrderNo must be new in OMS, so add -R<n>.
+                payload['thirdOrderNo'] = f"{p['tracking']}-R{earlier + 1}"
             ref = {'store': 'TU' if p['store_id'] == 1 else 'VB', 'tracking': p['tracking'], 'orders': order_ids}
             if any(not (li.get('seller_sku') or '').strip() for li in lines):
                 # Never send a partial package: a line without SKU would be left out.
@@ -884,7 +932,7 @@ def _record_pushed(conn, cur, payload, oms_no):
          logistics_channel, status_name, source, raw_json)
         VALUES (%s, %s, %s, %s, %s, %s, 'pushed', 'push', %s)
         ON DUPLICATE KEY UPDATE tracking_number = VALUES(tracking_number)""",
-        (oms_no or 'PUSH:' + payload['thirdOrderNo'], payload['thirdOrderNo'].upper(),
+        (oms_no or 'PUSH:' + payload['thirdOrderNo'], payload['logisticsTrackNo'].upper(),
          payload['thirdOrderNo'], payload['platformOrderNo'], payload['whCode'],
          payload['logisticsChannel'], json.dumps(payload, ensure_ascii=False)))
     conn.commit()
@@ -1238,7 +1286,7 @@ def export_oms_xlsx():
             FROM ({_selected_packages_sql(tracking_where)}) s
             JOIN tkorders_items a ON a.store_id=s.store_id AND a.tracking_number=s.tracking
             JOIN tkorders o ON o.store_id=a.store_id AND o.order_id=a.order_id
-            WHERE NOT {IN_OMS_SQL}
+            WHERE {PUSHABLE_SQL}
             GROUP BY s.store_id, s.tracking
             ORDER BY created ASC, s.tracking ASC""", args)
         contents = _package_contents(cur, [(p['store_id'], p['tracking']) for p in packages])
