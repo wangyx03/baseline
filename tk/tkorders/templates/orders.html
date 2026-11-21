@@ -897,7 +897,9 @@ function togglePkgLines(btn) {
   if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
   return j;
  }
- function close() { modal.hidden = true; if (done) location.reload(); }
+ let busy = false;   // a push is running: the dialog cannot be closed until it finishes
+ function close() { if (busy) return; modal.hidden = true; if (done) location.reload(); }
+ window.addEventListener('beforeunload', e => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
  // Every pushable package starts ticked. All ticked = push every pushable package matching
  // the search (all pages); some ticked = only those; none ticked = nothing to push.
  const pickAll = document.getElementById('pkgPickAll');
@@ -967,6 +969,8 @@ function togglePkgLines(btn) {
  confirmBtn.addEventListener('click', async () => {
   confirmBtn.disabled = true; confirmBtn.textContent = 'Creating…';
   if (opts) opts.hidden = true;
+  busy = true; cancelBtn.disabled = true;
+  note.textContent = 'Keep this page open until all packages are sent.';
   const query = location.search.slice(1), options = pushOptions();
   const results = [], summary = {};
   let errorMsg = '';
@@ -982,7 +986,7 @@ function togglePkgLines(btn) {
   } catch (e) {
    errorMsg = e.message;
   }
-  done = true;
+  done = true; busy = false; cancelBtn.disabled = false;
   const badge = {created: 'ok', failed: 'bad', unknown: 'bad', skipped: 'muted'};
   const rows = results.map(r => `<tr><td>${esc(r.store)}</td><td class="mono">${esc(r.tracking)}</td>
     <td><span class="pkg-badge ${badge[r.state] || 'muted'}">${esc(r.state)}</span></td><td>${esc(r.message)}</td></tr>`).join('');
@@ -1034,8 +1038,7 @@ function togglePkgLines(btn) {
  }
  document.getElementById('pkgClose').addEventListener('click', close);
  cancelBtn.addEventListener('click', close);
- modal.addEventListener('click', e => { if (e.target === modal) close(); });
- document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
+ // Clicking outside the dialog or pressing Esc does not close it: only × / Cancel / Close do.
 })();
 {% endif %}
 </script>{% endblock %}
