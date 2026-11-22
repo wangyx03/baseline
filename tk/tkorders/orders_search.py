@@ -1304,6 +1304,9 @@ def export_oms_xlsx():
     params = _effective_params(request.args)
     where, args = _filters(params)
     tracking_where = where + (' AND ' if where else ' WHERE ') + "TRIM(i.tracking_number) <> ''"
+    # Default: only packages that can still be created in OMS (same rule as Create package).
+    # ?oms_all=1 ("Include packages already in OMS"): every package of the search.
+    include_all = request.args.get('oms_all') == '1'
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     try:
@@ -1312,7 +1315,7 @@ def export_oms_xlsx():
             FROM ({_selected_packages_sql(tracking_where)}) s
             JOIN tkorders_items a ON a.store_id=s.store_id AND a.tracking_number=s.tracking
             JOIN tkorders o ON o.store_id=a.store_id AND o.order_id=a.order_id
-            WHERE {PUSHABLE_SQL}
+            WHERE {'1=1' if include_all else PUSHABLE_SQL}
             GROUP BY s.store_id, s.tracking
             ORDER BY created ASC, s.tracking ASC""", args)
         contents = _package_contents(cur, [(p['store_id'], p['tracking']) for p in packages])

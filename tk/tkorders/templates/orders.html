@@ -210,7 +210,7 @@
 <input type="hidden" name="from" id="ordersFrom" value="{{ params.get('from','') }}">
 <input type="hidden" name="to" id="ordersTo" value="{{ params.get('to','') }}">
 <div class="field orders-search-row"><label>Search</label><input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Order ID, Product ID, Product Name, Seller SKU, Tracking"></div>
-</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn export-fields-btn" type="button" id="openExportFields" title="Choose export format, columns and row grouping" {% if view == 'oms' %}hidden{% endif %}>⚙ Export Fields <span id="exportFieldCount" class="export-count"></span></button><button class="btn download-csv-btn" type="button" onclick="downloadExport()" id="mainDownload" {% if view == 'oms' %}hidden{% endif %}>Download XLSX</button>{% if view == 'oms' %}<span class="small" id="omsLastSync">{% if oms_last_sync %}OMS synced {{ oms_last_sync }}{% endif %}</span><button class="btn export-fields-btn" type="button" id="syncFromOms" title="Pull OMS outbound orders created in the last 2 days (a full 30-day sync runs daily at 5 AM)">⟳ Sync from OMS</button><a class="btn export-fields-btn" href="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}">Download OMS Excel</a><button class="btn create-pkg-btn" type="button" id="createPackages" data-count="{{ pkg_pushable }}" data-ready="{{ 1 if pkg_ready else 0 }}" {% if not pkg_ready %}disabled title="OMS table not available — see the message below"{% endif %}>Create package ({{ pkg_pushable }})</button>{% endif %}</div>
+</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn export-fields-btn" type="button" id="openExportFields" title="Choose export format, columns and row grouping" {% if view == 'oms' %}hidden{% endif %}>⚙ Export Fields <span id="exportFieldCount" class="export-count"></span></button><button class="btn download-csv-btn" type="button" onclick="downloadExport()" id="mainDownload" {% if view == 'oms' %}hidden{% endif %}>Download XLSX</button>{% if view == 'oms' %}<span class="small" id="omsLastSync">{% if oms_last_sync %}OMS synced {{ oms_last_sync }}{% endif %}</span><button class="btn export-fields-btn" type="button" id="syncFromOms" title="Pull OMS outbound orders created in the last 2 days (a full 30-day sync runs daily at 5 AM)">⟳ Sync from OMS</button><label class="small oms-all-toggle" title="Off: only packages not in OMS yet (same as Create package). On: every package of this search."><input type="checkbox" id="omsAllToggle"> Include packages already in OMS</label><a class="btn export-fields-btn" id="omsExcelLink" data-base="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}" href="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}">Download OMS Excel</a><button class="btn create-pkg-btn" type="button" id="createPackages" data-count="{{ pkg_pushable }}" data-ready="{{ 1 if pkg_ready else 0 }}" {% if not pkg_ready %}disabled title="OMS table not available — see the message below"{% endif %}>Create package ({{ pkg_pushable }})</button>{% endif %}</div>
 </form>
 <!-- Export field picker. Kept outside the filter form so its checkboxes never reach the search URL. -->
 <div class="xf-backdrop" id="exportFieldsModal" hidden>
@@ -242,6 +242,8 @@
 .order-expand { border:1px solid #d5dbe3; background:#fff; border-radius:6px; padding:5px 9px; cursor:pointer; font:inherit; color:#1769aa; margin-top:5px; white-space:nowrap; }
 .order-expand:hover { background:#eef5fc; }
 .pkg-pick { width:28px; text-align:center; }
+.oms-all-toggle { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; cursor:pointer; }
+.oms-all-toggle input { width:auto; margin:0; }
 .pkg-opts { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; padding:0 22px 16px; }
 .pkg-opts[hidden] { display:none; }
 .pkg-opts label { display:flex; flex-direction:column; gap:5px; font-size:12px; color:#596273; }
@@ -933,6 +935,11 @@ function togglePkgLines(btn) {
  document.getElementById('pkgRows').addEventListener('change', e => { if (e.target.classList.contains('pkg-pick-box')) updatePick(); });
  updatePick();
  let sending = null;
+ // Download OMS Excel: unticked (default) = only packages not in OMS yet; ticked = all packages.
+ const omsAll = document.getElementById('omsAllToggle'), omsLink = document.getElementById('omsExcelLink');
+ if (omsAll && omsLink) omsAll.addEventListener('change', () => {
+  omsLink.href = omsLink.dataset.base + (omsAll.checked ? '&oms_all=1' : '');
+ });
  // Dialog choices: Warehouse / Shipping service / Sales platform / Store ('' = automatic).
  const opts = document.getElementById('pkgOpts');
  const optWh = document.getElementById('pkgOptWh'), optCh = document.getElementById('pkgOptChannel');
