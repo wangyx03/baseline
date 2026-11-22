@@ -245,6 +245,7 @@
 .pkg-opts { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; padding:0 22px 16px; }
 .pkg-opts[hidden] { display:none; }
 .pkg-opts label { display:flex; flex-direction:column; gap:5px; font-size:12px; color:#596273; }
+.pkg-opts .req { color:#d92d20; font-weight:600; }
 .pkg-opts select { padding:8px 9px; border:1px solid #d5dbe3; border-radius:7px; font:inherit; font-size:13px; color:#202735; background:#fff; }
 .pkg-pick input { width:auto; cursor:pointer; }
 .bundle-tag { display:inline-block; padding:1px 7px; border-radius:999px; background:#f4ebff; color:#6941c6; font-size:11px; font-weight:600; }
@@ -318,10 +319,10 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
   <div class="pkg-body" id="pkgBody"></div>
   {% if push_options %}
   <div class="pkg-opts" id="pkgOpts">
-   <label>Warehouse<select id="pkgOptWh"><option value="">Auto (by TikTok warehouse)</option>{% for w in push_options.warehouses %}<option value="{{ w.code }}">{{ w.name }} · {{ w.code }}</option>{% endfor %}</select></label>
-   <label>Shipping service<select id="pkgOptChannel">{% for c in push_options.channels %}<option value="{{ c.code }}" data-wh="{{ c.warehouses|join(';') }}" {% if c.code == push_defaults.channel %}selected{% endif %}>{{ c.name }} ({{ c.code }})</option>{% endfor %}{% if push_defaults.channel not in push_options.channels|map(attribute='code')|list %}<option value="" selected>{{ push_defaults.channel }} (default)</option>{% endif %}</select></label>
-   <label>Sales platform<select id="pkgOptPlatform">{% for name in push_options.platforms %}<option value="{{ name }}" {% if name == push_defaults.sales_platform %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
-   <label>Store<select id="pkgOptStore"><option value="">Auto (by package store)</option>{% for name in push_options.stores %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select></label>
+   <label>Warehouse <span class="req">*</span><select id="pkgOptWh"><option value="">— Select —</option>{% for w in push_options.warehouses %}<option value="{{ w.code }}">{{ w.name }} · {{ w.code }}</option>{% endfor %}</select></label>
+   <label>Shipping service <span class="req">*</span><select id="pkgOptChannel"><option value="">— Select —</option>{% for c in push_options.channels %}<option value="{{ c.code }}" data-wh="{{ c.warehouses|join(';') }}">{{ c.name }} ({{ c.code }})</option>{% endfor %}</select></label>
+   <label>Sales platform<select id="pkgOptPlatform"><option value="">— Leave empty —</option>{% for name in push_options.platforms %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select></label>
+   <label>Store<select id="pkgOptStore"><option value="">— Leave empty —</option>{% for name in push_options.stores %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select></label>
   </div>
   {% endif %}
   <div class="xf-foot"><span class="small" id="pkgNote"></span><div class="xf-actions"><button type="button" class="btn secondary" id="pkgCancel">Cancel</button><button type="button" class="btn create-pkg-btn" id="pkgConfirm">Create</button></div></div>
@@ -943,13 +944,23 @@ function togglePkgLines(btn) {
  function filterChannels() {
   if (!optWh || !optCh) return;
   const wh = optWh.value;
-  [...optCh.options].forEach(o => { o.hidden = !!wh && !!o.dataset.wh && !o.dataset.wh.split(';').includes(wh); });
-  if (optCh.selectedOptions[0] && optCh.selectedOptions[0].hidden) {
-   const first = [...optCh.options].find(o => !o.hidden);
-   if (first) optCh.value = first.value;
-  }
+  [...optCh.options].forEach(o => { o.hidden = !!o.value && !!wh && !!o.dataset.wh && !o.dataset.wh.split(';').includes(wh); });
+  if (optCh.selectedOptions[0] && optCh.selectedOptions[0].hidden) optCh.value = '';
  }
- if (optWh) optWh.addEventListener('change', filterChannels);
+ // Warehouse and Shipping service are required: Create stays disabled until both are chosen.
+ let pushCount = 0;
+ function checkRequired() {
+  if (!opts || confirmBtn.hidden || busy) return;
+  confirmBtn.disabled = !pushCount || !optWh.value || !optCh.value;
+  note.textContent = confirmBtn.disabled && pushCount ? 'Choose a Warehouse and a Shipping service.' : '';
+ }
+ if (optWh) optWh.addEventListener('change', () => { filterChannels(); checkRequired(); });
+ if (optCh) optCh.addEventListener('change', checkRequired);
+ function resetOptions() {
+  if (!opts) return;
+  opts.querySelectorAll('select').forEach(sel => sel.value = '');
+  filterChannels();
+ }
  if (btn) btn.addEventListener('click', () => {
   const chosen = picked();
   const partial = chosen.length < pickBoxes().length;
@@ -972,6 +983,9 @@ function togglePkgLines(btn) {
   }
   if (opts) opts.hidden = !n;
   note.textContent = ''; cancelBtn.textContent = 'Cancel';
+  pushCount = n;
+  resetOptions();      // every push starts with all four choices empty
+  checkRequired();
   modal.hidden = false;
  });
  // Packages per request. OMS takes about a second per parcel, so small chunks keep each

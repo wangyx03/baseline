@@ -844,6 +844,8 @@ def create_packages():
         contents = _package_contents(cur, [(p['store_id'], p['tracking']) for p in packages])
         previous = _oms_order_counts(cur, [p['tracking'] for p in packages])
         overrides = oms_packages.clean_overrides(body.get('options'))
+        if not overrides.get('wh_code') or not overrides.get('channel'):
+            return jsonify(error='Choose a Warehouse and a Shipping service.'), 400
         ready = []
         for p in packages:
             lines = contents.get((p['store_id'], p['tracking'])) or []

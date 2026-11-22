@@ -136,9 +136,11 @@ def build_payload(tracking, lines, cfg, overrides=None):
     lines: every line item with this tracking (ordered by order create time),
     each carrying the order's recipient fields. Same SKU -> quantities added.
     Recipient comes from the first order (orders in one package share it).
-    overrides (from the Create package dialog, see clean_overrides): wh_code, channel,
-    sales_platform, store replace the automatic values.
+    overrides: None = automatic values (warehouse map, .env channel / platform, package store).
+    A dict = choices from the Create package dialog (see clean_overrides): wh_code and
+    channel are required there; sales_platform / store left empty are not sent to OMS.
     """
+    dialog = overrides is not None
     overrides = overrides or {}
     first = lines[0]
     products, order_ids, remarks = {}, [], []  # field names per OMS doc 创建小包出库单
@@ -157,8 +159,8 @@ def build_payload(tracking, lines, cfg, overrides=None):
         'thirdOrderNo': tracking,                         # required, globally unique -> tracking
         # OMS accepts one platform order number only: the first (earliest) order in the package.
         'platformOrderNo': order_ids[0] if order_ids else '',
-        'store': overrides.get('store') or STORE_NAMES.get(first.get('store_id'), ''),
-        'salesPlatform': overrides.get('sales_platform') or cfg['sales_platform'],
+        'store': overrides.get('store', '') if dialog else STORE_NAMES.get(first.get('store_id'), ''),
+        'salesPlatform': overrides.get('sales_platform', '') if dialog else cfg['sales_platform'],
         'subOrderType': 1,                                # 1 = product outbound (小包)
         'isSubmit': cfg['is_submit'],                     # 0 = draft
         'logisticsChannel': overrides.get('channel') or cfg['channel'],
@@ -176,6 +178,9 @@ def build_payload(tracking, lines, cfg, overrides=None):
         'remark': ' | '.join(remarks)[:255],
         'productList': [{'sku': sku, 'quantity': qty} for sku, qty in products.items()],
     }
+    for key in ('store', 'salesPlatform'):
+        if not payload[key]:
+            del payload[key]          # left empty in the dialog: OMS field stays blank
     return payload, order_ids
 
 
