@@ -245,6 +245,7 @@
 .pkg-opts { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; padding:0 22px 16px; }
 .pkg-opts[hidden] { display:none; }
 .pkg-opts label { display:flex; flex-direction:column; gap:5px; font-size:12px; color:#596273; }
+.pkg-opts .pkg-mode { grid-column:1/-1; font-size:12px; color:#596273; }
 .pkg-opts .req { color:#d92d20; font-weight:600; }
 .pkg-opts select { padding:8px 9px; border:1px solid #d5dbe3; border-radius:7px; font:inherit; font-size:13px; color:#202735; background:#fff; }
 .pkg-pick input { width:auto; cursor:pointer; }
@@ -319,6 +320,7 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
   <div class="pkg-body" id="pkgBody"></div>
   {% if push_options %}
   <div class="pkg-opts" id="pkgOpts">
+   <div class="pkg-mode">{% if push_defaults.is_submit == 1 %}<span class="pkg-badge bad">Submit</span> Packages are submitted to the warehouse right away (OMS_PKG_IS_SUBMIT=1){% elif push_defaults.is_submit == 0 %}<span class="pkg-badge ok">Draft</span> Packages are saved as drafts in OMS (OMS_PKG_IS_SUBMIT=0){% else %}<span class="pkg-badge bad">Not set</span> Set OMS_PKG_IS_SUBMIT to 0 or 1 in .env — pushing is blocked{% endif %}</div>
    <label>Warehouse <span class="req">*</span><select id="pkgOptWh"><option value="">— Select —</option>{% for w in push_options.warehouses %}<option value="{{ w.code }}">{{ w.name }} · {{ w.code }}</option>{% endfor %}</select></label>
    <label>Shipping service <span class="req">*</span><select id="pkgOptChannel"><option value="">— Select —</option>{% for c in push_options.channels %}<option value="{{ c.code }}" data-wh="{{ c.warehouses|join(';') }}">{{ c.name }} ({{ c.code }})</option>{% endfor %}</select></label>
    <label>Sales platform<select id="pkgOptPlatform"><option value="">— Leave empty —</option>{% for name in push_options.platforms %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select></label>

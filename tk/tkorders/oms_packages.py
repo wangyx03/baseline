@@ -9,7 +9,8 @@ Signing/transport reuse api/omsapi/client.py (OmsClient).
     OMS_PKG_WH_MAP=<tiktok warehouse_id>:M60001,...   optional per-warehouse override
     OMS_PKG_CHANNEL=Upload_Shipping_Label_SD
     OMS_PKG_CARRIER=usps                    used when the tracking prefix is not recognised
-    OMS_PKG_IS_SUBMIT=0                     0 = save as draft (待提交)
+    OMS_PKG_IS_SUBMIT=0                     required: 0 = save as draft (草稿), 1 = submit to the
+                                            warehouse right away. Missing / other value = no push.
     OMS_PKG_SALES_PLATFORM=TikTok           销售平台, must match an OMS platform name
 """
 import json
@@ -60,7 +61,8 @@ def settings():
         'wh_map': wh_map,
         'channel': os.environ.get('OMS_PKG_CHANNEL', 'Upload_Shipping_Label_SD'),
         'carrier': os.environ.get('OMS_PKG_CARRIER', 'usps'),
-        'is_submit': 1 if os.environ.get('OMS_PKG_IS_SUBMIT', '0') == '1' else 0,
+        # No default on purpose: whether OMS submits is decided only by .env.
+        'is_submit': {'0': 0, '1': 1}.get(os.environ.get('OMS_PKG_IS_SUBMIT', '').strip()),
         'sales_platform': os.environ.get('OMS_PKG_SALES_PLATFORM', 'TikTok').strip(),
     }
 
@@ -115,6 +117,15 @@ def clean_overrides(raw):
 def is_configured(cfg=None):
     cfg = cfg or settings()
     return bool(cfg['app_key'] and cfg['app_secret'])
+
+
+def submit_mode_error(cfg=None):
+    """Error text when OMS_PKG_IS_SUBMIT is not set to 0 or 1, else None."""
+    cfg = cfg or settings()
+    if cfg['is_submit'] is None:
+        return ('OMS_PKG_IS_SUBMIT must be set to 0 (draft) or 1 (submit) in .env, '
+                'then restart the baseline service.')
+    return None
 
 
 def carrier_for(tracking, default):

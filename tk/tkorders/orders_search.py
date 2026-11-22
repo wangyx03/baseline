@@ -766,7 +766,8 @@ def _package_contents(cur, keys):
 def _push_defaults():
     """Dialog defaults only (never the OMS credentials in settings())."""
     cfg = oms_packages.settings()
-    return {'channel': cfg['channel'], 'sales_platform': cfg['sales_platform']}
+    return {'channel': cfg['channel'], 'sales_platform': cfg['sales_platform'],
+            'is_submit': cfg['is_submit']}
 
 
 def _picked_packages(value):
@@ -807,6 +808,9 @@ def create_packages():
     cfg = oms_packages.settings()
     if not oms_packages.is_configured(cfg):
         return jsonify(error='OMS_APP_KEY / OMS_APP_SECRET are not set.'), 400
+    mode_error = oms_packages.submit_mode_error(cfg)
+    if mode_error:
+        return jsonify(error=mode_error), 400
     params = _effective_params(MultiDict(parse_qsl(str(body.get('query') or ''), keep_blank_values=True)))
     where, args = _filters(params)
     tracking_where = where + (' AND ' if where else ' WHERE ') + "TRIM(i.tracking_number) <> ''"
