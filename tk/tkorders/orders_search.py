@@ -906,6 +906,7 @@ def _bundle_components(cur, items):
 
 OMS_SYNC_SCRIPT = Path(__file__).resolve().parents[2] / 'oms' / 'oms packages' / 'oms_outbound_sync.py'
 OMS_SYNC_MAX_DAYS = 60
+OMS_SYNC_MAX_TRACKINGS = 200   # packages re-checked per Sync from OMS click (one page is 50)
 _oms_sync_module = None
 
 
@@ -926,7 +927,7 @@ def sync_from_oms():
     """Refresh oms_outbound_orders from OMS.
 
     quick=true (automatic sync when OMS View opens): OMS orders created in the last 2 days.
-    Open orders are re-checked only for the packages of the current search (fast); the
+    Open orders are re-checked only for the packages shown on the page (fast); the
     daily timer re-checks all of them.
     Button: from one day before the filter's start date (at least 3 days back), because
     OMS orders are created after the TikTok order and OMS times are Beijing time.
@@ -947,18 +948,11 @@ def sync_from_oms():
         return jsonify(error=f'Date range is longer than {OMS_SYNC_MAX_DAYS} days. Narrow it, '
                              'or run oms_outbound_sync.py --from ... on the server.'), 400
     try:
-        # Re-check open OMS orders (draft / 仓库处理中) only for the packages of this search;
-        # the daily oms-outbound-sync timer re-checks every open order.
-        where, args = _filters(params)
-        tracking_where = where + (' AND ' if where else ' WHERE ') + "TRIM(i.tracking_number) <> ''"
-        conn = get_db()
-        cur = conn.cursor(dictionary=True)
-        try:
-            trackings = [r['tracking'] for r in _rows(
-                cur, f"SELECT s.tracking FROM ({_selected_packages_sql(tracking_where)}) s", args)]
-        finally:
-            cur.close()
-            conn.close()
+        # Re-check open OMS orders only for the packages shown on the page (sent by the
+        # browser, at most one page); the daily oms-outbound-sync timer re-checks all of them.
+        raw = body.get('trackings')
+        trackings = [str(t).strip() for t in (raw if isinstance(raw, list) else [])
+                     if t and len(str(t)) <= 128][:OMS_SYNC_MAX_TRACKINGS]
         stats = _oms_sync().sync(start, end, open_trackings=trackings)
     except Exception as exc:  # API / DB errors are shown to the user
         return jsonify(error=f'OMS sync failed: {exc}'), 502

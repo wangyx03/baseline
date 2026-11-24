@@ -298,7 +298,7 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
 {% if view == 'oms' %}
 {% if not pkg_ready %}<div class="pkg-alert">{% if pkg_error %}Package query failed — MySQL error <span class="mono">{{ pkg_error }}</span>{% else %}Table <span class="mono">oms_outbound_orders</span> not found in the database this site uses. Run <span class="mono">migrations/oms_outbound_orders.sql</span> there.{% endif %}</div>{% endif %}
 <div class="table-scroll"><table><thead><tr><th class="pkg-pick"><input type="checkbox" id="pkgPickAll" title="Select all pushable packages on this page"></th><th>Store</th><th>Tracking Number</th><th>Orders</th><th>Seller SKU × Qty</th><th>Qty</th><th>Ship to</th><th>Created ({{ tz_label }})</th><th>OMS</th></tr></thead><tbody id="pkgRows">
-{% for p in orders %}<tr>
+{% for p in orders %}<tr data-tracking="{{ p.tracking }}">
 <td class="pkg-pick">{% if p.pushable %}<input type="checkbox" class="pkg-pick-box" value="{{ p.store_id }}:{{ p.tracking }}" checked>{% else %}<input type="checkbox" disabled title="Already in OMS">{% endif %}</td>
 <td>{{ 'TU' if p.store_id == 1 else 'VB' }}</td>
 <td class="mono nowrap">{{ p.tracking }}</td>
@@ -1060,7 +1060,9 @@ function togglePkgLines(btn) {
   const btnWasDisabled = btn ? btn.disabled : true;
   if (btn) btn.disabled = true;  // don't push on stale data while syncing
   try {
-   const j = await post(SYNC_URL, {query: location.search.slice(1), quick: quick === true});
+   // Re-check only the packages shown on this page (at most one page of rows).
+   const trackings = [...document.querySelectorAll('#pkgRows tr[data-tracking]')].map(r => r.dataset.tracking);
+   const j = await post(SYNC_URL, {query: location.search.slice(1), quick: quick === true, trackings});
    await refreshPackages();
    lastSync.title = `Last sync: ${j.saved} OMS orders (${j.start} → ${j.end})`;
   } catch (e) {
