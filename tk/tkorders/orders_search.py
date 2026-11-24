@@ -926,6 +926,8 @@ def sync_from_oms():
     """Refresh oms_outbound_orders from OMS.
 
     quick=true (automatic sync when OMS View opens): OMS orders created in the last 2 days.
+    Open orders are re-checked only for the packages of the current search (fast); the
+    daily timer re-checks all of them.
     Button: from one day before the filter's start date (at least 3 days back), because
     OMS orders are created after the TikTok order and OMS times are Beijing time.
     """
@@ -945,7 +947,19 @@ def sync_from_oms():
         return jsonify(error=f'Date range is longer than {OMS_SYNC_MAX_DAYS} days. Narrow it, '
                              'or run oms_outbound_sync.py --from ... on the server.'), 400
     try:
-        stats = _oms_sync().sync(start, end)
+        # Re-check open OMS orders (draft / 仓库处理中) only for the packages of this search;
+        # the daily oms-outbound-sync timer re-checks every open order.
+        where, args = _filters(params)
+        tracking_where = where + (' AND ' if where else ' WHERE ') + "TRIM(i.tracking_number) <> ''"
+        conn = get_db()
+        cur = conn.cursor(dictionary=True)
+        try:
+            trackings = [r['tracking'] for r in _rows(
+                cur, f"SELECT s.tracking FROM ({_selected_packages_sql(tracking_where)}) s", args)]
+        finally:
+            cur.close()
+            conn.close()
+        stats = _oms_sync().sync(start, end, open_trackings=trackings)
     except Exception as exc:  # API / DB errors are shown to the user
         return jsonify(error=f'OMS sync failed: {exc}'), 502
     return jsonify(dict(stats, start=start.strftime('%Y-%m-%d'), end=now.strftime('%Y-%m-%d')))

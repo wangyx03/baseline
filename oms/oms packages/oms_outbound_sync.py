@@ -203,20 +203,35 @@ WHERE p.oms_order_no LIKE 'PUSH:%%'
 """
 
 
-def refresh_open_orders(client, conn, progress=False):
+def refresh_open_orders(client, conn, progress=False, trackings=None):
     """Re-read every open OMS order (draft 0 / 仓库处理中 5) through the detail API.
 
     pageList cannot tell whether an order is in exception right now (exceptionTime stays set
     after a fix), and the regular sync only re-reads recently created orders, while an order
     can turn 异常 / 已出库 / 已取消 days after it was created. The detail API answers all of
     that in batches of DETAIL_BATCH orders, so this costs a few calls per sync.
+
+    trackings=None: every open order (daily timer / CLI). A list: only open orders with
+    those tracking numbers (OMS View sync = the packages of the current search), so the
+    web request stays short however many orders are open in OMS.
     """
     cur = conn.cursor()
     try:
-        cur.execute("""SELECT oms_order_no FROM oms_outbound_orders
-                       WHERE status IN ('0', '5') AND oms_order_no NOT LIKE 'PUSH:%%'
-                       ORDER BY oms_create_time DESC LIMIT %s""", (OPEN_CHECK_MAX,))
-        order_nos = [r[0] for r in cur.fetchall()]
+        if trackings is None:
+            cur.execute("""SELECT oms_order_no FROM oms_outbound_orders
+                           WHERE status IN ('0', '5') AND oms_order_no NOT LIKE 'PUSH:%%'
+                           ORDER BY oms_create_time DESC LIMIT %s""", (OPEN_CHECK_MAX,))
+            order_nos = [r[0] for r in cur.fetchall()]
+        else:
+            keys = list(dict.fromkeys(str(t).strip().upper() for t in trackings if t))
+            order_nos = []
+            for i in range(0, len(keys), 500):
+                chunk = keys[i:i + 500]
+                cur.execute(f"""SELECT oms_order_no FROM oms_outbound_orders
+                               WHERE status IN ('0', '5') AND oms_order_no NOT LIKE 'PUSH:%%'
+                                 AND tracking_number IN ({','.join(['%s'] * len(chunk))})""", chunk)
+                order_nos.extend(r[0] for r in cur.fetchall())
+            order_nos = order_nos[:OPEN_CHECK_MAX]
         checked = live = changed = 0
         for i in range(0, len(order_nos), DETAIL_BATCH):
             batch = order_nos[i:i + DETAIL_BATCH]
@@ -259,10 +274,11 @@ def refresh_open_orders(client, conn, progress=False):
         cur.close()
 
 
-def sync(start_dt, end_dt, time_type=None, page_size=PAGE_SIZE, progress=False):
+def sync(start_dt, end_dt, time_type=None, page_size=PAGE_SIZE, progress=False, open_trackings=None):
     """Fetch OMS outbound orders created/updated in [start_dt, end_dt) and upsert them.
 
     Returns counts. Used by the CLI below and by the OMS View "Sync from OMS" button.
+    open_trackings: see refresh_open_orders (None = re-check every open order).
     """
     client = OmsClient(os.environ.get('OMS_APP_KEY', ''), os.environ.get('OMS_APP_SECRET', ''))
     conn = get_db()
@@ -289,7 +305,7 @@ def sync(start_dt, end_dt, time_type=None, page_size=PAGE_SIZE, progress=False):
             stats['saved'] += len(batch)
         cur.execute(CLEANUP_SQL)
         conn.commit()
-        stats.update(refresh_open_orders(client, conn, progress))
+        stats.update(refresh_open_orders(client, conn, progress, open_trackings))
     finally:
         cur.close()
         conn.close()
