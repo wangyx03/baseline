@@ -60,10 +60,14 @@ TRACKING_KEYS = FIELDS['tracking_number']
 # Add codes here as they are confirmed; unknown codes fall back to event times below.
 STATUS_NAMES = {
     '0': '草稿',
+    '2': '仓库处理中',   # seen in OMS: 仓库处理中 orders come back with status 2
     '3': '已出库',
     '4': '已取消',
     '5': '仓库处理中',
 }
+# Finished orders. Everything else (草稿, 仓库处理中, 异常, unknown codes) is "open" and is
+# re-checked through the detail API until it reaches one of these.
+FINISHED_STATUSES = ('3', '4')
 
 
 def pick(record, keys):
@@ -204,7 +208,7 @@ WHERE p.oms_order_no LIKE 'PUSH:%%'
 
 
 def refresh_open_orders(client, conn, progress=False, trackings=None):
-    """Re-read every open OMS order (draft 0 / 仓库处理中 5) through the detail API.
+    """Re-read every open OMS order (not 已出库 3 / 已取消 4) through the detail API.
 
     pageList cannot tell whether an order is in exception right now (exceptionTime stays set
     after a fix), and the regular sync only re-reads recently created orders, while an order
@@ -219,7 +223,7 @@ def refresh_open_orders(client, conn, progress=False, trackings=None):
     try:
         if trackings is None:
             cur.execute("""SELECT oms_order_no FROM oms_outbound_orders
-                           WHERE status IN ('0', '5') AND oms_order_no NOT LIKE 'PUSH:%%'
+                           WHERE COALESCE(status, '') NOT IN ('3', '4') AND oms_order_no NOT LIKE 'PUSH:%%'
                            ORDER BY oms_create_time DESC LIMIT %s""", (OPEN_CHECK_MAX,))
             order_nos = [r[0] for r in cur.fetchall()]
         else:
@@ -228,7 +232,7 @@ def refresh_open_orders(client, conn, progress=False, trackings=None):
             for i in range(0, len(keys), 500):
                 chunk = keys[i:i + 500]
                 cur.execute(f"""SELECT oms_order_no FROM oms_outbound_orders
-                               WHERE status IN ('0', '5') AND oms_order_no NOT LIKE 'PUSH:%%'
+                               WHERE COALESCE(status, '') NOT IN ('3', '4') AND oms_order_no NOT LIKE 'PUSH:%%'
                                  AND tracking_number IN ({','.join(['%s'] * len(chunk))})""", chunk)
                 order_nos.extend(r[0] for r in cur.fetchall())
             order_nos = order_nos[:OPEN_CHECK_MAX]
@@ -246,12 +250,13 @@ def refresh_open_orders(client, conn, progress=False, trackings=None):
                 if not isinstance(d, dict) or not d.get('outboundOrderNo'):
                     continue
                 status = None if d.get('status') is None else str(d['status'])
-                if status not in ('0', '5'):
+                if status in FINISHED_STATUSES:
                     changed += 1
                 is_exc = 1 if (d.get('statusName') or '').strip() == '异常' else 0
                 live += is_exc
                 desc = (d.get('exceptionDesc') or '').strip()[:500] or None
-                name = STATUS_NAMES.get(status)
+                # The detail API names the status itself; that beats our code table.
+                name = (d.get('statusName') or '').strip()[:64] or STATUS_NAMES.get(status)
                 if not name and d.get('canceledTime'):
                     name = '已取消'
                 elif not name and d.get('outboundTime'):
