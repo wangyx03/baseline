@@ -34,6 +34,8 @@ MODULE_TIKTOK_LIVE = 9
 
 MODULE_TIKTOK_PRODUCTS = 10
 
+MODULE_GIVEAWAY = 11
+
 
 # =========================
 # Feature Permission Keys

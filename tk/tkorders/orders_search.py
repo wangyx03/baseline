@@ -17,9 +17,10 @@ from flask_login import login_required
 from werkzeug.datastructures import MultiDict
 import mysql.connector
 import requests
-from permissions.permissions import module_required, MODULE_TIKTOK_ORDERS
+from permissions.permissions import module_required, has_module, MODULE_TIKTOK_ORDERS, MODULE_GIVEAWAY
 from db import get_db
 from tk.tkorders import oms_packages
+from giveaway import service as giveaway
 
 orders_bp = Blueprint('orders', __name__, template_folder='templates', url_prefix='/orders')
 ET = ZoneInfo('America/New_York')
@@ -519,8 +520,24 @@ def page():
                 ORDER BY store_id, order_id, id
             """, item_args)
             components = _bundle_components(cur, item_rows)
+            # Giveaway books already drawn for lottery lines (read only here; drawing
+            # happens in OMS View / on the Giveaway page).
+            lottery_orders = {(o['store_id'], o['order_id']) for o in orders
+                              if o.get('order_type') == giveaway.LOTTERY_TYPE}
+            lottery_items = [it for it in item_rows if (it['store_id'], it['order_id']) in lottery_orders
+                             and not (it['seller_sku'] or '').strip()]
+            gifts = {}
+            if lottery_items:
+                try:
+                    gifts = giveaway.assignments_for(cur, [(it['store_id'], it['order_id'], it['line_item_id'])
+                                                           for it in lottery_items])
+                except mysql.connector.errors.Error as exc:
+                    if exc.errno != 1146:
+                        raise
             for item in item_rows:
                 item['components'] = components.get((item['store_id'], item['sku_id']), [])
+                item['gifts'] = [a['isbn'] for a in gifts.get(
+                    (item['store_id'], item['order_id'], item['line_item_id']), [])]
                 items_by_order.setdefault((item['store_id'], item['order_id']), []).append(item)
         for order in (orders if view == 'order' else []):
             line_items = items_by_order.get((order['store_id'], order['order_id']), [])
@@ -635,7 +652,9 @@ def page():
                            export_groups=EXPORT_GROUPS,
                            export_fields=[{k: f[k] for k in ('key', 'label', 'group')} for f in EXPORT_FIELDS.values()],
                            default_export_fields=DEFAULT_EXPORT_FIELDS,
-                           locked_export_fields=LOCKED_EXPORT_FIELDS, view=view)
+                           locked_export_fields=LOCKED_EXPORT_FIELDS, view=view,
+                           extra_nav_links=([{'label': 'Giveaway Pool', 'url': url_for('giveaway.page')}]
+                                            if has_module(MODULE_GIVEAWAY) else []))
 
 
 def _view_links():
@@ -717,7 +736,9 @@ def _package_page(cur, tracking_where, args, sort_dir, per_page, page_number, di
             if li['order_id'] not in order_ids:
                 order_ids.append(li['order_id'])
         first = lines[0] if lines else {}
-        r['lines'] = [(li['order_id'], li['seller_sku'] or '—', int(li['quantity'] or 0)) for li in lines]
+        r['lines'] = [(li['order_id'],
+                       ('🎁 ' if li.get('giveaway') else '') + (li['seller_sku'] or '—'),
+                       int(li['quantity'] or 0)) for li in lines]
         r.update(skus=list(skus.items()), order_ids=order_ids,
                  total_qty=sum(skus.values()), oms=oms.get(r['tracking'].upper()),
                  ship_to=' '.join(x for x in (first.get('recipient_state'),
@@ -734,13 +755,17 @@ def _package_contents(cur, keys):
     so OMS View, Create package and Download OMS Excel all ship the real books.
     A bundle whose contents are not synced yet keeps its empty Seller SKU and is
     therefore skipped by the push / export rules.
+
+    ZERO_LOTTERY lines (no Seller SKU) get a book per unit from the giveaway pool
+    (drawn here if missing) and become one line per book. A unit the pool cannot cover
+    keeps an empty Seller SKU, so that package is skipped too.
     """
     if not keys:
         return {}
     placeholders = ','.join(['(%s,%s)'] * len(keys))
     lines = _rows(cur, f"""
-        SELECT i.store_id, i.tracking_number, i.order_id, i.sku_id, i.seller_sku, i.quantity,
-               o.warehouse_id, o.buyer_email, o.recipient_name, o.recipient_phone, o.recipient_state,
+        SELECT i.store_id, i.tracking_number, i.order_id, i.line_item_id, i.sku_id, i.seller_sku,
+               i.quantity, o.order_type, o.warehouse_id, o.buyer_email, o.recipient_name, o.recipient_phone, o.recipient_state,
                o.recipient_city, o.recipient_postal_code, o.recipient_address_line1,
                o.recipient_address_line2, o.delivery_instruction
         FROM tkorders_items i
@@ -749,10 +774,17 @@ def _package_contents(cur, keys):
         ORDER BY o.create_time ASC, o.order_id ASC, i.id ASC
     """, [v for key in keys for v in key])
     components = _bundle_components(cur, lines)
+    gifts = _giveaway_books(cur, lines)
     out = {}
     for li in lines:
         parts = components.get((li['store_id'], li['sku_id'])) or []
-        if parts:
+        if _is_lottery(li):
+            qty = max(int(li['quantity'] or 1), 1)
+            books = {a['unit_no']: a['isbn'] for a in gifts.get(
+                (li['store_id'], li['order_id'], li['line_item_id']), [])}
+            expanded = [dict(li, seller_sku=books.get(u, ''), quantity=1, giveaway=True)
+                        for u in range(1, qty + 1)]
+        elif parts:
             qty = int(li['quantity'] or 0)
             expanded = [dict(li, seller_sku=c['component_seller_sku'],
                              quantity=qty * int(c['sku_count'] or 1), bundle_sku_id=li['sku_id'])
@@ -761,6 +793,28 @@ def _package_contents(cur, keys):
             expanded = [li]
         out.setdefault((li['store_id'], li['tracking_number']), []).extend(expanded)
     return out
+
+
+def _is_lottery(li):
+    return (li.get('order_type') == giveaway.LOTTERY_TYPE
+            and not (li.get('seller_sku') or '').strip())
+
+
+def _giveaway_books(cur, lines):
+    """Assignments for the lottery lines; draws the missing ones first (own connection)."""
+    lottery = [li for li in lines if _is_lottery(li)]
+    if not lottery:
+        return {}
+    try:
+        giveaway.ensure_for_orders([(li['store_id'], li['order_id']) for li in lottery])
+    except giveaway.GiveawayError:
+        pass            # another draw is running: show what is assigned so far
+    except mysql.connector.errors.Error as exc:
+        if exc.errno != 1146:   # giveaway tables not created: lottery lines stay without SKU
+            raise
+        return {}
+    return giveaway.assignments_for(cur, [(li['store_id'], li['order_id'], li['line_item_id'])
+                                          for li in lottery])
 
 
 def _push_defaults():
@@ -860,7 +914,8 @@ def create_packages():
             if earlier:
                 # Re-push after a cancellation: thirdOrderNo must be new in OMS, so add -R<n>.
                 payload['thirdOrderNo'] = f"{p['tracking']}-R{earlier + 1}"
-            ref = {'store': 'TU' if p['store_id'] == 1 else 'VB', 'tracking': p['tracking'], 'orders': order_ids}
+            ref = {'store': 'TU' if p['store_id'] == 1 else 'VB', 'store_id': p['store_id'],
+                   'tracking': p['tracking'], 'orders': order_ids}
             if any(not (li.get('seller_sku') or '').strip() for li in lines):
                 # Never send a partial package: a line without SKU would be left out.
                 results.append(dict(ref, state='skipped', message='a line item has no Seller SKU'))
@@ -871,6 +926,9 @@ def create_packages():
     finally:
         cur.close()
         conn.close()
+    # Giveaway books of created packages can no longer change.
+    giveaway.lock_orders([(r['store_id'], oid) for r in results
+                          if r.get('state') == 'created' for oid in r.get('orders') or []])
     summary = {}
     for r in results:
         summary[r['state']] = summary.get(r['state'], 0) + 1
@@ -1332,6 +1390,11 @@ def export_oms_xlsx():
         conn.close()
 
     rows, skipped = _oms_import_rows(packages, contents, oms_packages.settings())
+    skipped_set = set(skipped)
+    giveaway.lock_orders([(li['store_id'], li['order_id'])
+                          for p in packages if p['tracking'] not in skipped_set
+                          for li in contents.get((p['store_id'], p['tracking'])) or []
+                          if li.get('giveaway')])
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')     # the template's data-validation extension
         wb = load_workbook(OMS_IMPORT_TEMPLATE)

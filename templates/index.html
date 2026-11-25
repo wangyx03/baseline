@@ -668,6 +668,8 @@ Operations Dashboard
         current_user.has_access(MODULE_TIKTOK_LIVE)
         or
         current_user.has_access(MODULE_TIKTOK_PRODUCTS)
+        or
+        current_user.has_access(MODULE_GIVEAWAY)
     ) %}
     <div class="section">
       <div class="section-title">TikTok Shop</div>
@@ -677,6 +679,13 @@ Operations Dashboard
           <div class="card-icon">🛒</div>
           <div class="card-title">Orders</div>
           <div class="card-description">Search TU / VB orders with combined filters.</div>
+        </a>
+        {% endif %}
+        {% if current_user.has_access(MODULE_GIVEAWAY) %}
+        <a class="card" href="{{ url_for('giveaway.page') }}">
+          <div class="card-icon">🎁</div>
+          <div class="card-title">Giveaway Pool</div>
+          <div class="card-description">Books for ZERO_LOTTERY orders: pool, draws and pick list.</div>
         </a>
         {% endif %}
         {% if current_user.has_access(MODULE_TIKTOK_PRODUCTS) %}

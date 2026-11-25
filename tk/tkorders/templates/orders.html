@@ -344,6 +344,7 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
 {% set fb = o.first_item.components if o.first_item else [] %}
 <td>
   {% if fb %}<span class="bundle-tag">Bundle</span> <button class="bundle-toggle" type="button" aria-expanded="false" aria-controls="bundle-{{ loop.index }}" onclick="toggleBundle(this)" title="Show bundle contents">{{ fb|length }} SKUs ▾</button>
+  {% elif o.first_item and o.first_item.gifts %}{% for g in o.first_item.gifts %}<div class="mono" title="Giveaway book">🎁 {{ g }}</div>{% endfor %}
   {% else %}<span class="order-summary" title="{{ o.first_item.seller_sku if o.first_item else '' }}">{{ (o.first_item.seller_sku or '—') if o.first_item else '—' }}</span>{% endif %}
   {% if o.item_count > 1 %}<button class="order-expand" type="button" aria-expanded="false" aria-controls="order-items-{{ loop.index }}" onclick="toggleOrderItems(this)">Show {{ o.item_count }} items ▾</button>{% endif %}
 </td>
@@ -366,7 +367,7 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
 <td colspan="10">
   <strong>Order {{ o.order_id }} · {{ o.item_count }} line items</strong>
   <table class="order-details-table"><thead><tr><th>Seller SKU</th><th>Product</th><th>Product ID</th><th>Quantity</th></tr></thead>
-  <tbody>{% for item in o.line_items %}<tr><td>{% if item.components %}<span class="bundle-tag">Bundle</span>{% for c in item.components %}<div class="mono">{{ c.component_seller_sku or c.component_sku_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}{% else %}{{ item.seller_sku or '—' }}{% endif %}</td><td>{{ item.product_name or '—' }}{% if item.components %}{% for c in item.components %}<div class="bundle-sub">{{ c.component_title or c.component_product_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}{% endif %}</td><td>{{ item.product_id or '—' }}</td><td>{{ item.quantity }}</td></tr>{% endfor %}</tbody></table>
+  <tbody>{% for item in o.line_items %}<tr><td>{% if item.components %}<span class="bundle-tag">Bundle</span>{% for c in item.components %}<div class="mono">{{ c.component_seller_sku or c.component_sku_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}{% elif item.gifts %}{% for g in item.gifts %}<div class="mono">🎁 {{ g }}</div>{% endfor %}{% else %}{{ item.seller_sku or '—' }}{% endif %}</td><td>{{ item.product_name or '—' }}{% if item.components %}{% for c in item.components %}<div class="bundle-sub">{{ c.component_title or c.component_product_id }}{% if c.sku_count > 1 %} ×{{ c.sku_count }}{% endif %}</div>{% endfor %}{% endif %}</td><td>{{ item.product_id or '—' }}</td><td>{{ item.quantity }}</td></tr>{% endfor %}</tbody></table>
 </td></tr>
 {% endif %}
 {% else %}<tr><td colspan="10">No matching orders.</td></tr>{% endfor %}</tbody></table></div>
