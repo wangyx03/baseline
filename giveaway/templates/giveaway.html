@@ -673,7 +673,8 @@ renderCalendar();
   const boxes = [...panel.querySelectorAll('input[name]')];
   const all = panel.querySelector('.select-all');
   const toggle = document.querySelector(`[data-toggle="${panel.id}"]`);
-  const picked = params.getAll(panel.dataset.name);
+  // Ignore empty / "all" values (e.g. store= left in the URL by the old single-select form).
+  const picked = params.getAll(panel.dataset.name).filter(v => v && v !== 'all');
   boxes.forEach(b => b.checked = picked.length === 0 || picked.includes(b.value));
   const sync = () => {
    const n = boxes.filter(b => b.checked).length;
