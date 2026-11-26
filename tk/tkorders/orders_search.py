@@ -318,10 +318,17 @@ def _filters(params, omit=None):
                      'AND (' + OMS_STATE_SQL + ') IN (' + ','.join(['%s'] * len(oms_states)) + '))')
         args.extend(oms_states)
     sku_rule = params.get('sku_rule', 'all')
-    sku_match = ("EXISTS (SELECT 1 FROM tkorders_items sku_filter "
+    # "Starts with 9 · 13 digits": an ISBN Seller SKU, or a giveaway (lottery) line whose
+    # book is already decided in giveaway_assignments (its ISBN is the Seller SKU used
+    # for OMS). Lottery lines still without a book count as "Does not match".
+    sku_match = ("(EXISTS (SELECT 1 FROM tkorders_items sku_filter "
                  "WHERE sku_filter.store_id=o.store_id "
                  "AND sku_filter.order_id=o.order_id "
-                 "AND sku_filter.seller_sku REGEXP '^9[0-9]{12}$')")
+                 "AND sku_filter.seller_sku REGEXP '^9[0-9]{12}$') "
+                 "OR EXISTS (SELECT 1 FROM giveaway_assignments sku_gift "
+                 "WHERE sku_gift.store_id=o.store_id "
+                 "AND sku_gift.order_id=o.order_id "
+                 "AND sku_gift.isbn REGEXP '^9[0-9]{12}$'))")
     if 'sku_rule' not in omit:
         if sku_rule == 'match':
             parts.append(sku_match)
