@@ -65,17 +65,18 @@ def _day(value, default):
 
 def _filters(args, omit=()):
     """WHERE (aliases o / i) for the lottery list + normalized filter values.
-    omit={'status'} leaves the shipping-status filter out (for its own counts)."""
+    omit={'store'} / {'status'} leaves that filter out (for its own counts). Store, shipping
+    status and state are multi-selects: none or all ticked = no restriction."""
     today = datetime.now(ET).date()
     d_from = _day(args.get('from'), today - timedelta(days=6))
     d_to = _day(args.get('to'), today)
     start = datetime.combine(d_from, time.min, tzinfo=ET).astimezone(timezone.utc).replace(tzinfo=None)
     end = datetime.combine(d_to + timedelta(days=1), time.min, tzinfo=ET).astimezone(timezone.utc).replace(tzinfo=None)
     where, params = ['o.create_time >= %s', 'o.create_time < %s'], [start, end]
-    store = args.get('store', '')
-    if store in STORES:
-        where.append('o.store_id = %s')
-        params.append(STORES[store])
+    stores = [v for v in dict.fromkeys(args.getlist('store')) if v in STORES]
+    if stores and 'store' not in omit:
+        where.append('o.store_id IN (' + ','.join(['%s'] * len(stores)) + ')')
+        params += [STORES[v] for v in stores]
     q = (args.get('q') or '').strip()
     if q:
         where.append('(o.order_id = %s OR TRIM(i.tracking_number) = %s)')
@@ -84,14 +85,14 @@ def _filters(args, omit=()):
     if statuses and 'status' not in omit:
         where.append('o.status IN (' + ','.join(['%s'] * len(statuses)) + ')')
         params += statuses
-    state = args.get('state', '')
-    values = {'from': d_from.isoformat(), 'to': d_to.isoformat(), 'store': store, 'q': q,
-              'state': state if state in STATES else '', 'statuses': statuses}
+    states = [v for v in dict.fromkeys(args.getlist('state')) if v in STATES]
+    values = {'from': d_from.isoformat(), 'to': d_to.isoformat(), 'stores': stores, 'q': q,
+              'states': states, 'statuses': statuses}
     return ' AND '.join(where), params, values
 
 
-def _units(cur, where, params, state):
-    """One row per lottery book (line x unit) with its assignment."""
+def _units(cur, where, params, states=()):
+    """One row per lottery book (line x unit) with its assignment; states = keep only these."""
     lines = gs.lottery_lines(cur, where, params)
     assigned = gs.assignments_for(cur, [(l['store_id'], l['order_id'], l['line_item_id']) for l in lines])
     rows = []
@@ -100,7 +101,7 @@ def _units(cur, where, params, state):
         for unit in range(1, int(l['quantity']) + 1):
             a = by_unit.get(unit)
             st = 'unassigned' if not a else ('locked' if a['locked'] else 'unlocked')
-            if state and st != state:
+            if states and st not in states:
                 continue
             rows.append({
                 'store': STORE_NAMES.get(l['store_id'], l['store_id']), 'store_id': l['store_id'],
@@ -123,15 +124,20 @@ def page():
     cur = conn.cursor(dictionary=True)
     try:
         pool = gs.pool_rows(cur)
-        rows = _units(cur, where, params, values['state']) if tab == 'draws' else []
-        status_counts = {}
+        rows = _units(cur, where, params, values['states']) if tab == 'draws' else []
+        status_counts, store_counts, state_counts = {}, {}, {s: 0 for s in STATES}
         if tab == 'draws':
-            # Shipping-status choices with counts under every other filter (books, like the list).
+            # Choice counts (books, like the list) under every other filter but their own.
             s_where, s_params, _ = _filters(request.args, omit={'status'})
-            for r in _units(cur, s_where, s_params, values['state']):
+            for r in _units(cur, s_where, s_params, values['states']):
                 status_counts[r['status'] or '—'] = status_counts.get(r['status'] or '—', 0) + 1
             for st in values['statuses']:
                 status_counts.setdefault(st, 0)
+            st_where, st_params, _ = _filters(request.args, omit={'store'})
+            for r in _units(cur, st_where, st_params, values['states']):
+                store_counts[r['store']] = store_counts.get(r['store'], 0) + 1
+            for r in _units(cur, where, params):
+                state_counts[r['state']] += 1
         oms = inv.available_by_isbn(cur, [p['isbn'] for p in pool]) if tab == 'pool' else {}
         snap = _fmt(inv.snapshot_time(cur)) if tab == 'pool' else ''
     finally:
@@ -145,7 +151,8 @@ def page():
         p['oms_available'] = oms.get(p['isbn'])          # None = SKU not in the snapshot
     status_options = sorted(status_counts.items(), key=lambda kv: (-kv[1], kv[0]))
     return render_template('giveaway.html', tab=tab, pool=pool, snapshot_at=snap,
-                           status_options=status_options,
+                           status_options=status_options, state_counts=state_counts,
+                           store_options=[(k, store_counts.get(k, 0)) for k in STORES],
                            inventory_running=inv.is_running() if tab == 'pool' else False,
                            extra_nav_links=([{'label': 'Orders', 'url': url_for('orders.page')}]
                                             if has_module(MODULE_TIKTOK_ORDERS) else []), rows=rows[:MAX_ROWS], total_rows=len(rows),
@@ -319,7 +326,7 @@ def export_xlsx():
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     try:
-        rows = _units(cur, where, params, values['state'])
+        rows = _units(cur, where, params, values['states'])
     finally:
         cur.close()
         conn.close()

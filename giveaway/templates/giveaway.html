@@ -257,16 +257,30 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
  <form method="get" id="filters">
   <input type="hidden" name="tab" value="draws">
   <div class="filter-grid">
-   <label>Store<select name="store"><option value="">All</option>{% for s in ['TU', 'VB'] %}<option value="{{ s }}" {% if values.store == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
-   <div class="field-col"><span class="field-label">Shipping Status (multiple)</span>
-    <div class="multi"><button class="multi-toggle" type="button" data-toggle="statusPanel">Shipping Status: All ▾</button>
-     <div class="multi-panel" id="statusPanel" hidden>
+   <div class="field-col"><span class="field-label">Store (multiple)</span>
+    <div class="multi"><button class="multi-toggle" type="button" data-toggle="storePanel" data-label="Store">Store: All ▾</button>
+     <div class="multi-panel" id="storePanel" data-name="store" hidden>
       <label><input type="checkbox" class="select-all"> All</label>
-      {% for st, n in status_options %}<label><input type="checkbox" name="status" value="{{ st }}" {% if st in values.statuses %}checked{% endif %}> {{ st }} <span class="facet-count">{{ n }}</span></label>{% endfor %}
+      {% for st, n in store_options %}<label><input type="checkbox" name="store" value="{{ st }}"> {{ st }} <span class="facet-count">{{ n }}</span></label>{% endfor %}
      </div>
     </div>
    </div>
-   <label>State<select name="state"><option value="">All</option>{% for s in ['unassigned', 'unlocked', 'locked'] %}<option value="{{ s }}" {% if values.state == s %}selected{% endif %}>{{ {'unassigned': 'Unassigned', 'unlocked': 'Drawn', 'locked': 'Locked'}[s] }}</option>{% endfor %}</select></label>
+   <div class="field-col"><span class="field-label">Shipping Status (multiple)</span>
+    <div class="multi"><button class="multi-toggle" type="button" data-toggle="statusPanel" data-label="Shipping Status">Shipping Status: All ▾</button>
+     <div class="multi-panel" id="statusPanel" data-name="status" hidden>
+      <label><input type="checkbox" class="select-all"> All</label>
+      {% for st, n in status_options %}<label><input type="checkbox" name="status" value="{{ st }}"> {{ st }} <span class="facet-count">{{ n }}</span></label>{% endfor %}
+     </div>
+    </div>
+   </div>
+   <div class="field-col"><span class="field-label">State (multiple)</span>
+    <div class="multi"><button class="multi-toggle" type="button" data-toggle="statePanel" data-label="State">State: All ▾</button>
+     <div class="multi-panel" id="statePanel" data-name="state" hidden>
+      <label><input type="checkbox" class="select-all"> All</label>
+      {% for st in ['unassigned', 'unlocked', 'locked'] %}<label><input type="checkbox" name="state" value="{{ st }}"> {{ {'unassigned': 'Unassigned', 'unlocked': 'Drawn', 'locked': 'Locked'}[st] }} <span class="facet-count">{{ state_counts[st] }}</span></label>{% endfor %}
+     </div>
+    </div>
+   </div>
    <div class="calendar-range-field">
  <label>Order Date Range (ET)</label>
  <button id="dateRangeButton" type="button" class="date-range-button"><span id="dateRangeText">Select dates</span><span>📅</span></button>
@@ -651,29 +665,39 @@ document.addEventListener("click", function (event) {
 updateDateRangeText();
 renderCalendar();
 
-// ---- Shipping Status multi-select: no value = All; All / none submit as no parameter ----
+// ---- Multi-selects (Store / Shipping Status / State): no value = All; All / none submit nothing ----
 (function () {
- const panel = document.getElementById('statusPanel');
- const boxes = [...panel.querySelectorAll('input[name=status]')];
- const all = panel.querySelector('.select-all');
- const toggle = document.querySelector('[data-toggle="statusPanel"]');
- const picked = new URLSearchParams(location.search).getAll('status');
- boxes.forEach(b => b.checked = picked.length === 0 || picked.includes(b.value));
- function sync() {
-  const n = boxes.filter(b => b.checked).length;
-  all.checked = boxes.length > 0 && n === boxes.length;
-  all.indeterminate = n > 0 && n < boxes.length;
-  toggle.textContent = 'Shipping Status: ' + ((n === 0 || n === boxes.length) ? 'All' : n + ' selected') + ' ▾';
- }
- all.addEventListener('change', () => { boxes.forEach(b => b.checked = all.checked); sync(); });
- boxes.forEach(b => b.addEventListener('change', sync));
- toggle.addEventListener('click', () => { panel.hidden = !panel.hidden; });
- document.addEventListener('click', e => { if (!e.target.closest('.multi')) panel.hidden = true; });
- document.getElementById('filters').addEventListener('submit', () => {
-  const n = boxes.filter(b => b.checked).length;
-  if (n === 0 || n === boxes.length) boxes.forEach(b => b.checked = false);
+ const panels = [...document.querySelectorAll('#filters .multi-panel[data-name]')];
+ const params = new URLSearchParams(location.search);
+ panels.forEach(panel => {
+  const boxes = [...panel.querySelectorAll('input[name]')];
+  const all = panel.querySelector('.select-all');
+  const toggle = document.querySelector(`[data-toggle="${panel.id}"]`);
+  const picked = params.getAll(panel.dataset.name);
+  boxes.forEach(b => b.checked = picked.length === 0 || picked.includes(b.value));
+  const sync = () => {
+   const n = boxes.filter(b => b.checked).length;
+   all.checked = boxes.length > 0 && n === boxes.length;
+   all.indeterminate = n > 0 && n < boxes.length;
+   toggle.textContent = toggle.dataset.label + ': ' + ((n === 0 || n === boxes.length) ? 'All' : n + ' selected') + ' ▾';
+  };
+  all.addEventListener('change', () => { boxes.forEach(b => b.checked = all.checked); sync(); });
+  boxes.forEach(b => b.addEventListener('change', sync));
+  toggle.addEventListener('click', () => {
+   const opening = panel.hidden;
+   panels.forEach(p => p.hidden = true);
+   panel.hidden = !opening;
+  });
+  sync();
  });
- sync();
+ document.addEventListener('click', e => { if (!e.target.closest('.multi')) panels.forEach(p => p.hidden = true); });
+ document.getElementById('filters').addEventListener('submit', () => {
+  panels.forEach(panel => {
+   const boxes = [...panel.querySelectorAll('input[name]')];
+   const n = boxes.filter(b => b.checked).length;
+   if (n === 0 || n === boxes.length) boxes.forEach(b => b.checked = false);
+  });
+ });
 })();
 // ---- Draws: ticked rows. Every row starts ticked. All ticked = the whole search (all rows,
 // not only those shown); some ticked = only those; none = nothing. ----
