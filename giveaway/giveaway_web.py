@@ -63,8 +63,9 @@ def _day(value, default):
         return default
 
 
-def _filters(args):
-    """WHERE (aliases o / i) for the lottery list + normalized filter values."""
+def _filters(args, omit=()):
+    """WHERE (aliases o / i) for the lottery list + normalized filter values.
+    omit={'status'} leaves the shipping-status filter out (for its own counts)."""
     today = datetime.now(ET).date()
     d_from = _day(args.get('from'), today - timedelta(days=6))
     d_to = _day(args.get('to'), today)
@@ -79,9 +80,13 @@ def _filters(args):
     if q:
         where.append('(o.order_id = %s OR TRIM(i.tracking_number) = %s)')
         params += [q, q]
+    statuses = list(dict.fromkeys(v for v in args.getlist('status') if v and v != 'all' and len(v) <= 64))
+    if statuses and 'status' not in omit:
+        where.append('o.status IN (' + ','.join(['%s'] * len(statuses)) + ')')
+        params += statuses
     state = args.get('state', '')
     values = {'from': d_from.isoformat(), 'to': d_to.isoformat(), 'store': store, 'q': q,
-              'state': state if state in STATES else ''}
+              'state': state if state in STATES else '', 'statuses': statuses}
     return ' AND '.join(where), params, values
 
 
@@ -119,6 +124,14 @@ def page():
     try:
         pool = gs.pool_rows(cur)
         rows = _units(cur, where, params, values['state']) if tab == 'draws' else []
+        status_counts = {}
+        if tab == 'draws':
+            # Shipping-status choices with counts under every other filter (books, like the list).
+            s_where, s_params, _ = _filters(request.args, omit={'status'})
+            for r in _units(cur, s_where, s_params, values['state']):
+                status_counts[r['status'] or '—'] = status_counts.get(r['status'] or '—', 0) + 1
+            for st in values['statuses']:
+                status_counts.setdefault(st, 0)
         oms = inv.available_by_isbn(cur, [p['isbn'] for p in pool]) if tab == 'pool' else {}
         snap = _fmt(inv.snapshot_time(cur)) if tab == 'pool' else ''
     finally:
@@ -130,7 +143,9 @@ def page():
     active_left = sum(max(int(p['remaining']), 0) for p in pool if p['active'])
     for p in pool:
         p['oms_available'] = oms.get(p['isbn'])          # None = SKU not in the snapshot
+    status_options = sorted(status_counts.items(), key=lambda kv: (-kv[1], kv[0]))
     return render_template('giveaway.html', tab=tab, pool=pool, snapshot_at=snap,
+                           status_options=status_options,
                            inventory_running=inv.is_running() if tab == 'pool' else False,
                            extra_nav_links=([{'label': 'Orders', 'url': url_for('orders.page')}]
                                             if has_module(MODULE_TIKTOK_ORDERS) else []), rows=rows[:MAX_ROWS], total_rows=len(rows),

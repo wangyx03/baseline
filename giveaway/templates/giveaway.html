@@ -50,6 +50,20 @@ th.sortable:hover{background:#eef2f7}
 th.sortable::after{content:" ↕";color:#c3c8cf;font-weight:400}
 th.sortable.asc::after{content:" ↑";color:#1769aa}
 th.sortable.desc::after{content:" ↓";color:#1769aa}
+.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;align-items:end}
+.filter-grid label,.search-row,.field-col{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#596273}
+.filter-grid select,.multi-toggle{width:100%;box-sizing:border-box}
+.filter-grid .calendar-range-field{width:auto}
+.calendar-range-field > label{font-size:12px;color:#596273;margin-bottom:5px;display:block}
+.search-row{margin-top:12px}
+.search-row input{width:100%;box-sizing:border-box}
+.multi{position:relative}
+.multi-toggle{text-align:left;cursor:pointer;padding:8px 9px;border:1px solid #d5dbe3;border-radius:7px;font:inherit;font-size:14px;background:#fff;color:#202735}
+.multi-panel{position:absolute;z-index:20;top:100%;left:0;min-width:100%;width:max-content;max-height:320px;overflow:auto;background:#fff;border:1px solid #cbd5e1;box-shadow:0 8px 24px #0002;border-radius:8px;padding:9px}
+.multi-panel[hidden]{display:none}
+.multi-panel label{display:flex;flex-direction:row;align-items:center;gap:7px;padding:7px 3px;font-size:13px;color:#202735;cursor:pointer;margin:0}
+.multi-panel input[type=checkbox]{width:auto}
+.multi-panel .facet-count{margin-left:auto;flex-shrink:0;color:#667085;font-size:12px;padding-left:14px}
 .add-row{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap}
 .add-or{color:#98a2b3;font-size:13px;padding-bottom:10px}
 .calendar-range-field{position:relative}
@@ -238,10 +252,20 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
 
 {% else %}
 <section class="panel">
- <form method="get" id="filters" class="form-row">
+ <form method="get" id="filters">
   <input type="hidden" name="tab" value="draws">
-  <label>Store<select name="store"><option value="">All</option>{% for s in ['TU', 'VB'] %}<option value="{{ s }}" {% if values.store == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
-<div class="calendar-range-field">
+  <div class="filter-grid">
+   <label>Store<select name="store"><option value="">All</option>{% for s in ['TU', 'VB'] %}<option value="{{ s }}" {% if values.store == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+   <div class="field-col"><span class="field-label">Shipping Status (multiple)</span>
+    <div class="multi"><button class="multi-toggle" type="button" data-toggle="statusPanel">Shipping Status: All ▾</button>
+     <div class="multi-panel" id="statusPanel" hidden>
+      <label><input type="checkbox" class="select-all"> All</label>
+      {% for st, n in status_options %}<label><input type="checkbox" name="status" value="{{ st }}" {% if st in values.statuses %}checked{% endif %}> {{ st }} <span class="facet-count">{{ n }}</span></label>{% endfor %}
+     </div>
+    </div>
+   </div>
+   <label>State<select name="state"><option value="">All</option>{% for s in ['unassigned', 'unlocked', 'locked'] %}<option value="{{ s }}" {% if values.state == s %}selected{% endif %}>{{ {'unassigned': 'Unassigned', 'unlocked': 'Drawn', 'locked': 'Locked'}[s] }}</option>{% endfor %}</select></label>
+   <div class="calendar-range-field">
  <label>Order Date Range (ET)</label>
  <button id="dateRangeButton" type="button" class="date-range-button"><span id="dateRangeText">Select dates</span><span>📅</span></button>
  <div id="calendarPopover" class="calendar-popover">
@@ -276,11 +300,12 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
 </div>
 <input type="hidden" name="from" id="ordersFrom" value="{{ values.from }}">
 <input type="hidden" name="to" id="ordersTo" value="{{ values.to }}">
-
-  <label>State<select name="state"><option value="">All</option>{% for s in ['unassigned', 'unlocked', 'locked'] %}<option value="{{ s }}" {% if values.state == s %}selected{% endif %}>{{ {'unassigned': 'Unassigned', 'unlocked': 'Drawn', 'locked': 'Locked'}[s] }}</option>{% endfor %}</select></label>
-  <label>Order ID / tracking<input type="search" name="q" value="{{ values.q }}"></label>
-  <button class="btn" type="submit">Search</button>
-  <a class="btn secondary" href="{{ url_for('giveaway.page', tab='draws') }}">Reset</a>
+  </div>
+  <label class="search-row">Search<input type="search" name="q" value="{{ values.q }}" placeholder="Order ID, Tracking"></label>
+  <div class="row" style="margin-top:12px">
+   <button class="btn" type="submit">Search</button>
+   <a class="btn secondary" href="{{ url_for('giveaway.page', tab='draws') }}">Reset</a>
+  </div>
  </form>
  <div class="row" style="margin-top:14px;justify-content:space-between">
   <div class="small">
@@ -622,6 +647,30 @@ document.addEventListener("click", function (event) {
 updateDateRangeText();
 renderCalendar();
 
+// ---- Shipping Status multi-select: no value = All; All / none submit as no parameter ----
+(function () {
+ const panel = document.getElementById('statusPanel');
+ const boxes = [...panel.querySelectorAll('input[name=status]')];
+ const all = panel.querySelector('.select-all');
+ const toggle = document.querySelector('[data-toggle="statusPanel"]');
+ const picked = new URLSearchParams(location.search).getAll('status');
+ boxes.forEach(b => b.checked = picked.length === 0 || picked.includes(b.value));
+ function sync() {
+  const n = boxes.filter(b => b.checked).length;
+  all.checked = boxes.length > 0 && n === boxes.length;
+  all.indeterminate = n > 0 && n < boxes.length;
+  toggle.textContent = 'Shipping Status: ' + ((n === 0 || n === boxes.length) ? 'All' : n + ' selected') + ' ▾';
+ }
+ all.addEventListener('change', () => { boxes.forEach(b => b.checked = all.checked); sync(); });
+ boxes.forEach(b => b.addEventListener('change', sync));
+ toggle.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+ document.addEventListener('click', e => { if (!e.target.closest('.multi')) panel.hidden = true; });
+ document.getElementById('filters').addEventListener('submit', () => {
+  const n = boxes.filter(b => b.checked).length;
+  if (n === 0 || n === boxes.length) boxes.forEach(b => b.checked = false);
+ });
+ sync();
+})();
 // ---- Draws: draw all ----
 const drawBtn = document.getElementById('drawAll');
 drawBtn.addEventListener('click', async () => {
