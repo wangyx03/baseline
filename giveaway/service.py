@@ -389,7 +389,8 @@ def _drop_invalid(cur, keys):
     return removed
 
 
-def _draw_missing(conn, cur, lines, user):
+def _draw_missing(conn, cur, lines, user, only_units=None):
+    """only_units: optional set of (store_id, order_id, line_item_id, unit_no) to limit the draw."""
     keys = [(l['store_id'], l['order_id'], l['line_item_id']) for l in lines]
     stats = {'drawn': 0, 'redrawn': _drop_invalid(cur, keys), 'short': 0}
     existing = assignments_for(cur, keys)
@@ -399,7 +400,8 @@ def _draw_missing(conn, cur, lines, user):
     for line in lines:
         key = (line['store_id'], line['order_id'], line['line_item_id'])
         have = {a['unit_no'] for a in existing.get(key, [])}
-        missing = [u for u in range(1, int(line['quantity']) + 1) if u not in have]
+        missing = [u for u in range(1, int(line['quantity']) + 1) if u not in have
+                   and (only_units is None or (*key, u) in only_units)]
         if not missing:
             continue
         package = _package_isbns(cur, line)
@@ -437,6 +439,25 @@ def ensure_for_orders(order_keys, user='auto'):
             lines = lottery_lines(cur, f"(i.store_id, i.order_id) IN ({','.join(['(%s,%s)'] * len(chunk))})",
                                   [v for k in chunk for v in k])
             for k, v in _draw_missing(conn, cur, lines, user).items():
+                total[k] += v
+        return total
+    return _with_draw_lock(run)
+
+
+def draw_units(units, user='auto'):
+    """Draw books for the given units only: [(store_id, order_id, line_item_id, unit_no)]."""
+    wanted = {(int(s), str(o), str(l), int(u)) for s, o, l, u in units}
+    lines_keys = sorted({k[:3] for k in wanted})
+    if not lines_keys:
+        return {'drawn': 0, 'redrawn': 0, 'short': 0}
+
+    def run(conn, cur):
+        total = {'drawn': 0, 'redrawn': 0, 'short': 0}
+        for start in range(0, len(lines_keys), 300):
+            chunk = lines_keys[start:start + 300]
+            lines = lottery_lines(cur, f"(i.store_id, i.order_id, i.line_item_id) IN ({','.join(['(%s,%s,%s)'] * len(chunk))})",
+                                  [v for k in chunk for v in k])
+            for k, v in _draw_missing(conn, cur, lines, user, wanted).items():
                 total[k] += v
         return total
     return _with_draw_lock(run)

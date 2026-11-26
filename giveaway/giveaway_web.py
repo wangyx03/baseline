@@ -255,12 +255,29 @@ def pool_delete():
 def draw():
     from urllib.parse import parse_qsl
     from werkzeug.datastructures import MultiDict
-    args = MultiDict(parse_qsl(str(_json().get('query') or ''), keep_blank_values=True))
-    where, params, _ = _filters(args)
+    body = _json()
+    picked = _picked_units(body.get('units'))
     try:
+        if picked is not None:          # some rows ticked: only those
+            return jsonify(gs.draw_units(picked, _user()))
+        args = MultiDict(parse_qsl(str(body.get('query') or ''), keep_blank_values=True))
+        where, params, _ = _filters(args)
         return jsonify(gs.draw_all(where, params, _user()))
     except gs.GiveawayError as exc:
         return _error(exc, 409)
+
+
+def _picked_units(raw):
+    """None = nothing sent (whole filter); else [(store_id, order_id, line_item_id, unit_no)]
+    from "store:order:line:unit" strings."""
+    if raw is None:
+        return None
+    out = []
+    for item in raw if isinstance(raw, list) else []:
+        parts = str(item).split(':')
+        if len(parts) == 4 and parts[0].isdigit() and parts[3].isdigit():
+            out.append((int(parts[0]), parts[1], parts[2], int(parts[3])))
+    return out[:5000]
 
 
 def _unit_args(body):
@@ -286,11 +303,19 @@ def assign_set():
         return _error(exc)
 
 
-@bp.get('/export.xlsx')
+@bp.route('/export.xlsx', methods=['GET', 'POST'])
 def export_xlsx():
-    """Pick list of the filtered lottery books. lock=1 locks the exported books."""
+    """Pick list of the filtered lottery books. lock=1 locks the exported books.
+    POST with units (JSON list of "store:order:line:unit") = only the ticked rows."""
+    import json
     from openpyxl import Workbook
     where, params, values = _filters(request.args)
+    picked = None
+    if request.method == 'POST':
+        try:
+            picked = set(_picked_units(json.loads(request.form.get('units') or '[]')) or [])
+        except ValueError:
+            picked = set()
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     try:
@@ -298,8 +323,9 @@ def export_xlsx():
     finally:
         cur.close()
         conn.close()
-    rows = [r for r in rows if r['isbn']]
-    if request.args.get('lock') == '1':
+    rows = [r for r in rows if r['isbn'] and (picked is None or
+            (r['store_id'], str(r['order_id']), str(r['line_item_id']), r['unit_no']) in picked)]
+    if (request.form.get('lock') if request.method == 'POST' else request.args.get('lock')) == '1':
         gs.lock_orders([(r['store_id'], r['order_id']) for r in rows])
     wb = Workbook(write_only=True)
     ws = wb.create_sheet('Pick list')

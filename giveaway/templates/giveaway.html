@@ -64,6 +64,8 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
 .multi-panel label{display:flex;flex-direction:row;align-items:center;gap:7px;padding:7px 3px;font-size:13px;color:#202735;cursor:pointer;margin:0}
 .multi-panel input[type=checkbox]{width:auto}
 .multi-panel .facet-count{margin-left:auto;flex-shrink:0;color:#667085;font-size:12px;padding-left:14px}
+.pick{width:28px;text-align:center}
+.pick input{width:auto;cursor:pointer;margin:0}
 .add-row{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap}
 .add-or{color:#98a2b3;font-size:13px;padding-bottom:10px}
 .calendar-range-field{position:relative}
@@ -315,19 +317,21 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
    {% if total_rows > rows|length %}showing the first {{ rows|length }} of {{ total_rows }}{% endif %}
   </div>
   <div class="row">
-   <button class="btn" type="button" id="drawAll" {% if not counts.unassigned %}disabled{% endif %}>Draw all unassigned ({{ counts.unassigned }})</button>
+   <button class="btn" type="button" id="drawAll" data-total="{{ counts.unassigned }}" {% if not counts.unassigned %}disabled{% endif %}>Draw unassigned ({{ counts.unassigned }})</button>
    <label class="small row" style="gap:5px"><input type="checkbox" id="exportLock"> Lock exported books</label>
-   <a class="btn outline" id="exportLink" data-base="{{ url_for('giveaway.export_xlsx') }}?{{ query }}" href="{{ url_for('giveaway.export_xlsx') }}?{{ query }}">Export pick list</a>
+   <button class="btn outline" type="button" id="exportBtn" data-total="{{ counts.unlocked + counts.locked }}">Export pick list ({{ counts.unlocked + counts.locked }})</button>
+   <form method="post" id="exportForm" action="{{ url_for('giveaway.export_xlsx') }}?{{ query }}" hidden><input type="hidden" name="units"><input type="hidden" name="lock"></form>
   </div>
  </div>
  <div class="msg" id="drawMsg"></div>
  <datalist id="poolIsbns">{% for p in pool if p.active %}<option value="{{ p.isbn }}">{{ p.book_title or '' }} · left {{ p.remaining }}</option>{% endfor %}</datalist>
  <div class="table-scroll" style="margin-top:10px">
  <table>
-  <thead><tr><th>Store</th><th>Order ID</th><th>Created (ET)</th><th>Tracking</th><th>Status</th><th>Book #</th><th>Book</th><th>State</th><th>Change</th></tr></thead>
+  <thead><tr><th class="pick"><input type="checkbox" id="pickAll" title="Select all rows on this page"></th><th>Store</th><th>Order ID</th><th>Created (ET)</th><th>Tracking</th><th>Status</th><th>Book #</th><th>Book</th><th>State</th><th>Change</th></tr></thead>
   <tbody>
   {% for r in rows %}
    <tr data-store="{{ r.store_id }}" data-order="{{ r.order_id }}" data-line="{{ r.line_item_id }}" data-unit="{{ r.unit_no }}">
+    <td class="pick"><input type="checkbox" class="pick-box" checked value="{{ r.store_id }}:{{ r.order_id }}:{{ r.line_item_id }}:{{ r.unit_no }}" data-state="{{ r.state }}"></td>
     <td>{{ r.store }}</td>
     <td class="mono nowrap">{{ r.order_id }}</td>
     <td class="nowrap">{{ r.created }}</td>
@@ -340,7 +344,7 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
      <input type="text" class="set-input mono" list="poolIsbns" placeholder="ISBN" data-setisbn> <button class="btn sm outline" type="button" data-set>Set</button>{% else %}<span class="small">locked</span>{% endif %}</td>
    </tr>
   {% else %}
-   <tr><td colspan="9">No lottery books in this range.</td></tr>
+   <tr><td colspan="10">No lottery books in this range.</td></tr>
   {% endfor %}
   </tbody>
  </table>
@@ -671,16 +675,41 @@ renderCalendar();
  });
  sync();
 })();
-// ---- Draws: draw all ----
-const drawBtn = document.getElementById('drawAll');
+// ---- Draws: ticked rows. Every row starts ticked. All ticked = the whole search (all rows,
+// not only those shown); some ticked = only those; none = nothing. ----
+const drawBtn = document.getElementById('drawAll'), exportBtn = document.getElementById('exportBtn');
+const pickAll = document.getElementById('pickAll');
+const pickBoxes = () => [...document.querySelectorAll('.pick-box')];
+function pickState() {
+ const boxes = pickBoxes(), on = boxes.filter(b => b.checked);
+ return {boxes, on, all: boxes.length > 0 && on.length === boxes.length};
+}
+function updatePick() {
+ const {boxes, on, all} = pickState();
+ pickAll.checked = all;
+ pickAll.indeterminate = on.length > 0 && !all;
+ pickAll.disabled = !boxes.length;
+ const nDraw = all ? Number(drawBtn.dataset.total) : on.filter(b => b.dataset.state === 'unassigned').length;
+ const nExport = all ? Number(exportBtn.dataset.total) : on.filter(b => b.dataset.state !== 'unassigned').length;
+ drawBtn.textContent = all ? `Draw unassigned (${nDraw})` : `Draw selected (${nDraw})`;
+ exportBtn.textContent = all ? `Export pick list (${nExport})` : `Export selected (${nExport})`;
+ drawBtn.disabled = !nDraw;
+ exportBtn.disabled = !nExport;
+}
+pickAll.addEventListener('change', () => { pickBoxes().forEach(b => b.checked = pickAll.checked); updatePick(); });
+document.querySelector('.gw-page').addEventListener('change', e => { if (e.target.classList.contains('pick-box')) updatePick(); });
+updatePick();
 drawBtn.addEventListener('click', async () => {
+ const {on, all} = pickState();
  drawBtn.disabled = true; drawBtn.textContent = 'Drawing…';
  try {
-  const j = await gwPost(GW.draw, {query: location.search.slice(1)});
+  const req = {query: location.search.slice(1)};
+  if (!all) req.units = on.filter(b => b.dataset.state === 'unassigned').map(b => b.value);
+  const j = await gwPost(GW.draw, req);
   gwSay('drawMsg', `Drawn ${j.drawn} book(s)` + (j.redrawn ? `, ${j.redrawn} re-drawn (book left the pool)` : '') +
         (j.short ? `\n${j.short} could not be drawn: no book has both pool Left and OMS stock (check the Pool tab).` : ''), !j.short);
   setTimeout(() => location.reload(), j.short ? 2500 : 800);
- } catch (err) { gwSay('drawMsg', err.message, false); drawBtn.disabled = false; }
+ } catch (err) { gwSay('drawMsg', err.message, false); updatePick(); }
 });
 // ---- Draws: per book re-draw / set ----
 document.querySelector('.gw-page').addEventListener('click', async e => {
@@ -703,8 +732,18 @@ document.querySelector('.gw-page').addEventListener('click', async e => {
   location.reload();
  } catch (err) { gwSay('drawMsg', err.message, false); e.target.disabled = false; }
 });
-// ---- Draws: export (optionally locking) ----
-const lockBox = document.getElementById('exportLock'), exportLink = document.getElementById('exportLink');
-lockBox.addEventListener('change', () => { exportLink.href = exportLink.dataset.base + (lockBox.checked ? '&lock=1' : ''); });
+// ---- Draws: export (optionally locking). All ticked = whole search; else the ticked rows. ----
+exportBtn.addEventListener('click', () => {
+ const {on, all} = pickState();
+ const form = document.getElementById('exportForm');
+ form.units.value = all ? '' : JSON.stringify(on.map(b => b.value));
+ form.lock.value = document.getElementById('exportLock').checked ? '1' : '';
+ if (all) {   // whole search: plain GET keeps working for any number of rows
+  location.href = form.getAttribute('action') + (form.lock.value ? '&lock=1' : '');
+ } else {
+  form.submit();
+ }
+ if (form.lock.value) setTimeout(() => location.reload(), 1500);
+});
 {% endif %}
 </script>{% endblock %}
