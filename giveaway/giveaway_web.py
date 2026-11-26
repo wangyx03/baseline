@@ -1,7 +1,7 @@
 """Flask blueprint: Giveaway Pool (books for TikTok ZERO_LOTTERY orders).
 
 - GET  /giveaway/?tab=pool           pool management (default)
-- GET  /giveaway/?tab=draws          lottery books (filters: store, dates ET, state)
+- GET  /giveaway/?tab=draws          lottery books (filters: store, status, state, dates in the chosen time zone)
 - POST /giveaway/pool/add            add one book (or replace its quantity)
 - POST /giveaway/pool/upload         .xlsx / .csv with isbn, quantity[, note] (set or add)
 - GET  /giveaway/pool/template.xlsx  empty upload file
@@ -34,6 +34,13 @@ from permissions.permissions import MODULE_GIVEAWAY, MODULE_TIKTOK_ORDERS, has_m
 bp = Blueprint('giveaway', __name__, url_prefix='/giveaway', template_folder='templates')
 
 ET = ZoneInfo('America/New_York')
+TIME_ZONES = {          # same choices as the Orders page
+    'America/New_York': 'ET',
+    'America/Chicago': 'CT',
+    'America/Denver': 'MT',
+    'America/Los_Angeles': 'PT',
+    'UTC': 'UTC',
+}
 STORES = {'TU': 1, 'VB': 2}
 STORE_NAMES = {v: k for k, v in STORES.items()}
 STATES = ('unassigned', 'unlocked', 'locked')
@@ -50,10 +57,15 @@ def _user():
     return (getattr(current_user, 'username', None) or str(current_user.get_id()))[:64]
 
 
-def _fmt(dt):
+def _tz_name(args):
+    name = args.get('tz', 'America/New_York')
+    return name if name in TIME_ZONES else 'America/New_York'
+
+
+def _fmt(dt, tz=ET):
     if not dt:
         return ''
-    return dt.replace(tzinfo=timezone.utc).astimezone(ET).strftime('%Y-%m-%d %I:%M %p')
+    return dt.replace(tzinfo=timezone.utc).astimezone(tz).strftime('%Y-%m-%d %I:%M %p')
 
 
 def _day(value, default):
@@ -67,11 +79,13 @@ def _filters(args, omit=()):
     """WHERE (aliases o / i) for the lottery list + normalized filter values.
     omit={'store'} / {'status'} leaves that filter out (for its own counts). Store, shipping
     status and state are multi-selects: none or all ticked = no restriction."""
-    today = datetime.now(ET).date()
+    tz_name = _tz_name(args)
+    tz = ZoneInfo(tz_name)
+    today = datetime.now(tz).date()
     d_from = _day(args.get('from'), today - timedelta(days=6))
     d_to = _day(args.get('to'), today)
-    start = datetime.combine(d_from, time.min, tzinfo=ET).astimezone(timezone.utc).replace(tzinfo=None)
-    end = datetime.combine(d_to + timedelta(days=1), time.min, tzinfo=ET).astimezone(timezone.utc).replace(tzinfo=None)
+    start = datetime.combine(d_from, time.min, tzinfo=tz).astimezone(timezone.utc).replace(tzinfo=None)
+    end = datetime.combine(d_to + timedelta(days=1), time.min, tzinfo=tz).astimezone(timezone.utc).replace(tzinfo=None)
     where, params = ['o.create_time >= %s', 'o.create_time < %s'], [start, end]
     stores = [v for v in dict.fromkeys(args.getlist('store')) if v in STORES]
     if stores and 'store' not in omit:
@@ -87,11 +101,11 @@ def _filters(args, omit=()):
         params += statuses
     states = [v for v in dict.fromkeys(args.getlist('state')) if v in STATES]
     values = {'from': d_from.isoformat(), 'to': d_to.isoformat(), 'stores': stores, 'q': q,
-              'states': states, 'statuses': statuses}
+              'states': states, 'statuses': statuses, 'tz': tz_name, 'tz_label': TIME_ZONES[tz_name]}
     return ' AND '.join(where), params, values
 
 
-def _units(cur, where, params, states=()):
+def _units(cur, where, params, states=(), tz=ET):
     """One row per lottery book (line x unit) with its assignment; states = keep only these."""
     lines = gs.lottery_lines(cur, where, params)
     assigned = gs.assignments_for(cur, [(l['store_id'], l['order_id'], l['line_item_id']) for l in lines])
@@ -107,11 +121,11 @@ def _units(cur, where, params, states=()):
                 'store': STORE_NAMES.get(l['store_id'], l['store_id']), 'store_id': l['store_id'],
                 'order_id': l['order_id'], 'line_item_id': l['line_item_id'], 'unit_no': unit,
                 'units': int(l['quantity']), 'tracking': l['tracking'] or '', 'status': l['status'],
-                'created': _fmt(l['create_time']), 'product_name': l['product_name'] or '',
+                'created': _fmt(l['create_time'], tz), 'product_name': l['product_name'] or '',
                 'isbn': a['isbn'] if a else '', 'title': (a['book_title'] or '') if a else '',
                 'in_pool': bool(a and a['in_pool']), 'state': st,
                 'assigned_by': (a['assigned_by'] or '') if a else '',
-                'assigned_at': _fmt(a['assigned_at']) if a else '',
+                'assigned_at': _fmt(a['assigned_at'], tz) if a else '',
             })
     return rows
 
@@ -120,26 +134,27 @@ def _units(cur, where, params, states=()):
 def page():
     tab = 'draws' if request.args.get('tab') == 'draws' else 'pool'
     where, params, values = _filters(request.args)
+    tz = ZoneInfo(values['tz'])
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     try:
         pool = gs.pool_rows(cur)
-        rows = _units(cur, where, params, values['states']) if tab == 'draws' else []
+        rows = _units(cur, where, params, values['states'], tz) if tab == 'draws' else []
         status_counts, store_counts, state_counts = {}, {}, {s: 0 for s in STATES}
         if tab == 'draws':
             # Choice counts (books, like the list) under every other filter but their own.
             s_where, s_params, _ = _filters(request.args, omit={'status'})
-            for r in _units(cur, s_where, s_params, values['states']):
+            for r in _units(cur, s_where, s_params, values['states'], tz):
                 status_counts[r['status'] or '—'] = status_counts.get(r['status'] or '—', 0) + 1
             for st in values['statuses']:
                 status_counts.setdefault(st, 0)
             st_where, st_params, _ = _filters(request.args, omit={'store'})
-            for r in _units(cur, st_where, st_params, values['states']):
+            for r in _units(cur, st_where, st_params, values['states'], tz):
                 store_counts[r['store']] = store_counts.get(r['store'], 0) + 1
-            for r in _units(cur, where, params):
+            for r in _units(cur, where, params, tz=tz):
                 state_counts[r['state']] += 1
         oms = inv.available_by_isbn(cur, [p['isbn'] for p in pool]) if tab == 'pool' else {}
-        snap = _fmt(inv.snapshot_time(cur)) if tab == 'pool' else ''
+        snap = _fmt(inv.snapshot_time(cur), tz) if tab == 'pool' else ''
     finally:
         cur.close()
         conn.close()
@@ -156,7 +171,7 @@ def page():
                            inventory_running=inv.is_running() if tab == 'pool' else False,
                            extra_nav_links=([{'label': 'Orders', 'url': url_for('orders.page')}]
                                             if has_module(MODULE_TIKTOK_ORDERS) else []), rows=rows[:MAX_ROWS], total_rows=len(rows),
-                           counts=counts, values=values, active_left=active_left,
+                           counts=counts, values=values, active_left=active_left, time_zones=TIME_ZONES,
                            query=request.query_string.decode('utf-8'))
 
 
@@ -231,7 +246,7 @@ def inventory_status():
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     try:
-        updated = _fmt(inv.snapshot_time(cur))
+        updated = _fmt(inv.snapshot_time(cur), ZoneInfo(_tz_name(request.args)))
     finally:
         cur.close()
         conn.close()
@@ -326,7 +341,7 @@ def export_xlsx():
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     try:
-        rows = _units(cur, where, params, values['states'])
+        rows = _units(cur, where, params, values['states'], ZoneInfo(values['tz']))
     finally:
         cur.close()
         conn.close()
@@ -336,7 +351,7 @@ def export_xlsx():
         gs.lock_orders([(r['store_id'], r['order_id']) for r in rows])
     wb = Workbook(write_only=True)
     ws = wb.create_sheet('Pick list')
-    ws.append(['Store', 'Order ID', 'Tracking', 'Created (ET)', 'Book #', 'ISBN', 'Title', 'Order status'])
+    ws.append(['Store', 'Order ID', 'Tracking', f"Created ({values['tz_label']})", 'Book #', 'ISBN', 'Title', 'Order status'])
     for r in rows:   # IDs stay text so Excel does not turn them into 5.77E+17
         ws.append([r['store'], str(r['order_id']), str(r['tracking']), r['created'],
                    f"{r['unit_no']}/{r['units']}", str(r['isbn']), r['title'], r['status']])
@@ -345,6 +360,6 @@ def export_xlsx():
     resp = Response(out.getvalue(),
                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp.headers['Content-Disposition'] = (
-        f'attachment; filename="giveaway_picklist_{datetime.now(ET):%Y%m%d_%H%M}.xlsx"')
+        f'attachment; filename="giveaway_picklist_{datetime.now(ZoneInfo(values["tz"])):%Y%m%d_%H%M}.xlsx"')
     resp.headers['Cache-Control'] = 'no-store, private'
     return resp

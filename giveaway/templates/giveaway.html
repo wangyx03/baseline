@@ -179,8 +179,8 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
 <p class="small">Books for TikTok ZERO_LOTTERY orders · Pool = which books can be given and how many · Lottery draws = which book each lottery order gets</p>
 
 <div class="tabs">
- <a class="tab {{ 'active' if tab == 'pool' }}" href="{{ url_for('giveaway.page', tab='pool') }}">Pool ({{ pool|length }})</a>
- <a class="tab {{ 'active' if tab == 'draws' }}" href="{{ url_for('giveaway.page', tab='draws') }}">Lottery draws</a>
+ <a class="tab {{ 'active' if tab == 'pool' }}" href="{{ url_for('giveaway.page', tab='pool', tz=values.tz) }}">Pool ({{ pool|length }})</a>
+ <a class="tab {{ 'active' if tab == 'draws' }}" href="{{ url_for('giveaway.page', tab='draws', tz=values.tz) }}">Lottery draws</a>
 </div>
 
 {% if tab == 'pool' %}
@@ -190,7 +190,7 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
   <div class="stat"><span class="small">Active books</span><b>{{ pool|selectattr('active')|list|length }}</b></div>
   <div class="stat"><span class="small">Copies left (active)</span><b>{{ active_left }}</b></div>
   <div class="stat"><span class="small">Copies given</span><b>{{ pool|sum(attribute='used') }}</b></div>
-  <div class="stat"><span class="small">OMS stock updated (ET)</span><b style="font-size:14px;margin-top:6px">{{ snapshot_at or '—' }}</b></div>
+  <div class="stat"><span class="small">OMS stock updated ({{ values.tz_label }})</span><b style="font-size:14px;margin-top:6px">{{ snapshot_at or '—' }}</b></div>
   <div class="row" style="align-self:center">
    <button class="btn outline" type="button" id="invRefresh" {% if inventory_running %}disabled{% endif %}>{{ 'Refreshing OMS stock…' if inventory_running else '⟳ Refresh OMS stock' }}</button>
    <span class="small" id="invMsg"></span>
@@ -257,6 +257,7 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
  <form method="get" id="filters">
   <input type="hidden" name="tab" value="draws">
   <div class="filter-grid">
+   <label>Time Zone<select name="tz" id="tzSelect">{% for zone, short in time_zones.items() %}<option value="{{ zone }}" {% if values.tz == zone %}selected{% endif %}>{{ short }} ({{ zone }})</option>{% endfor %}</select></label>
    <div class="field-col"><span class="field-label">Store (multiple)</span>
     <div class="multi"><button class="multi-toggle" type="button" data-toggle="storePanel" data-label="Store">Store: All ▾</button>
      <div class="multi-panel" id="storePanel" data-name="store" hidden>
@@ -282,7 +283,7 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
     </div>
    </div>
    <div class="calendar-range-field">
- <label>Order Date Range (ET)</label>
+ <label>Order Date Range ({{ values.tz_label }})</label>
  <button id="dateRangeButton" type="button" class="date-range-button"><span id="dateRangeText">Select dates</span><span>📅</span></button>
  <div id="calendarPopover" class="calendar-popover">
   <div class="calendar-months">
@@ -320,7 +321,7 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
   <label class="search-row">Search<input type="search" name="q" value="{{ values.q }}" placeholder="Order ID, Tracking"></label>
   <div class="row" style="margin-top:12px">
    <button class="btn" type="submit">Search</button>
-   <a class="btn secondary" href="{{ url_for('giveaway.page', tab='draws') }}">Reset</a>
+   <a class="btn secondary" href="{{ url_for('giveaway.page', tab='draws', tz=values.tz) }}">Reset</a>
   </div>
  </form>
  <div class="row" style="margin-top:14px;justify-content:space-between">
@@ -341,7 +342,7 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
  <datalist id="poolIsbns">{% for p in pool if p.active %}<option value="{{ p.isbn }}">{{ p.book_title or '' }} · left {{ p.remaining }}</option>{% endfor %}</datalist>
  <div class="table-scroll" style="margin-top:10px">
  <table>
-  <thead><tr><th class="pick"><input type="checkbox" id="pickAll" title="Select all rows on this page"></th><th>Store</th><th>Order ID</th><th>Created (ET)</th><th>Tracking</th><th>Status</th><th>Book #</th><th>Book</th><th>State</th><th>Change</th></tr></thead>
+  <thead><tr><th class="pick"><input type="checkbox" id="pickAll" title="Select all rows on this page"></th><th>Store</th><th>Order ID</th><th>Created ({{ values.tz_label }})</th><th>Tracking</th><th>Status</th><th>Book #</th><th>Book</th><th>State</th><th>Change</th></tr></thead>
   <tbody>
   {% for r in rows %}
    <tr data-store="{{ r.store_id }}" data-order="{{ r.order_id }}" data-line="{{ r.line_item_id }}" data-unit="{{ r.unit_no }}">
@@ -402,7 +403,7 @@ document.getElementById('addBtn').addEventListener('click', async e => {
 // ---- OMS stock refresh (runs in the background, then the page reloads) ----
 (function () {
  const btn = document.getElementById('invRefresh'), msg = document.getElementById('invMsg');
- const STATUS = {{ url_for('giveaway.inventory_status') | tojson }}, START = {{ url_for('giveaway.inventory_refresh') | tojson }};
+ const STATUS = {{ url_for('giveaway.inventory_status', tz=values.tz) | tojson }}, START = {{ url_for('giveaway.inventory_refresh') | tojson }};
  let timer = null;
  async function poll() {
   try {
@@ -504,7 +505,7 @@ function displayDate(date) {
 // "Today" follows the Time Zone filter, matching how the server interprets dates.
 function todayISO() {
     try {
-        return new Intl.DateTimeFormat("en-CA", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
+        return new Intl.DateTimeFormat("en-CA", {timeZone: (document.getElementById('tzSelect') || {}).value || {{ values.tz | tojson }}, year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
     } catch (e) {
         return toISODate(new Date());
     }
