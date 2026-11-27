@@ -62,6 +62,15 @@ def _tz_name(args):
     return name if name in TIME_ZONES else 'America/New_York'
 
 
+def _hour(value, lo, hi):
+    """'lo'..'hi' -> int, anything else (blank) -> None."""
+    try:
+        h = int(value)
+    except (TypeError, ValueError):
+        return None
+    return h if lo <= h <= hi else None
+
+
 def _fmt(dt, tz=ET):
     if not dt:
         return ''
@@ -84,8 +93,12 @@ def _filters(args, omit=()):
     today = datetime.now(tz).date()
     d_from = _day(args.get('from'), today - timedelta(days=6))
     d_to = _day(args.get('to'), today)
-    start = datetime.combine(d_from, time.min, tzinfo=tz).astimezone(timezone.utc).replace(tzinfo=None)
-    end = datetime.combine(d_to + timedelta(days=1), time.min, tzinfo=tz).astimezone(timezone.utc).replace(tzinfo=None)
+    # Hours: start = from-date at from_hour:00; end (exclusive) = to-date at to_hour:00 (default 24:00).
+    h_from, h_to = _hour(args.get('from_hour'), 0, 23), _hour(args.get('to_hour'), 1, 24)
+    start = datetime.combine(d_from, time.min, tzinfo=tz) + timedelta(hours=h_from or 0)
+    end = datetime.combine(d_to, time.min, tzinfo=tz) + timedelta(hours=24 if h_to is None else h_to)
+    start = start.astimezone(timezone.utc).replace(tzinfo=None)
+    end = end.astimezone(timezone.utc).replace(tzinfo=None)
     where, params = ['o.create_time >= %s', 'o.create_time < %s'], [start, end]
     stores = [v for v in dict.fromkeys(args.getlist('store')) if v in STORES]
     if stores and 'store' not in omit:
@@ -101,7 +114,8 @@ def _filters(args, omit=()):
         params += statuses
     states = [v for v in dict.fromkeys(args.getlist('state')) if v in STATES]
     values = {'from': d_from.isoformat(), 'to': d_to.isoformat(), 'stores': stores, 'q': q,
-              'states': states, 'statuses': statuses, 'tz': tz_name, 'tz_label': TIME_ZONES[tz_name]}
+              'states': states, 'statuses': statuses, 'tz': tz_name, 'tz_label': TIME_ZONES[tz_name],
+              'from_hour': '' if h_from is None else str(h_from), 'to_hour': '' if h_to in (None, 24) else str(h_to)}
     return ' AND '.join(where), params, values
 
 

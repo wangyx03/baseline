@@ -55,7 +55,7 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
 .filter-grid select,.multi-toggle{width:100%;box-sizing:border-box}
 .filter-grid .calendar-range-field{width:auto}
 .calendar-range-field > label{font-size:12px;color:#596273;margin-bottom:5px;display:block}
-.search-row{margin-top:12px}
+.hour-range{display:flex;align-items:center;gap:6px}.hour-range select{flex:1;min-width:0}.search-row{margin-top:12px}
 .search-row input{width:100%;box-sizing:border-box}
 .multi{position:relative}
 .multi-toggle{text-align:left;cursor:pointer;padding:8px 9px;border:1px solid #d5dbe3;border-radius:7px;font:inherit;font-size:14px;background:#fff;color:#202735}
@@ -317,6 +317,7 @@ th.sortable.desc::after{content:" ↓";color:#1769aa}
 </div>
 <input type="hidden" name="from" id="ordersFrom" value="{{ values.from }}">
 <input type="hidden" name="to" id="ordersTo" value="{{ values.to }}">
+   <label>Order Time (hour)<span class="hour-range"><select name="from_hour" title="From this time (on the start date)">{% for h in range(0,24) %}<option value="{{ h if h else '' }}" {% if values.from_hour == (h|string if h else '') %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select><span>→</span><select name="to_hour" title="Up to this time (on the end date)">{% for h in range(1,25) %}<option value="{{ h if h < 24 else '' }}" {% if values.to_hour == (h|string if h < 24 else '') %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></span></label>
   </div>
   <label class="search-row">Search<input type="search" name="q" value="{{ values.q }}" placeholder="Order ID, Tracking"></label>
   <div class="row" style="margin-top:12px">
