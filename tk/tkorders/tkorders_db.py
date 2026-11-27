@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS {ITEMS_TABLE} (
     is_pod_customized BOOLEAN DEFAULT NULL,
 
     tracking_number VARCHAR(128) DEFAULT NULL,
+    package_id VARCHAR(64) DEFAULT NULL,
 
     PRIMARY KEY (id),
 
@@ -782,15 +783,17 @@ def upsert_order(
         # Preserve tracking already received from a package notification when
         # a later Order Detail snapshot omits it. Do not erase known tracking.
         cur.execute(
-            f"SELECT line_item_id, tracking_number FROM {ITEMS_TABLE} "
-            "WHERE store_id=%s AND order_id=%s AND tracking_number IS NOT NULL "
-            "AND tracking_number<>''",
+            f"SELECT line_item_id, tracking_number, package_id FROM {ITEMS_TABLE} "
+            "WHERE store_id=%s AND order_id=%s",
             (store_id, order.get("id")),
         )
-        previous_tracking = {str(line_id): tracking for line_id, tracking in cur.fetchall()}
+        previous = {str(line_id): (tracking, package_id) for line_id, tracking, package_id in cur.fetchall()}
         for li in line_items:
+            old_tracking, old_package = previous.get(str(li.get("line_item_id")), (None, None))
             if not li.get("tracking_number"):
-                li["tracking_number"] = previous_tracking.get(str(li.get("line_item_id")))
+                li["tracking_number"] = old_tracking or None
+            if not li.get("package_id"):
+                li["package_id"] = old_package
 
         # The Order Detail API returns the current complete line-item list.
         # Replace this order's items atomically inside the same transaction.
@@ -838,7 +841,8 @@ def upsert_order(
                     is_dangerous_good,
                     is_pod_customized,
 
-                    tracking_number
+                    tracking_number,
+                    package_id
                 ) VALUES (
                     %(store_id)s,
                     %(order_id)s,
@@ -868,7 +872,8 @@ def upsert_order(
                     %(is_dangerous_good)s,
                     %(is_pod_customized)s,
 
-                    %(tracking_number)s
+                    %(tracking_number)s,
+                    %(package_id)s
                 )
                 """,
                 [

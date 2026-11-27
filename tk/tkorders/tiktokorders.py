@@ -267,6 +267,10 @@ def _sales_tax(item: dict) -> tuple:
 
 def extract_line_items(order: dict) -> list[dict]:
     result = []
+    # Line items carry their own package_id; if one is missing and the order has
+    # exactly one package, that package is the only possible one.
+    packages = [p for p in (order.get("packages") or []) if isinstance(p, dict) and p.get("id")]
+    only_package = str(packages[0]["id"]) if len(packages) == 1 else None
 
     for item in order.get("line_items", []) or []:
         tax_amount, tax_rate = _sales_tax(item)
@@ -293,6 +297,7 @@ def extract_line_items(order: dict) -> list[dict]:
             "is_dangerous_good": item.get("is_dangerous_good"),
             "is_pod_customized": item.get("is_pod_customized"),
             "tracking_number": item.get("tracking_number"),
+            "package_id": str(item.get("package_id") or only_package or "") or None,
         })
 
     return result
@@ -560,14 +565,18 @@ def sync_package_tracking(conn, shop, order_ids):
         try:
             for item in extract_line_items(matching[0]):
                 tracking = item.get('tracking_number')
+                package_id = item.get('package_id')
                 line_id = item.get('line_item_id')
-                if not tracking or not line_id:
+                if not line_id or not (tracking or package_id):
                     continue
                 cur.execute("""UPDATE tkorders_items
-                    SET tracking_number=%s
+                    SET tracking_number=COALESCE(%s, tracking_number),
+                        package_id=COALESCE(%s, package_id)
                     WHERE store_id=%s AND order_id=%s AND line_item_id=%s
-                      AND (tracking_number IS NULL OR tracking_number<>%s)""",
-                    (tracking, shop['store_id'], oid, str(line_id), tracking))
+                      AND (NOT (tracking_number <=> COALESCE(%s, tracking_number))
+                           OR NOT (package_id <=> COALESCE(%s, package_id)))""",
+                    (tracking or None, package_id, shop['store_id'], oid, str(line_id),
+                     tracking or None, package_id))
                 changed += cur.rowcount
             conn.commit()
         except Exception:
@@ -580,6 +589,52 @@ def sync_package_tracking(conn, shop, order_ids):
         print(f"[{shop['short_name']}] Package update: "
               f"skipped_unavailable_orders={skipped}", flush=True)
     return changed
+
+
+def backfill_package_ids(conn, shop: dict, limit: int = 0):
+    """Fill tkorders_items.package_id for orders that have tracking but no package_id.
+    Only package_id (and missing tracking) is written; nothing else is touched."""
+    cur = conn.cursor()
+    try:
+        cur.execute("""SELECT DISTINCT order_id FROM tkorders_items
+            WHERE store_id=%s AND package_id IS NULL
+              AND tracking_number IS NOT NULL AND tracking_number<>''""" +
+            (f" LIMIT {int(limit)}" if limit else ""), (shop['store_id'],))
+        order_ids = [str(row[0]) for row in cur.fetchall()]
+    finally:
+        cur.close()
+    print(f"[{shop['short_name']}] package_id backfill: {len(order_ids)} order(s)", flush=True)
+    updated = 0
+    for i in range(0, len(order_ids), 50):
+        batch = order_ids[i:i + 50]
+        try:
+            details = get_order_detail(shop, batch, save_debug=False)
+        except TikTokAPIError as exc:
+            print(f"[{shop['short_name']}] batch {i // 50 + 1} failed: {exc}", flush=True)
+            continue
+        cur = conn.cursor()
+        try:
+            for order in details:
+                for item in extract_line_items(order):
+                    if not item.get('package_id') or not item.get('line_item_id'):
+                        continue
+                    cur.execute("""UPDATE tkorders_items
+                        SET package_id=%s,
+                            tracking_number=COALESCE(NULLIF(tracking_number, ''), %s)
+                        WHERE store_id=%s AND order_id=%s AND line_item_id=%s
+                          AND package_id IS NULL""",
+                        (item['package_id'], item.get('tracking_number') or None,
+                         shop['store_id'], str(order.get('id')), str(item['line_item_id'])))
+                    updated += cur.rowcount
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+        print(f"[{shop['short_name']}] {min(i + 50, len(order_ids))}/{len(order_ids)} orders, "
+              f"{updated} line item(s) updated", flush=True)
+    return updated
 
 
 def run_webhook_worker():
@@ -731,6 +786,15 @@ def main():
                 shops[0],
                 args[idx + 1],
             )
+            return
+
+        if "--package-ids" in args:
+            # python tk/tkorders/tiktokorders.py --package-ids [--store TU] [--limit N]
+            limit = 0
+            if "--limit" in args:
+                limit = int(args[args.index("--limit") + 1])
+            for shop in shops:
+                backfill_package_ids(conn, shop, limit)
             return
 
         if "--backfill" in args:
