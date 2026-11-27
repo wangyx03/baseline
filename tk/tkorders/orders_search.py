@@ -225,13 +225,26 @@ def _effective_params(params):
     return effective
 
 
-def _day_bound(value, tz_name, end=False):
+def _hour(value, lo=0, hi=23):
+    """'lo'..'hi' -> int, anything else (blank = whole day) -> None."""
+    try:
+        h = int(value)
+    except (TypeError, ValueError):
+        return None
+    return h if lo <= h <= hi else None
+
+
+def _day_bound(value, tz_name, end=False, hour=None):
+    """Start: the date at `hour`:00 (default 00:00). End (exclusive): the date at
+    `hour`:00, so to_hour=14 keeps orders up to 13:59:59 (default 24:00 = end of day)."""
     if not value:
         return None
     try:
         local = datetime.strptime(value, '%Y-%m-%d').replace(tzinfo=ZoneInfo(tz_name))
         if end:
-            local += timedelta(days=1)
+            local += timedelta(hours=hour) if hour is not None else timedelta(days=1)
+        elif hour is not None:
+            local += timedelta(hours=hour)
         return local.astimezone(timezone.utc).replace(tzinfo=None)
     except ValueError:
         return None
@@ -335,7 +348,8 @@ def _filters(params, omit=None):
         elif sku_rule == 'nonmatch':
             parts.append('NOT ' + sku_match)
     tz_name = _selected_timezone(params)
-    start, end = _day_bound(params.get('from'), tz_name), _day_bound(params.get('to'), tz_name, True)
+    start = _day_bound(params.get('from'), tz_name, hour=_hour(params.get('from_hour')))
+    end = _day_bound(params.get('to'), tz_name, True, hour=_hour(params.get('to_hour'), 1, 24))
     if start:
         parts.append('o.create_time >= %s')
         args.append(start)
