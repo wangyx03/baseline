@@ -1435,3 +1435,86 @@ def export_oms_xlsx():
     response.headers['X-Packages-Skipped'] = str(len(skipped))
     response.headers['Cache-Control'] = 'no-store, private'
     return response
+
+
+# ---------------------------------------------------------------------------
+# Shipping labels / labels + packing slips from TikTok (merged PDF, background job)
+# ---------------------------------------------------------------------------
+@orders_bp.route('/labels/start', methods=['POST'])
+@module_required(MODULE_TIKTOK_ORDERS)
+def labels_start():
+    """body: query (page filters), kind label|both, packages ["store:tracking"] (ticked rows)
+    or null (whole search; oms_all=1 = also packages already in OMS, like OMS Excel)."""
+    from tk.tkorders import labels_job
+    body = request.get_json(silent=True) or {}
+    kind = body.get('kind')
+    if kind not in ('label', 'both'):
+        return jsonify(error='kind must be label or both'), 400
+    params = _effective_params(MultiDict(parse_qsl(str(body.get('query') or ''), keep_blank_values=True)))
+    where, args = _filters(params)
+    tracking_where = where + (' AND ' if where else ' WHERE ') + "TRIM(i.tracking_number) <> ''"
+    picked = _picked_packages(body.get('packages'))
+    if picked is not None and not picked:
+        return jsonify(error='No packages selected.'), 400
+    pick_sql, pick_args = '', []
+    if picked:
+        pick_sql = ' AND (s.store_id, s.tracking) IN (' + ','.join(['(%s,%s)'] * len(picked)) + ')'
+        pick_args = [v for pair in picked for v in pair]
+    scope_sql = '1=1' if (picked or body.get('oms_all')) else PUSHABLE_SQL
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # Same order as the OMS Excel (oldest first), so labels and sheet rows line up.
+        packages = _rows(cur, f"""
+            SELECT s.store_id, s.tracking, MAX(o.create_time) AS created,
+                   GROUP_CONCAT(DISTINCT a.package_id ORDER BY a.package_id) AS package_ids
+            FROM ({_selected_packages_sql(tracking_where)}) s
+            JOIN tkorders_items a ON a.store_id=s.store_id AND a.tracking_number=s.tracking
+            JOIN tkorders o ON o.store_id=a.store_id AND o.order_id=a.order_id
+            WHERE {scope_sql}{pick_sql}
+            GROUP BY s.store_id, s.tracking
+            ORDER BY created ASC, s.tracking ASC
+            LIMIT %s""", args + pick_args + [labels_job.MAX_PACKAGES + 1])
+    finally:
+        cur.close()
+        conn.close()
+    if not packages:
+        return jsonify(error='No packages with a tracking number in this selection.'), 400
+    if len(packages) > labels_job.MAX_PACKAGES:
+        return jsonify(error=f'More than {labels_job.MAX_PACKAGES} packages. Narrow the filters first.'), 400
+    job_id = labels_job.start([{'store_id': p['store_id'], 'tracking': p['tracking'],
+                                'package_ids': [x for x in (p['package_ids'] or '').split(',') if x]}
+                               for p in packages], kind)
+    return jsonify(job=job_id, total=len(packages))
+
+
+@orders_bp.route('/labels/status/<job_id>')
+@module_required(MODULE_TIKTOK_ORDERS)
+def labels_status(job_id):
+    from tk.tkorders import labels_job
+    try:
+        st = labels_job.status(job_id)
+    except ValueError:
+        st = None
+    if st is None:
+        return jsonify(error='Job not found (expired, or the server restarted).'), 404
+    return jsonify(st)
+
+
+@orders_bp.route('/labels/file/<job_id>')
+@module_required(MODULE_TIKTOK_ORDERS)
+def labels_file(job_id):
+    from tk.tkorders import labels_job
+    try:
+        st, path = labels_job.status(job_id), labels_job.result_path(job_id)
+    except ValueError:
+        st, path = None, None
+    if not st or not path:
+        return jsonify(error='File not found.'), 404
+    name = 'Labels' if st.get('kind') == 'label' else 'Labels_Slips'
+    ok = st['total'] - len(st.get('failed') or [])
+    response = Response(path.read_bytes(), mimetype='application/pdf')
+    response.headers['Content-Disposition'] = (
+        f'attachment; filename="{name}_{datetime.now(ET):%Y%m%d_%H%M}_{ok}pkg.pdf"')
+    response.headers['Cache-Control'] = 'no-store, private'
+    return response

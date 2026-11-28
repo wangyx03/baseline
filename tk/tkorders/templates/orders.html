@@ -211,7 +211,7 @@
 <input type="hidden" name="to" id="ordersTo" value="{{ params.get('to','') }}">
 <div class="field"><label>Order Time (hour)</label><div class="hour-range"><select name="from_hour" title="From hour (on the start date)"><option value="">00:00</option>{% for h in range(1,24) %}<option value="{{ h }}" {% if params.get('from_hour') == h|string %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select><span>→</span><select name="to_hour" title="Up to this time (on the end date)">{% for h in range(1,24) %}<option value="{{ h }}" {% if params.get('to_hour') == h|string %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}<option value="" {% if params.get('to_hour','') in ('', '24') %}selected{% endif %}>24:00</option></select></div></div>
 <div class="field orders-search-row"><label>Search</label><input type="search" name="q" value="{{ params.get('q','') }}" placeholder="Order ID, Product ID, Product Name, Seller SKU, Tracking"></div>
-</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn export-fields-btn" type="button" id="openExportFields" title="Choose export format, columns and row grouping" {% if view == 'oms' %}hidden{% endif %}>⚙ Export Fields <span id="exportFieldCount" class="export-count"></span></button><button class="btn download-csv-btn" type="button" onclick="downloadExport()" id="mainDownload" {% if view == 'oms' %}hidden{% endif %}>Download XLSX</button>{% if view == 'oms' %}<span class="small" id="omsLastSync">{% if oms_last_sync %}OMS synced {{ oms_last_sync }}{% endif %}</span><button class="btn export-fields-btn" type="button" id="syncFromOms" title="Pull OMS outbound orders created in the last 2 days (a full 30-day sync runs daily at 5 AM)">⟳ Sync from OMS</button><label class="small oms-all-toggle" title="Off: only packages not in OMS yet (same as Create package). On: every package of this search."><input type="checkbox" id="omsAllToggle"> Include packages already in OMS</label><a class="btn export-fields-btn" id="omsExcelLink" data-base="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}" href="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}">Download OMS Excel</a><button class="btn create-pkg-btn" type="button" id="createPackages" data-count="{{ pkg_pushable }}" data-ready="{{ 1 if pkg_ready else 0 }}" {% if not pkg_ready %}disabled title="OMS table not available — see the message below"{% endif %}>Create package ({{ pkg_pushable }})</button>{% endif %}</div>
+</div><div class="actions"><button class="btn" type="submit">Search Orders</button><a class="btn secondary" href="{{ url_for('orders.page') }}">Reset All</a><span class="small">Different filters combine with AND; multiple selections within a filter use OR.</span><button class="btn export-fields-btn" type="button" id="openExportFields" title="Choose export format, columns and row grouping" {% if view == 'oms' %}hidden{% endif %}>⚙ Export Fields <span id="exportFieldCount" class="export-count"></span></button><button class="btn download-csv-btn" type="button" onclick="downloadExport()" id="mainDownload" {% if view == 'oms' %}hidden{% endif %}>Download XLSX</button>{% if view == 'oms' %}<span class="small" id="omsLastSync">{% if oms_last_sync %}OMS synced {{ oms_last_sync }}{% endif %}</span><button class="btn export-fields-btn" type="button" id="syncFromOms" title="Pull OMS outbound orders created in the last 2 days (a full 30-day sync runs daily at 5 AM)">⟳ Sync from OMS</button><label class="small oms-all-toggle" title="Off: only packages not in OMS yet (same as Create package). On: every package of this search."><input type="checkbox" id="omsAllToggle"> Include packages already in OMS</label><div class="dl-menu"><button class="btn export-fields-btn" type="button" id="dlToggle" aria-haspopup="true">⬇ Download ▾</button><div class="dl-panel" id="dlPanel" hidden><a id="omsExcelLink" data-base="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}" href="{{ url_for('orders.export_oms_xlsx') }}?{{ request.query_string.decode('utf-8') }}"><b>OMS Excel</b><span>Import sheet for OMS (.xlsx)</span></a><button type="button" data-labels="label"><b>Labels</b><span>TikTok shipping labels, one PDF</span></button><button type="button" data-labels="both"><b>Labels + packing slips</b><span>Label and slip per package, one PDF</span></button><div class="dl-hint">Ticked rows only, or the whole search when all are ticked. “Include packages already in OMS” applies to the whole search.</div></div></div><button class="btn create-pkg-btn" type="button" id="createPackages" data-count="{{ pkg_pushable }}" data-ready="{{ 1 if pkg_ready else 0 }}" {% if not pkg_ready %}disabled title="OMS table not available — see the message below"{% endif %}>Create package ({{ pkg_pushable }})</button>{% endif %}</div>
 </form>
 <!-- Export field picker. Kept outside the filter form so its checkboxes never reach the search URL. -->
 <div class="xf-backdrop" id="exportFieldsModal" hidden>
@@ -289,6 +289,14 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
 .pkg-toggle { border:0; background:none; padding:0; color:#1769aa; cursor:pointer; font:inherit; font-size:12px; }
 .pkg-toggle:focus { outline:none; } .pkg-toggle:focus-visible { outline:2px solid #1769aa; outline-offset:2px; } .pkg-more summary { cursor:pointer; color:#1769aa; font-family:inherit; font-size:12px; }
 .pkg-link { border:0; background:none; color:#1f5fbf; cursor:pointer; font:inherit; font-size:12px; padding:0; text-decoration:underline; }
+.dl-menu{position:relative;display:inline-block}
+.dl-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:1500;background:#fff;border:1px solid #d5dbe3;border-radius:10px;box-shadow:0 12px 30px #0002;width:290px;padding:6px}
+.dl-panel[hidden]{display:none}
+.dl-panel a,.dl-panel button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;box-sizing:border-box;padding:9px 12px;border:0;background:none;border-radius:7px;text-align:left;text-decoration:none;color:#1d2939;font-size:14px;cursor:pointer}
+.dl-panel a:hover,.dl-panel button:hover{background:#f2f6fa}
+.dl-panel span{font-size:12px;color:#667085;font-weight:400}
+.dl-hint{font-size:11px;color:#98a2b3;padding:6px 12px 4px;border-top:1px solid #eef1f4;margin-top:4px;line-height:1.4}
+.lbl-bar{height:8px;background:#eef1f4;border-radius:99px;overflow:hidden;margin:10px 0 4px}.lbl-bar div{height:100%;background:#1f6feb;width:0;transition:width .3s}
 .pkg-dialog { width:min(760px,100%); } .pkg-body { padding:16px 20px; overflow:auto; font-size:14px; }
 .pkg-body table { font-size:12px; margin-top:10px; }
 </style>
@@ -331,6 +339,13 @@ tr.pkg-open .pkg-col .pkg-extra { display:block; }
   </div>
   {% endif %}
   <div class="xf-foot"><span class="small" id="pkgNote"></span><div class="xf-actions"><button type="button" class="btn secondary" id="pkgCancel">Cancel</button><button type="button" class="btn create-pkg-btn" id="pkgConfirm">Create</button></div></div>
+ </div>
+</div>
+<div class="xf-backdrop" id="lblModal" hidden>
+ <div class="xf-dialog pkg-dialog" role="dialog" aria-modal="true" aria-labelledby="lblTitle">
+  <div class="xf-head"><h3 id="lblTitle">Download labels</h3><button type="button" class="xf-close" id="lblClose" aria-label="Close">×</button></div>
+  <div class="pkg-body" id="lblBody"></div>
+  <div class="xf-foot"><span class="small" id="lblNote"></span><div class="xf-actions"><button type="button" class="btn secondary" id="lblCancel">Close</button><a class="btn" id="lblDownload" hidden>Download PDF</a></div></div>
  </div>
 </div>
 {% else %}
@@ -1080,6 +1095,77 @@ function togglePkgLines(btn) {
  document.getElementById('pkgClose').addEventListener('click', close);
  cancelBtn.addEventListener('click', close);
  // Clicking outside the dialog or pressing Esc does not close it: only × / Cancel / Close do.
+})();
+// ---- OMS View: Download menu (OMS Excel / Labels / Labels + packing slips) ----
+(function () {
+ const toggle = document.getElementById('dlToggle'), panel = document.getElementById('dlPanel');
+ if (!toggle || !panel) return;
+ const CSRF = {{ (csrf_token() if csrf_token is defined else '') | tojson }};
+ const START = {{ url_for('orders.labels_start') | tojson }};
+ const STATUS = {{ url_for('orders.labels_status', job_id='JOB') | tojson }};
+ const FILE = {{ url_for('orders.labels_file', job_id='JOB') | tojson }};
+ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ toggle.addEventListener('click', e => { e.stopPropagation(); panel.hidden = !panel.hidden; });
+ document.addEventListener('click', e => { if (!e.target.closest('.dl-menu')) panel.hidden = true; });
+ document.getElementById('omsExcelLink').addEventListener('click', () => { panel.hidden = true; });
+ const modal = document.getElementById('lblModal'), body = document.getElementById('lblBody');
+ const note = document.getElementById('lblNote'), dl = document.getElementById('lblDownload');
+ let busy = false;
+ function close() { if (!busy) modal.hidden = true; }
+ document.getElementById('lblClose').addEventListener('click', close);
+ document.getElementById('lblCancel').addEventListener('click', close);
+ window.addEventListener('beforeunload', e => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
+ const sleep = ms => new Promise(res => setTimeout(res, ms));
+ panel.querySelectorAll('[data-labels]').forEach(b => b.addEventListener('click', async () => {
+  panel.hidden = true;
+  const kind = b.dataset.labels, title = kind === 'label' ? 'Labels' : 'Labels + packing slips';
+  const boxes = [...document.querySelectorAll('#pkgRows .pkg-pick-box')];
+  const ticked = boxes.filter(x => x.checked).map(x => x.value);
+  const all = boxes.length === 0 || ticked.length === boxes.length;
+  if (!all && !ticked.length) { alert('Tick at least one package.'); return; }
+  document.getElementById('lblTitle').textContent = title;
+  dl.hidden = true; note.textContent = 'Keep this page open until the PDF is ready.';
+  body.innerHTML = '<p style="margin:0">Starting…</p>';
+  modal.hidden = false; busy = true;
+  try {
+   const headers = {'Content-Type': 'application/json'};
+   if (CSRF) headers['X-CSRFToken'] = CSRF;
+   const r = await fetch(START, {method: 'POST', headers, credentials: 'same-origin', body: JSON.stringify({
+    kind, query: location.search.slice(1), packages: all ? null : ticked,
+    oms_all: !!(document.getElementById('omsAllToggle') || {}).checked})});
+   let j = null; try { j = await r.json(); } catch (e) { throw new Error('HTTP ' + r.status); }
+   if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+   const job = j.job, total = j.total;
+   let st = null;
+   for (;;) {
+    await sleep(1500);
+    const s = await fetch(STATUS.replace('JOB', job), {credentials: 'same-origin'});
+    st = await s.json();
+    if (!s.ok) throw new Error(st.error || ('HTTP ' + s.status));
+    const pct = total ? Math.round(100 * st.done / total) : 100;
+    body.innerHTML = `<p style="margin:0">Getting ${esc(title.toLowerCase())} from TikTok… ${st.done} / ${total} packages</p><div class="lbl-bar"><div style="width:${pct}%"></div></div>`;
+    if (st.state !== 'running') break;
+   }
+   if (st.state === 'error') throw new Error(st.error || 'The job failed.');
+   const failed = st.failed || [], ok = total - failed.length;
+   const rows = failed.map(f => `<tr><td>${esc(f.store)}</td><td class="mono">${esc(f.tracking)}</td><td>${esc(f.error)}</td></tr>`).join('');
+   body.innerHTML = `<p style="margin:0"><strong>${ok}</strong> package${ok === 1 ? '' : 's'} · ${st.pages} page${st.pages === 1 ? '' : 's'}` +
+    (failed.length ? ` · <strong style="color:#b42318">${failed.length} failed</strong>` : '') + '</p>' +
+    (rows ? `<table><thead><tr><th>Store</th><th>Tracking</th><th>Problem</th></tr></thead><tbody>${rows}</tbody></table>` : '');
+   if (st.pages) {
+    dl.href = FILE.replace('JOB', job); dl.hidden = false;
+    note.textContent = 'Same order as the OMS Excel (oldest first). The link works for 24 hours.';
+    busy = false;                       // the download must not trigger the leave-page warning
+    location.href = dl.href;            // start the download right away
+   } else {
+    note.textContent = 'Nothing to download.';
+   }
+  } catch (e) {
+   body.innerHTML = `<p class="pkg-err" style="max-width:none">${esc(e.message)}</p>`;
+   note.textContent = '';
+  }
+  busy = false;
+ }));
 })();
 {% endif %}
 </script>{% endblock %}
