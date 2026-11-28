@@ -280,6 +280,7 @@
 .pkg-badge.ok { background:#dcfae6; color:#067647; } .pkg-badge.warn { background:#fef0c7; color:#93370d; }
 .pkg-badge.bad { background:#fee4e2; color:#b42318; } .pkg-badge.muted { background:#f2f4f7; color:#667085; }
 .pkg-err { color:#b42318; max-width:220px; }
+.pkg-ask { margin:0 0 12px; padding:10px 12px; background:#fffaeb; border:1px solid #fedf89; border-radius:8px; color:#7a2e0e; line-height:1.5; }
 /* one toggle opens both columns; every line has the same height so the two columns stay aligned */
 .pkg-col .pkg-line { height:20px; line-height:20px; white-space:nowrap; }
 .pkg-col .pkg-line.small { font-size:12px; color:#667085; font-family:inherit; }
@@ -988,6 +989,7 @@ function togglePkgLines(btn) {
   filterChannels();
  }
  if (btn) btn.addEventListener('click', () => {
+  noLabelKeys = null;      // a new push never continues an earlier "no label" question
   const chosen = picked();
   const partial = chosen.length < pickBoxes().length;
   const n = partial ? chosen.length : (Number(btn.dataset.count) || 0);
@@ -1016,23 +1018,34 @@ function togglePkgLines(btn) {
  });
  // Packages per request. OMS takes about a second per parcel, so small chunks keep each
  // request far below the proxy timeout (nginx / Cloudflare answer 504 after ~60-100 s).
- const PUSH_CHUNK = 20;
+ // Each package also fetches its TikTok label (~1 s), so chunks are smaller than before.
+ const PUSH_CHUNK = 10;
+ // Packages whose label could not be fetched are not pushed; the dialog then asks whether
+ // to push them without a label (second round with allow_no_label).
+ let noLabelKeys = null, lastOptions = null, allResults = [];
  confirmBtn.addEventListener('click', async () => {
+  const retryNoLabel = noLabelKeys;
+  noLabelKeys = null;
   confirmBtn.disabled = true; confirmBtn.textContent = 'Creating…';
   if (opts) opts.hidden = true;
   busy = true; cancelBtn.disabled = true;
   note.textContent = 'Keep this page open until all packages are sent.';
-  const query = location.search.slice(1), options = pushOptions();
-  const results = [], summary = {};
+  const query = location.search.slice(1);
+  const options = retryNoLabel ? lastOptions : pushOptions();
+  lastOptions = options;
+  if (!retryNoLabel) allResults = [];
+  // Second round: drop the earlier no_label rows, their new result replaces them.
+  const results = retryNoLabel ? allResults.filter(r => r.state !== 'no_label') : allResults;
   let errorMsg = '';
   try {
    // All ticked: get every pushable package of the search (all pages) first.
-   const keys = sending || (await post(CREATE_URL, {query, dry_run: true})).packages;
+   const keys = retryNoLabel || sending || (await post(CREATE_URL, {query, dry_run: true})).packages;
    for (let i = 0; i < keys.length; i += PUSH_CHUNK) {
-    body.innerHTML = `<p style="margin:0">Creating packages… ${Math.min(i, keys.length)} / ${keys.length}</p>`;
-    const j = await post(CREATE_URL, {query, options, packages: keys.slice(i, i + PUSH_CHUNK)});
+    body.innerHTML = `<p style="margin:0">${retryNoLabel ? 'Creating packages without labels' : 'Getting labels and creating packages'}… ${Math.min(i, keys.length)} / ${keys.length}</p>`;
+    const chunk = keys.slice(i, i + PUSH_CHUNK);
+    const j = await post(CREATE_URL, retryNoLabel ? {query, options, packages: chunk, allow_no_label: chunk}
+                                                  : {query, options, packages: chunk});
     results.push(...j.results);
-    Object.entries(j.summary).forEach(([k, v]) => summary[k] = (summary[k] || 0) + v);
    }
   } catch (e) {
    errorMsg = /HTTP 50[24]/.test(e.message)
@@ -1040,15 +1053,29 @@ function togglePkgLines(btn) {
       'Click Sync from OMS, then Create package again (packages already in OMS are skipped).'
     : e.message;
   }
+  allResults = results;
+  const summary = {};
+  results.forEach(r => summary[r.state] = (summary[r.state] || 0) + 1);
   done = true; busy = false; cancelBtn.disabled = false;
-  const badge = {created: 'ok', failed: 'bad', unknown: 'bad', skipped: 'muted'};
+  const badge = {created: 'ok', failed: 'bad', unknown: 'bad', skipped: 'muted', no_label: 'warn'};
   const rows = results.map(r => `<tr><td>${esc(r.store)}</td><td class="mono">${esc(r.tracking)}</td>
     <td><span class="pkg-badge ${badge[r.state] || 'muted'}">${esc(r.state)}</span></td><td>${esc(r.message)}</td></tr>`).join('');
   body.innerHTML = (errorMsg ? `<p class="pkg-err">${esc(errorMsg)}${results.length ? ' — stopped; the results below were already sent.' : ''}</p>` : '') +
    `<p style="margin:0">${Object.entries(summary).map(([k, v]) => `<strong>${v}</strong> ${esc(k)}`).join(' · ') || (errorMsg ? '' : 'Nothing to push.')}</p>
     ${rows ? `<table><thead><tr><th>Store</th><th>Tracking</th><th>Result</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>` : ''}`;
   note.textContent = 'Unknown = OMS did not answer clearly. Run the OMS sync before pushing those again.';
-  confirmBtn.hidden = true; cancelBtn.textContent = 'Close';
+  const missing = errorMsg ? [] : results.filter(r => r.state === 'no_label');
+  if (missing.length) {
+   // Ask: push these without a label (the label must then be added in OMS by hand), or leave them.
+   noLabelKeys = missing.map(r => `${r.store_id}:${r.tracking}`);
+   body.insertAdjacentHTML('afterbegin', `<p class="pkg-ask"><strong>${missing.length} package${missing.length > 1 ? 's have' : ' has'} no TikTok label</strong> (see “no_label” below) and ${missing.length > 1 ? 'were' : 'was'} not pushed.<br>Push ${missing.length > 1 ? 'them' : 'it'} to OMS without a label? The label then has to be added in OMS by hand.</p>`);
+   confirmBtn.hidden = false; confirmBtn.disabled = false;
+   confirmBtn.textContent = `Push ${missing.length} without label`;
+   cancelBtn.textContent = "Don't push";
+   note.textContent = '';
+  } else {
+   confirmBtn.hidden = true; cancelBtn.textContent = 'Close';
+  }
  });
  // Sync from OMS: last 2 days, on every load of OMS View and on each button click.
  // After a sync only the package rows, paging and button counts are swapped in (no reload loop).

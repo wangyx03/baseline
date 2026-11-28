@@ -1,5 +1,6 @@
 """Read-only TikTok orders search Blueprint for the Baseline Flask application."""
 from datetime import datetime, timedelta, timezone
+import base64
 import csv
 import re
 import io
@@ -942,6 +943,23 @@ def create_packages():
                 results.append(dict(ref, state='skipped', message='a line item has no Seller SKU'))
                 continue
             ready.append((payload, ref))
+        # Attach the TikTok shipping label (PDF, base64) to every package. A package whose
+        # label cannot be fetched is not pushed (state no_label) unless the user allowed it
+        # in the follow-up question (body.allow_no_label = ["store_id:tracking", ...]).
+        allow_no_label = set(_picked_packages(body.get('allow_no_label')) or [])
+        labels = _tiktok_labels(cur, [ref for _, ref in ready])
+        with_labels = []
+        for payload, ref in ready:
+            key = (ref['store_id'], ref['tracking'])
+            pdf, err = labels.get(key, (None, 'no label'))
+            if pdf:
+                payload['label'] = {'fileName': f"{ref['tracking']}.pdf", 'fileType': 'pdf',
+                                    'fileData': base64.b64encode(pdf).decode('ascii')}
+            elif key not in allow_no_label:
+                results.append(dict(ref, state='no_label', message=err or 'no label'))
+                continue
+            with_labels.append((payload, ref))
+        ready = with_labels
         for start in range(0, len(ready), oms_packages.API_MAX_BATCH):
             results.extend(_push_batch(conn, cur, ready[start:start + oms_packages.API_MAX_BATCH], cfg))
     finally:
@@ -954,6 +972,24 @@ def create_packages():
     for r in results:
         summary[r['state']] = summary.get(r['state'], 0) + 1
     return jsonify(results=results, summary=summary)
+
+
+def _tiktok_labels(cur, refs):
+    """{(store_id, tracking): (label PDF bytes or None, error or None)} from TikTok."""
+    from tk.tkorders import labels_job
+    if not refs:
+        return {}
+    keys = list(dict.fromkeys((r['store_id'], r['tracking']) for r in refs))
+    rows = _rows(cur, f"""
+        SELECT store_id, TRIM(tracking_number) AS tracking,
+               GROUP_CONCAT(DISTINCT package_id ORDER BY package_id) AS package_ids
+        FROM tkorders_items
+        WHERE (store_id, TRIM(tracking_number)) IN ({','.join(['(%s,%s)'] * len(keys))})
+        GROUP BY store_id, TRIM(tracking_number)""", [v for k in keys for v in k])
+    pids = {(r['store_id'], r['tracking'].upper()): [x for x in (r['package_ids'] or '').split(',') if x]
+            for r in rows}
+    return labels_job.fetch_many([{'store_id': sid, 'tracking': t,
+                                   'package_ids': pids.get((sid, t.upper()), [])} for sid, t in keys])
 
 
 def _bundle_components(cur, items):
@@ -1047,7 +1083,10 @@ def _record_pushed(conn, cur, payload, oms_no):
         ON DUPLICATE KEY UPDATE tracking_number = VALUES(tracking_number)""",
         (oms_no or 'PUSH:' + payload['thirdOrderNo'], payload['logisticsTrackNo'].upper(),
          payload['thirdOrderNo'], payload['platformOrderNo'], payload['whCode'],
-         payload['logisticsChannel'], json.dumps(payload, ensure_ascii=False)))
+         payload['logisticsChannel'],
+         # keep the label file name only, not the base64 PDF
+         json.dumps(dict(payload, label={'fileName': payload['label']['fileName']})
+                    if payload.get('label') else payload, ensure_ascii=False)))
     conn.commit()
 
 

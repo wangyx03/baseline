@@ -85,7 +85,7 @@ def start(packages, kind):
     return job_id
 
 
-def _fetch(pkg, kind):
+def fetch(pkg, kind):
     """-> (list of PDF bytes, error text or None) for one package (one tracking)."""
     shop = SHOPS.get(int(pkg['store_id']))
     if not shop:
@@ -109,13 +109,44 @@ def _fetch(pkg, kind):
     return pdfs, None
 
 
+def fetch_one_pdf(pkg, kind='label'):
+    """-> (one PDF as bytes or None, error text or None). Several package_ids under one
+    tracking (rare) are merged into one file."""
+    pdfs, err = fetch(pkg, kind)
+    if err:
+        return None, err
+    if len(pdfs) == 1:
+        return pdfs[0], None
+    from pypdf import PdfReader, PdfWriter
+    writer = PdfWriter()
+    for data in pdfs:
+        for page in PdfReader(io.BytesIO(data)).pages:
+            writer.add_page(page)
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue(), None
+
+
+def fetch_many(packages, kind='label'):
+    """{(store_id, tracking): (pdf bytes or None, error or None)}, WORKERS at a time."""
+    out = {}
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        futures = {pool.submit(fetch_one_pdf, p, kind): (int(p['store_id']), p['tracking']) for p in packages}
+        for fut in as_completed(futures):
+            try:
+                out[futures[fut]] = fut.result()
+            except Exception as exc:
+                out[futures[fut]] = (None, f'{type(exc).__name__}: {exc}')
+    return out
+
+
 def _run(job_dir, packages, kind):
     from pypdf import PdfReader, PdfWriter
     st = json.loads((job_dir / 'status.json').read_text(encoding='utf-8'))
     results = [None] * len(packages)
     try:
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            futures = {pool.submit(_fetch, p, kind): i for i, p in enumerate(packages)}
+            futures = {pool.submit(fetch, p, kind): i for i, p in enumerate(packages)}
             done = 0
             for fut in as_completed(futures):
                 i = futures[fut]
